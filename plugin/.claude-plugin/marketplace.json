@@ -1,0 +1,14 @@
+{
+  "name": "hifz",
+  "owner": {
+    "name": "Farhan Khan",
+    "github": "arriqaaq"
+  },
+  "plugins": [
+    {
+      "name": "hifz",
+      "description": "Persistent memory for Claude Code",
+      "source": "./"
+    }
+  ]
+}

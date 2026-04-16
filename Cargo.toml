@@ -1,0 +1,72 @@
+[package]
+name = "hifz"
+version = "0.9.0"
+edition = "2024"
+default-run = "hifz"
+
+[dependencies]
+# Web
+axum = { version = "0.8", features = ["macros"] }
+tokio = { version = "1", features = ["full"] }
+tower-http = { version = "0.6", features = ["fs", "cors"] }
+
+# Database — git dep to surrealdb main (3.1.0-alpha, not yet on crates.io)
+surrealdb = { git = "https://github.com/surrealdb/surrealdb", features = ["kv-surrealkv", "kv-mem"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Embeddings (local, free)
+fastembed = "5"
+
+# HTTP client (Ollama, optional)
+reqwest = { version = "0.12", features = ["json", "stream"] }
+
+# Hashing
+sha2 = "0.10"
+hex = "0.4"
+
+# Text processing
+regex = "1"
+
+# CLI
+clap = { version = "4", features = ["derive", "env"] }
+
+# Error handling
+anyhow = "1"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# UUID
+uuid = { version = "1", features = ["v4"] }
+
+# Concurrent data structures
+dashmap = "6"
+
+# Streaming
+futures = "0.3"
+
+# Progress bars (for benchmark)
+indicatif = "0.17"
+
+[features]
+default = []
+
+[[bin]]
+name = "longmemeval-bench"
+path = "benchmark/longmemeval_bench.rs"
+
+# For local dev: uncomment to use local SurrealDB checkout instead of git
+# [patch.crates-io]
+# surrealdb = { path = "/path/to/surrealdb/surrealdb" }
+
+# Optimize dependencies in dev builds — SurrealDB's HNSW and query engine
+# use deep call stacks that overflow when compiled at opt-level 0.
+[profile.dev.package."*"]
+opt-level = 2

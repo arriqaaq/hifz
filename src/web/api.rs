@@ -1,6 +1,7 @@
 use axum::extract::{Query, State};
 use axum::response::Json;
 use serde::Deserialize;
+use surrealdb::types::SurrealValue;
 
 use crate::models::HookPayload;
 use crate::web::AppState;
@@ -83,9 +84,15 @@ pub async fn session_start(
         .bind(("now", now.clone()))
         .await;
 
-    let context = crate::context::generate_context(&state.db, &body.project, state.token_budget)
-        .await
-        .unwrap_or_default();
+    let context = crate::context::generate_context_with_query(
+        &state.db,
+        Some(&state.embedder),
+        &body.project,
+        None,
+        state.token_budget,
+    )
+    .await
+    .unwrap_or_default();
 
     Json(serde_json::json!({
         "sessionId": body.session_id,
@@ -163,6 +170,7 @@ pub struct SearchReq {
     pub query: String,
     pub limit: Option<usize>,
     pub mode: Option<String>,
+    pub project: Option<String>,
 }
 
 pub async fn smart_search(
@@ -171,13 +179,17 @@ pub async fn smart_search(
 ) -> Json<serde_json::Value> {
     let limit = body.limit.unwrap_or(10);
     let mode = body.mode.as_deref().unwrap_or("hybrid");
+    let project = body.project.as_deref();
 
     let results = match mode {
-        "text" => crate::search::search_text(&state.db, &body.query, limit).await,
+        "text" => crate::search::search_text(&state.db, &body.query, limit, project).await,
         "semantic" => {
             crate::search::search_semantic(&state.db, &state.embedder, &body.query, limit).await
         }
-        _ => crate::search::search_hybrid(&state.db, &state.embedder, &body.query, limit).await,
+        _ => {
+            crate::search::search_hybrid(&state.db, &state.embedder, &body.query, limit, project)
+                .await
+        }
     };
 
     match results {
@@ -196,6 +208,7 @@ pub struct RememberReq {
     pub mem_type: Option<String>,
     pub concepts: Option<Vec<String>>,
     pub files: Option<Vec<String>>,
+    pub project: Option<String>,
 }
 
 pub async fn remember(
@@ -205,18 +218,66 @@ pub async fn remember(
     let mem_type = body.mem_type.as_deref().unwrap_or("fact");
     let concepts = body.concepts.unwrap_or_default();
     let files = body.files.unwrap_or_default();
+    let project = body.project.as_deref().unwrap_or("global");
 
-    match crate::remember::save(
+    let save_result = crate::remember::save(
         &state.db,
+        &state.embedder,
+        project,
         mem_type,
         &body.title,
         &body.content,
         &concepts,
         &files,
     )
-    .await
-    {
-        Ok(title) => Json(serde_json::json!({"status": "ok", "title": title})),
+    .await;
+
+    match save_result {
+        Ok(title) => {
+            // Opt-in Memory Evolution fires in the background after the write commits.
+            if state.llm_evolve {
+                if let Some(ollama) = state.ollama.clone() {
+                    let db = state.db.clone();
+                    let probe_title = title.clone();
+                    let probe_project = project.to_string();
+                    tokio::spawn(async move {
+                        // Look up the freshly-created memory id by title+project+latest-created.
+                        let mut resp = match db
+                            .query(
+                                "SELECT id FROM hifz \
+                                 WHERE title = $title AND project = $project \
+                                 ORDER BY created_at DESC LIMIT 1",
+                            )
+                            .bind(("title", probe_title))
+                            .bind(("project", probe_project))
+                            .await
+                        {
+                            Ok(r) => r,
+                            Err(e) => {
+                                tracing::warn!("evolve: id lookup failed: {e}");
+                                return;
+                            }
+                        };
+                        #[derive(
+                            serde::Deserialize,
+                            serde::Serialize,
+                            surrealdb::types::SurrealValue,
+                            Debug,
+                        )]
+                        struct Row {
+                            id: Option<surrealdb::types::RecordId>,
+                        }
+                        let rows: Vec<Row> = resp.take(0).unwrap_or_default();
+                        if let Some(id) = rows.into_iter().next().and_then(|r| r.id) {
+                            if let Err(e) = crate::evolve::evolve_one(&db, &ollama, &id).await {
+                                tracing::warn!("evolve failed for {id:?}: {e}");
+                            }
+                        }
+                    });
+                }
+            }
+            Json(serde_json::json!({"status": "ok", "title": title}))
+        }
         Err(e) => Json(serde_json::json!({"error": e.to_string()})),
     }
 }
@@ -244,6 +305,10 @@ pub async fn forget(
 pub struct ContextReq {
     pub project: String,
     pub token_budget: Option<usize>,
+    /// Optional query to bias retrieval (e.g. the user's prompt, pre-compact
+    /// summary, or recent observation titles). When omitted, the server
+    /// synthesises one from recent project activity.
+    pub query: Option<String>,
 }
 
 pub async fn context(
@@ -251,8 +316,71 @@ pub async fn context(
     Json(body): Json<ContextReq>,
 ) -> Json<serde_json::Value> {
     let budget = body.token_budget.unwrap_or(state.token_budget);
-    match crate::context::generate_context(&state.db, &body.project, budget).await {
+    let result = crate::context::generate_context_with_query(
+        &state.db,
+        Some(&state.embedder),
+        &body.project,
+        body.query.as_deref(),
+        budget,
+    )
+    .await;
+    match result {
         Ok(ctx) => Json(serde_json::json!({"context": ctx})),
+        Err(e) => Json(serde_json::json!({"error": e.to_string()})),
+    }
+}
+
+// --- Episodes (Phase 4) ---
+
+#[derive(Deserialize)]
+pub struct EpisodesReq {
+    pub query: String,
+    pub project: Option<String>,
+    pub limit: Option<usize>,
+}
+
+pub async fn episodes_search(
+    State(state): State<AppState>,
+    Json(body): Json<EpisodesReq>,
+) -> Json<serde_json::Value> {
+    let limit = body.limit.unwrap_or(10);
+    match crate::episode::search(&state.db, body.project.as_deref(), &body.query, limit).await {
+        Ok(rows) => Json(serde_json::json!({"episodes": rows, "count": rows.len()})),
+        Err(e) => Json(serde_json::json!({"error": e.to_string()})),
+    }
+}
+
+// --- Core memory (always-on per-project block) ---
+
+pub async fn core_get(
+    State(state): State<AppState>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Json<serde_json::Value> {
+    let project = params
+        .get("project")
+        .map(|s| s.as_str())
+        .unwrap_or("global");
+    match crate::core_mem::get(&state.db, project).await {
+        Ok(row) => Json(serde_json::to_value(row).unwrap_or_default()),
+        Err(e) => Json(serde_json::json!({"error": e.to_string()})),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct CoreEditReq {
+    pub project: String,
+    pub field: String, // identity | goals | invariants | watchlist
+    pub op: String,    // set | add | remove
+    pub value: String,
+}
+
+pub async fn core_edit(
+    State(state): State<AppState>,
+    Json(body): Json<CoreEditReq>,
+) -> Json<serde_json::Value> {
+    match crate::core_mem::edit(&state.db, &body.project, &body.field, &body.op, &body.value).await
+    {
+        Ok(row) => Json(serde_json::to_value(row).unwrap_or_default()),
         Err(e) => Json(serde_json::json!({"error": e.to_string()})),
     }
 }
@@ -275,6 +403,49 @@ pub async fn digest(
 pub async fn forget_gc(State(state): State<AppState>) -> Json<serde_json::Value> {
     match crate::forget::run_forget(&state.db, false).await {
         Ok(r) => Json(serde_json::to_value(r).unwrap_or_default()),
+        Err(e) => Json(serde_json::json!({"error": e.to_string()})),
+    }
+}
+
+// --- Evolve (opt-in Memory Evolution) ---
+
+#[derive(Deserialize)]
+pub struct EvolveReq {
+    pub memory_id: String,
+}
+
+pub async fn evolve(
+    State(state): State<AppState>,
+    Json(body): Json<EvolveReq>,
+) -> Json<serde_json::Value> {
+    let Some(ollama) = state.ollama.as_ref() else {
+        return Json(serde_json::json!({
+            "error": "HIFZ_LLM_EVOLVE requires OLLAMA_URL to be configured"
+        }));
+    };
+
+    // Resolve id string into a RecordId via the DB.
+    let mut resp = match state
+        .db
+        .query("SELECT id FROM type::record($id)")
+        .bind(("id", body.memory_id.clone()))
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => return Json(serde_json::json!({"error": e.to_string()})),
+    };
+
+    #[derive(serde::Deserialize, serde::Serialize, surrealdb::types::SurrealValue, Debug)]
+    struct Row {
+        id: Option<surrealdb::types::RecordId>,
+    }
+    let rows: Vec<Row> = resp.take(0).unwrap_or_default();
+    let Some(rid) = rows.into_iter().next().and_then(|r| r.id) else {
+        return Json(serde_json::json!({"error": "memory not found"}));
+    };
+
+    match crate::evolve::evolve_one(&state.db, ollama, &rid).await {
+        Ok(report) => Json(serde_json::to_value(report).unwrap_or_default()),
         Err(e) => Json(serde_json::json!({"error": e.to_string()})),
     }
 }

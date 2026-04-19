@@ -42,6 +42,15 @@ enum Command {
     },
     /// Show health status
     Status,
+    /// Backfill schema upgrades (embeddings, project, ...) for existing memories
+    Reindex {
+        /// SurrealDB data directory
+        #[arg(long, default_value = "db_data")]
+        db_path: String,
+        /// Reindex memories (hifz table): embeddings + project backfill
+        #[arg(long)]
+        memories: bool,
+    },
 }
 
 fn main() -> Result<()> {
@@ -112,6 +121,7 @@ async fn async_main(cli: Cli) -> Result<()> {
                 ollama,
                 config.auto_compress,
                 config.token_budget,
+                config.llm_evolve,
             )
             .await?;
         }
@@ -124,6 +134,22 @@ async fn async_main(cli: Cli) -> Result<()> {
 
             eprintln!("[hifz] MCP proxy → {url}");
             hifz::mcp::serve_stdio(state).await?;
+        }
+
+        Command::Reindex {
+            db_path,
+            memories: _,
+        } => {
+            tracing::info!("hifz reindex — SurrealKV ({db_path})");
+            let db = hifz::db::connect(&db_path).await?;
+            let embedder = Arc::new(hifz::embed::Embedder::new()?);
+            hifz::db::init_schema(&db, embedder.dimension()).await?;
+
+            let report = hifz::reindex::reindex_memories(&db, &embedder).await?;
+            println!(
+                "memories: embedded={}, project_backfilled={}, skipped={}",
+                report.embedded, report.project_backfilled, report.skipped
+            );
         }
 
         Command::Status => {

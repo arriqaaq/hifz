@@ -22,6 +22,7 @@ pub struct AppState {
     pub dedup: Arc<DedupMap>,
     pub auto_compress: bool,
     pub token_budget: usize,
+    pub llm_evolve: bool,
     pub started_at: Instant,
 }
 
@@ -32,6 +33,7 @@ pub async fn serve(
     ollama: Option<Arc<OllamaClient>>,
     auto_compress: bool,
     token_budget: usize,
+    llm_evolve: bool,
 ) -> Result<()> {
     let state = AppState {
         db,
@@ -40,6 +42,7 @@ pub async fn serve(
         dedup: Arc::new(DedupMap::new()),
         auto_compress,
         token_budget,
+        llm_evolve,
         started_at: Instant::now(),
     };
 
@@ -69,12 +72,19 @@ pub async fn serve(
         .route("/hifz/forget", axum::routing::post(api::forget))
         // Context
         .route("/hifz/context", axum::routing::post(api::context))
+        // Core memory (always-on per-project block)
+        .route("/hifz/core", axum::routing::get(api::core_get))
+        .route("/hifz/core/edit", axum::routing::post(api::core_edit))
+        // Episodes (task-scoped trajectories)
+        .route("/hifz/episodes", axum::routing::post(api::episodes_search))
         // Digest (project intelligence)
         .route("/hifz/digest", axum::routing::get(api::digest))
         // Forget GC (garbage collection)
         .route("/hifz/forget-gc", axum::routing::post(api::forget_gc))
         // Consolidation
         .route("/hifz/consolidate", axum::routing::post(api::consolidate))
+        // Memory Evolution (opt-in LLM)
+        .route("/hifz/evolve", axum::routing::post(api::evolve))
         // Timeline
         .route("/hifz/timeline", axum::routing::get(api::timeline))
         // Export

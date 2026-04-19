@@ -324,7 +324,16 @@ cargo build --release
 ./benchmark/download_dataset.sh
 cargo run --bin longmemeval-bench -- bm25
 cargo run --bin longmemeval-bench -- hybrid
+
+# Memory-tier benchmark (Phase 6) — measures hifz_save / hifz_search / context injection
+cargo run --release --bin memory-bench -- full
+cargo run --release --bin memory-bench -- base
 ```
+
+## Docs
+
+- [docs/architecture/memory.md](docs/architecture/memory.md) — memory model, write/read/evolution pipelines, mermaid diagrams.
+- [docs/research/memory-architecture.md](docs/research/memory-architecture.md) — prior art (A-MEM, Mem0, MemGPT, MIRIX), design tradeoffs, verified SurrealDB syntax, evaluation plan.
 
 ## License
 

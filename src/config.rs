@@ -14,6 +14,8 @@ pub struct Config {
     pub consolidation_enabled: bool,
     pub token_budget: usize,
     pub max_obs_per_session: usize,
+    /// A-MEM Memory Evolution on write. Requires Ollama; defaults to off.
+    pub llm_evolve: bool,
 }
 
 impl Default for Config {
@@ -28,6 +30,7 @@ impl Default for Config {
             consolidation_enabled: true,
             token_budget: 2000,
             max_obs_per_session: 500,
+            llm_evolve: false,
         }
     }
 }
@@ -126,6 +129,9 @@ pub fn load_config() -> Config {
     }
     if let Some(v) = get("MAX_OBS_PER_SESSION") {
         cfg.max_obs_per_session = parse_usize(&v, 500);
+    }
+    if let Some(v) = get("HIFZ_LLM_EVOLVE") {
+        cfg.llm_evolve = parse_bool(&v);
     }
 
     cfg

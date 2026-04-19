@@ -62,6 +62,10 @@ default = []
 name = "longmemeval-bench"
 path = "benchmark/longmemeval_bench.rs"
 
+[[bin]]
+name = "memory-bench"
+path = "benchmark/memory_bench.rs"
+
 # For local dev: uncomment to use local SurrealDB checkout instead of git
 # [patch.crates-io]
 # surrealdb = { path = "/path/to/surrealdb/surrealdb" }

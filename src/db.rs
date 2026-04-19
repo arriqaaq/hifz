@@ -83,13 +83,20 @@ DEFINE INDEX IF NOT EXISTS obs_vec          ON TABLE observation
 DEFINE INDEX IF NOT EXISTS obs_session      ON TABLE observation FIELDS session_id;
 
 DEFINE TABLE IF NOT EXISTS hifz SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS project       ON hifz TYPE string DEFAULT 'global';
 DEFINE FIELD IF NOT EXISTS mem_type      ON hifz TYPE string;
 DEFINE FIELD IF NOT EXISTS title         ON hifz TYPE string;
 DEFINE FIELD IF NOT EXISTS content       ON hifz TYPE string;
 DEFINE FIELD IF NOT EXISTS concepts      ON hifz TYPE array<string>;
 DEFINE FIELD IF NOT EXISTS files         ON hifz TYPE array<string>;
+DEFINE FIELD IF NOT EXISTS keywords      ON hifz TYPE array<string> DEFAULT [];
+DEFINE FIELD IF NOT EXISTS tags          ON hifz TYPE array<string> DEFAULT [];
+DEFINE FIELD IF NOT EXISTS context       ON hifz TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS session_ids   ON hifz TYPE array<record<session>>;
 DEFINE FIELD IF NOT EXISTS strength      ON hifz TYPE float;
+DEFINE FIELD IF NOT EXISTS access_count  ON hifz TYPE int DEFAULT 0;
+DEFINE FIELD IF NOT EXISTS last_accessed_at ON hifz TYPE string DEFAULT time::now();
+DEFINE FIELD IF NOT EXISTS embedding     ON hifz TYPE option<array<float>>;
 DEFINE FIELD IF NOT EXISTS version       ON hifz TYPE int DEFAULT 1;
 DEFINE FIELD IF NOT EXISTS parent_id     ON hifz TYPE option<record<hifz>>;
 DEFINE FIELD IF NOT EXISTS supersedes    ON hifz TYPE option<array<record<hifz>>>;
@@ -101,6 +108,10 @@ DEFINE INDEX IF NOT EXISTS mem_title_ft  ON TABLE hifz
   FIELDS title FULLTEXT ANALYZER obs_analyzer BM25 CONCURRENTLY;
 DEFINE INDEX IF NOT EXISTS mem_content_ft ON TABLE hifz
   FIELDS content FULLTEXT ANALYZER obs_analyzer BM25 CONCURRENTLY;
+DEFINE INDEX IF NOT EXISTS mem_vec       ON TABLE hifz
+  FIELDS embedding HNSW DIMENSION 384 DIST COSINE;
+DEFINE INDEX IF NOT EXISTS mem_project   ON TABLE hifz FIELDS project;
+DEFINE INDEX IF NOT EXISTS mem_latest    ON TABLE hifz FIELDS is_latest;
 
 DEFINE TABLE IF NOT EXISTS summary SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS session_id        ON summary TYPE record<session>;
@@ -124,6 +135,64 @@ DEFINE FIELD IF NOT EXISTS strength          ON semantic_hifz TYPE float DEFAULT
 DEFINE FIELD IF NOT EXISTS last_accessed_at  ON semantic_hifz TYPE string;
 DEFINE FIELD IF NOT EXISTS created_at        ON semantic_hifz TYPE string;
 DEFINE FIELD IF NOT EXISTS updated_at        ON semantic_hifz TYPE string;
+
+-- === CORE MEMORY (MemGPT-style always-on block) ===
+-- Per-project singleton. `id` is deterministic: hifz_core:<project-slug>.
+DEFINE TABLE IF NOT EXISTS hifz_core SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS project     ON hifz_core TYPE string;
+DEFINE FIELD IF NOT EXISTS identity    ON hifz_core TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS goals       ON hifz_core TYPE array<string> DEFAULT [];
+DEFINE FIELD IF NOT EXISTS invariants  ON hifz_core TYPE array<string> DEFAULT [];
+DEFINE FIELD IF NOT EXISTS watchlist   ON hifz_core TYPE array<string> DEFAULT [];
+DEFINE FIELD IF NOT EXISTS updated_at  ON hifz_core TYPE string;
+DEFINE INDEX IF NOT EXISTS core_project ON TABLE hifz_core FIELDS project UNIQUE;
+
+-- === ENTITIES (Phase 4) ===
+-- Typed named things (files, symbols, concepts, errors) mentioned across
+-- observations and memories. Used to bridge memories sharing a topic.
+DEFINE TABLE IF NOT EXISTS entity SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS kind       ON entity TYPE string;  -- file|symbol|concept|error
+DEFINE FIELD IF NOT EXISTS name       ON entity TYPE string;
+DEFINE FIELD IF NOT EXISTS project    ON entity TYPE string;
+DEFINE FIELD IF NOT EXISTS first_seen ON entity TYPE string;
+DEFINE FIELD IF NOT EXISTS last_seen  ON entity TYPE string;
+DEFINE FIELD IF NOT EXISTS count      ON entity TYPE int DEFAULT 1;
+DEFINE INDEX IF NOT EXISTS entity_unique ON TABLE entity FIELDS kind, name, project UNIQUE;
+
+-- === EPISODES (Phase 4) ===
+-- A task-scoped trajectory inside a session: UserPromptSubmit → … → Stop/TaskCompleted.
+DEFINE TABLE IF NOT EXISTS episode SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS session_id      ON episode TYPE record<session>;
+DEFINE FIELD IF NOT EXISTS project         ON episode TYPE string;
+DEFINE FIELD IF NOT EXISTS started_at      ON episode TYPE string;
+DEFINE FIELD IF NOT EXISTS ended_at        ON episode TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS prompt          ON episode TYPE string;
+DEFINE FIELD IF NOT EXISTS outcome         ON episode TYPE string DEFAULT 'unknown';
+DEFINE FIELD IF NOT EXISTS observation_ids ON episode TYPE array<record<observation>> DEFAULT [];
+DEFINE FIELD IF NOT EXISTS lesson          ON episode TYPE option<string>;
+DEFINE INDEX IF NOT EXISTS ep_project ON TABLE episode FIELDS project;
+DEFINE INDEX IF NOT EXISTS ep_session ON TABLE episode FIELDS session_id;
+DEFINE ANALYZER IF NOT EXISTS ep_analyzer TOKENIZERS blank, class
+  FILTERS lowercase, snowball(english);
+DEFINE INDEX IF NOT EXISTS ep_prompt_ft ON TABLE episode
+  FIELDS prompt FULLTEXT ANALYZER ep_analyzer BM25 CONCURRENTLY;
+DEFINE INDEX IF NOT EXISTS ep_lesson_ft ON TABLE episode
+  FIELDS lesson FULLTEXT ANALYZER ep_analyzer BM25 CONCURRENTLY;
+
+-- === GRAPH LINKS BETWEEN MEMORIES (Phase 3) ===
+-- Typed relation edge. `via` distinguishes the reason two memories are linked:
+--   embedding  — KNN cosine similarity
+--   concept    — Jaccard overlap on concepts
+--   file       — Jaccard overlap on files
+--   entity     — shared entity mention (Phase 4)
+--   semantic   — proposed by evolution (Phase 5, LLM)
+-- NOTE: RELATE ... UNIQUE enforces (in, out) uniqueness only. Per-via dedup is
+-- handled Rust-side in src/link.rs before any RELATE call.
+DEFINE TABLE IF NOT EXISTS mem_link SCHEMAFULL TYPE RELATION IN hifz OUT hifz;
+DEFINE FIELD IF NOT EXISTS score      ON mem_link TYPE float;
+DEFINE FIELD IF NOT EXISTS via        ON mem_link TYPE string;
+DEFINE FIELD IF NOT EXISTS created_at ON mem_link TYPE string;
+DEFINE INDEX IF NOT EXISTS mem_link_via ON TABLE mem_link FIELDS via;
 
 DEFINE TABLE IF NOT EXISTS procedural_hifz SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS name              ON procedural_hifz TYPE string;

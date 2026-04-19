@@ -53,19 +53,67 @@ pub struct RawObservation {
 #[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
 pub struct Hifz {
     pub id: Option<surrealdb::types::RecordId>,
+    pub project: String,
     pub mem_type: String,
     pub title: String,
     pub content: String,
     pub concepts: Vec<String>,
     pub files: Vec<String>,
+    pub keywords: Vec<String>,
+    pub tags: Vec<String>,
+    pub context: Option<String>,
     pub session_ids: Vec<surrealdb::types::RecordId>,
     pub strength: f64,
+    pub access_count: i64,
+    pub last_accessed_at: String,
+    pub embedding: Option<Vec<f32>>,
     pub version: i64,
     pub parent_id: Option<surrealdb::types::RecordId>,
     pub supersedes: Option<Vec<surrealdb::types::RecordId>>,
     pub is_latest: bool,
     pub forget_after: Option<String>,
     pub created_at: String,
+    pub updated_at: String,
+}
+
+// --- Entity (Phase 4) ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
+pub struct Entity {
+    pub id: Option<surrealdb::types::RecordId>,
+    pub kind: String, // file | symbol | concept | error
+    pub name: String,
+    pub project: String,
+    pub first_seen: String,
+    pub last_seen: String,
+    pub count: i64,
+}
+
+// --- Episode (Phase 4) ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
+pub struct Episode {
+    pub id: Option<surrealdb::types::RecordId>,
+    pub session_id: surrealdb::types::RecordId,
+    pub project: String,
+    pub started_at: String,
+    pub ended_at: Option<String>,
+    pub prompt: String,
+    pub outcome: String,
+    pub observation_ids: Vec<surrealdb::types::RecordId>,
+    pub lesson: Option<String>,
+}
+
+// --- Core memory (per-project always-on block) ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
+pub struct CoreMemory {
+    pub id: Option<surrealdb::types::RecordId>,
+    pub project: String,
+    pub identity: Option<String>,
+    pub goals: Vec<String>,
+    pub invariants: Vec<String>,
+    pub watchlist: Vec<String>,
     pub updated_at: String,
 }
 

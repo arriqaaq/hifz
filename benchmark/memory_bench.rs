@@ -30,8 +30,20 @@ use anyhow::Result;
 
 use hifz::db::{self, init_schema};
 use hifz::embed::Embedder;
+use hifz::llm_rerank;
+use hifz::ollama::OllamaClient;
 use hifz::remember;
+use hifz::rerank::{Reranker, RerankerChoice};
 use hifz::search::{self, SearchConfig};
+
+/// Which reranker path the bench is asked to use.
+enum RerankSpec {
+    None,
+    /// In-process fastembed cross-encoder.
+    Fastembed(RerankerChoice),
+    /// Listwise LLM rerank via local Ollama, model name verbatim.
+    Llm(String),
+}
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -486,7 +498,7 @@ fn mrr(ranks: &[Option<usize>]) -> f64 {
     sum / ranks.len() as f64
 }
 
-async fn run(mode: &str, ablations: &str, rrf_k: Option<u64>) -> Result<()> {
+async fn run(mode: &str, ablations: &str, rrf_k: Option<u64>, rerank: RerankSpec) -> Result<()> {
     let start = Instant::now();
     let mut cfg = parse_ablations(ablations);
     if let Some(k) = rrf_k {
@@ -499,6 +511,17 @@ async fn run(mode: &str, ablations: &str, rrf_k: Option<u64>) -> Result<()> {
     if let Some(k) = rrf_k {
         println!("rrf_k: {k} (default {})", SearchConfig::default().rrf_k);
     }
+    match &rerank {
+        RerankSpec::None => {}
+        RerankSpec::Fastembed(c) => {
+            println!("rerank: fastembed/{} (cross-encoder, top-20)", c.as_str())
+        }
+        RerankSpec::Llm(m) => {
+            let url =
+                std::env::var("OLLAMA_URL").unwrap_or_else(|_| "http://localhost:11434".into());
+            println!("rerank: LLM via Ollama ({m} @ {url}, listwise top-20)")
+        }
+    }
     println!("fixtures: {} memories, {} probes", FIXTURES.len(), {
         let n: usize = FIXTURES.iter().map(|f| f.probes.len()).sum();
         n
@@ -508,6 +531,31 @@ async fn run(mode: &str, ablations: &str, rrf_k: Option<u64>) -> Result<()> {
     let embedder = Arc::new(Embedder::new()?);
     init_schema(&db, embedder.dimension()).await?;
 
+    // Build reranker state. Only one path is active at a time — the enum
+    // guarantees the bench flag is self-consistent.
+    let mut fastembed_reranker: Option<Reranker> = None;
+    let mut llm_reranker: Option<OllamaClient> = None;
+    match rerank {
+        RerankSpec::None => {}
+        RerankSpec::Fastembed(choice) => {
+            let t = Instant::now();
+            let rr = Reranker::new(choice)?;
+            println!("reranker loaded in {:?}", t.elapsed());
+            fastembed_reranker = Some(rr);
+        }
+        RerankSpec::Llm(model) => {
+            let url = std::env::var("OLLAMA_URL").ok();
+            let client = OllamaClient::new(url, Some(model));
+            if !client.is_available().await {
+                eprintln!(
+                    "warning: Ollama not reachable at the configured URL; running without rerank"
+                );
+            } else {
+                llm_reranker = Some(client);
+            }
+        }
+    }
+
     seed_memories(&db, &embedder).await?;
     println!("seeded in {:?}", start.elapsed());
 
@@ -516,6 +564,7 @@ async fn run(mode: &str, ablations: &str, rrf_k: Option<u64>) -> Result<()> {
     let mut result_pool_size: Vec<usize> = Vec::with_capacity(probes.len());
     let mut competitors_per_probe: Vec<Vec<(String, f64)>> = Vec::with_capacity(probes.len());
     let mut inj_hits = 0usize;
+    let mut rerank_elapsed = std::time::Duration::ZERO;
 
     let search_start = Instant::now();
     for p in &probes {
@@ -524,9 +573,18 @@ async fn run(mode: &str, ablations: &str, rrf_k: Option<u64>) -> Result<()> {
             _ => None,
         };
 
-        let results =
+        let mut results =
             search::search_hybrid_with_config(&db, &embedder, &p.text, 20, project_filter, cfg)
                 .await?;
+        if let Some(rr) = fastembed_reranker.as_ref() {
+            let rr_t = Instant::now();
+            results = search::apply_rerank(rr, &p.text, results, 20);
+            rerank_elapsed += rr_t.elapsed();
+        } else if let Some(ollama) = llm_reranker.as_ref() {
+            let rr_t = Instant::now();
+            results = llm_rerank::apply_llm_rerank(ollama, &p.text, results, 20).await;
+            rerank_elapsed += rr_t.elapsed();
+        }
         result_pool_size.push(results.len());
         let rank = rank_of(&results, &p.oracle_title);
         ranks.push(rank);
@@ -564,6 +622,13 @@ async fn run(mode: &str, ablations: &str, rrf_k: Option<u64>) -> Result<()> {
     println!("Injection@top  : {:.3}", inj);
     println!("avg pool size  : {:.1}", avg_pool);
     println!("search time    : {:?}", search_elapsed);
+    if fastembed_reranker.is_some() || llm_reranker.is_some() {
+        println!(
+            "rerank time    : {:?}  ({:.1} ms/probe avg)",
+            rerank_elapsed,
+            rerank_elapsed.as_secs_f64() * 1000.0 / probes.len() as f64
+        );
+    }
     println!("total time     : {:?}", start.elapsed());
 
     // Diagnostic: per-miss report with the memories that ranked above the
@@ -632,11 +697,21 @@ async fn main() -> Result<()> {
         )
         .init();
 
-    // Usage: memory-bench [base|full] [--ablate=...] [--rrf-k=N]
+    // Usage: memory-bench [base|full] [--ablate=...] [--rrf-k=N] [--rerank=<spec>]
+    //
+    // `--rerank=<spec>` has three shapes:
+    //   * `bge-base` | `bge-v2-m3` | `jina-v1-turbo` | `jina-v2-multilingual`
+    //       → in-process fastembed cross-encoder (ONNX, CPU).
+    //   * `llm:<ollama-model>`  (e.g. `llm:qwen3:8b`, `llm:qwen2.5:3b`)
+    //       → listwise rerank through local Ollama. Model string after the
+    //         first colon is passed verbatim as the Ollama tag.
+    //         `OLLAMA_URL` env (default http://localhost:11434) picks host.
+    //   * `off` | omitted → no reranker.
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut mode = "full".to_string();
     let mut ablations = String::new();
     let mut rrf_k: Option<u64> = None;
+    let mut rerank = RerankSpec::None;
     for a in args {
         if let Some(rest) = a.strip_prefix("--ablate=") {
             ablations = rest.to_string();
@@ -647,11 +722,21 @@ async fn main() -> Result<()> {
                     eprintln!("warning: --rrf-k expects a positive integer, got '{rest}' (ignored)")
                 }
             }
+        } else if let Some(rest) = a.strip_prefix("--rerank=") {
+            rerank = parse_rerank_spec(rest);
         } else if matches!(a.as_str(), "full" | "base") {
             mode = a;
         } else if a == "--help" || a == "-h" {
             eprintln!(
-                "usage: memory-bench [base|full] [--ablate=vector,recency,graph,diversify] [--rrf-k=N]"
+                "usage: memory-bench [base|full] [--ablate=vector,recency,graph,diversify] \
+                 [--rrf-k=N] [--rerank=<spec>]\n\
+                 \n\
+                 --rerank spec:\n  \
+                   bge-base | bge-v2-m3 | jina-v1-turbo | jina-v2-multilingual  \
+                 (fastembed cross-encoder, in-process ONNX)\n  \
+                   llm:<ollama-model>  e.g. llm:qwen3:8b  \
+                 (listwise rerank via Ollama; OLLAMA_URL env picks host)\n  \
+                   off (default)"
             );
             return Ok(());
         } else {
@@ -659,5 +744,26 @@ async fn main() -> Result<()> {
         }
     }
 
-    run(&mode, &ablations, rrf_k).await
+    run(&mode, &ablations, rrf_k, rerank).await
+}
+
+fn parse_rerank_spec(raw: &str) -> RerankSpec {
+    if raw.is_empty() || raw == "off" {
+        return RerankSpec::None;
+    }
+    if let Some(model) = raw.strip_prefix("llm:") {
+        if model.is_empty() {
+            eprintln!("warning: --rerank=llm: requires a model name (e.g. llm:qwen3:8b); ignored");
+            return RerankSpec::None;
+        }
+        return RerankSpec::Llm(model.to_string());
+    }
+    if let Some(choice) = RerankerChoice::from_str(raw) {
+        return RerankSpec::Fastembed(choice);
+    }
+    eprintln!(
+        "warning: unknown --rerank value '{raw}' (expected bge-base, bge-v2-m3, \
+         jina-v1-turbo, jina-v2-multilingual, llm:<ollama-model>, or off)"
+    );
+    RerankSpec::None
 }

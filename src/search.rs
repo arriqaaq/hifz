@@ -9,6 +9,7 @@ use crate::embed::Embedder;
 use crate::link;
 use crate::models::{RrfResult, SearchResult};
 use crate::rank;
+use crate::rerank::Reranker;
 
 /// Ablation / tuning knobs for the hybrid retrieval path. `Default` preserves
 /// the normal Phase-1–6 behaviour; each `bool` turns one stage OFF so the bench
@@ -457,6 +458,67 @@ async fn search_memories_with_config(
     });
     results.truncate(limit);
     Ok(results)
+}
+
+/// Re-score the top-`top_n` memory rows in `results` with a fastembed
+/// cross-encoder reranker. Observation rows are left untouched. The full
+/// list is re-sorted after reranking so memories may move above/below
+/// observations based on the new scores.
+///
+/// The reranker's score *replaces* the first-stage score for the memory
+/// rows it touches. We don't blend — mixing dilutes the cross-attention
+/// signal. Memory rows beyond `top_n` keep their first-stage score.
+///
+/// Errors degrade gracefully: the original `results` are returned
+/// unchanged and the error is logged via `tracing::warn!`.
+pub fn apply_rerank(
+    reranker: &Reranker,
+    query: &str,
+    mut results: Vec<SearchResult>,
+    top_n: usize,
+) -> Vec<SearchResult> {
+    let mem_indices: Vec<usize> = results
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| r.obs_type.starts_with("memory:"))
+        .map(|(i, _)| i)
+        .take(top_n)
+        .collect();
+    if mem_indices.is_empty() {
+        return results;
+    }
+
+    let docs: Vec<String> = mem_indices
+        .iter()
+        .map(|&i| {
+            let r = &results[i];
+            if r.narrative.is_empty() {
+                r.title.clone()
+            } else {
+                format!("{}\n{}", r.title, r.narrative)
+            }
+        })
+        .collect();
+
+    match reranker.rerank(query, &docs) {
+        Ok(scored) => {
+            for (docs_idx, new_score) in scored {
+                if let Some(&r_idx) = mem_indices.get(docs_idx) {
+                    results[r_idx].score = Some(new_score);
+                }
+            }
+            results.sort_by(|a, b| {
+                b.score
+                    .unwrap_or(0.0)
+                    .partial_cmp(&a.score.unwrap_or(0.0))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+        }
+        Err(e) => {
+            tracing::warn!("reranker failed, returning first-stage order: {e}");
+        }
+    }
+    results
 }
 
 /// Increment `access_count` and bump `last_accessed_at` for any memory hits.

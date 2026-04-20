@@ -107,3 +107,28 @@ All patterns were verified against local copies of the SurrealDB source and the 
 1. **Memory scoping — project-scoped.** `project: string` is added to `hifz`, `semantic_hifz`, `procedural_hifz`, `hifz_core`, `episode`, `mem_link`, `entity`. All search and context queries filter on `project`. Existing rows backfill from `session_ids[0].project`.
 2. **Embedding input — richer text.** We embed `title + "\n" + content + "\nconcepts: " + concepts + "\nfiles: " + files`. Phase 6 ablations compare against title+content only.
 3. **Evolution scope — curated tiers only.** Evolution runs on `hifz`, `semantic_hifz`, `procedural_hifz`. Observations stay ephemeral — evolving them would be cost-prohibitive with no retrieval benefit, and it matches A-MEM's intent (curated notes, not raw traces).
+
+## F. LLM-as-reranker: the debate
+
+Phase 10 exposes both a fastembed cross-encoder path and an LLM listwise path behind `memory-bench --rerank=<spec>`. Which is "correct" is contested in the retrieval community. This section captures the argument in both directions so future-us doesn't re-litigate it, and so the null result from our bge-base run (Recall@5 0.944 → 0.900) is read in context.
+
+### The case against LLM reranking (the "fundamentally wrong" position, honestly stated)
+
+1. **Training-objective mismatch.** Cross-encoders like bge are trained *specifically* on (query, doc, relevance) triples with a ranking loss. LLMs are trained on next-token prediction. Using an LLM to produce a ranking is asking it to do something its objective function never rewarded directly.
+2. **Latency & cost at scale.** 10–100× slower and more expensive per rerank. For a production memory system with thousands of queries/day, this compounds badly.
+3. **Position bias.** LLMs have a documented tendency to over-rank items that appear early or late in a listwise prompt. [Liu et al. 2024 "Lost in the Middle"](https://arxiv.org/abs/2307.03172) is the canonical citation.
+4. **Non-determinism.** Even at temperature=0, identical inputs can produce different outputs due to floating-point non-associativity in batched kernels. Rerankers are deterministic.
+5. **JSON fragility.** You have to parse structured output from a generative model. Our own code in [src/llm_rerank.rs](../src/llm_rerank.rs) has a whole validation path precisely because the LLM can return malformed output.
+6. **The real answer is domain fine-tuning.** If a public cross-encoder is weak on your domain (which bge-base was, for us), the principled fix is to fine-tune a small cross-encoder on domain data — not to throw a 7B generative model at it. The LLM route is often a shortcut that masks the missing fine-tuning data.
+
+### The case for LLM reranking (in narrow cases)
+
+1. **Zero-shot on unseen domains.** Papers like [RankGPT](https://arxiv.org/abs/2304.09542) and RankVicuna show generalist LLMs can be competitive or better than fine-tuned rerankers on out-of-distribution data — which is exactly the hifz situation (no training data, domain-specific text).
+2. **World knowledge.** LLMs know "ORM ↔ sqlx/diesel/Postgres" from pretraining; bge-base does not. For short, technical probes this matters.
+3. **No data to fine-tune.** If you don't have labeled pairs, the choice is "public cross-encoder (domain-mismatched) or LLM (zero-shot)", and LLM can win.
+
+### Where this leaves hifz
+
+We expose both paths and default to neither. The bench is the arbiter; conclusions only after data. Production should not route through either until eval shows a clear win that survives on a real (non-synthetic) corpus.
+
+Long-term correct path: if a public cross-encoder is ever shown to be the bottleneck, the principled fix is fine-tuning on hifz-style (query, memory, relevance) pairs — not a permanent LLM hop.

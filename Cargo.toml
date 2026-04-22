@@ -1,6 +1,6 @@
 [package]
 name = "hifz"
-version = "0.9.0"
+version = "0.1.0"
 edition = "2024"
 default-run = "hifz"
 
@@ -9,9 +9,12 @@ default-run = "hifz"
 axum = { version = "0.8", features = ["macros"] }
 tokio = { version = "1", features = ["full"] }
 tower-http = { version = "0.6", features = ["fs", "cors"] }
+# Binary resolution
+which = "7"
 
-# Database — git dep to surrealdb main (3.1.0-alpha, not yet on crates.io)
-surrealdb = { git = "https://github.com/surrealdb/surrealdb", features = ["kv-surrealkv", "kv-mem"] }
+# Database — pinned to specific commit from main (3.1.0-alpha, not yet on crates.io)
+# To update: cargo update surrealdb
+surrealdb = { git = "https://github.com/surrealdb/surrealdb", rev = "876df15b11fabd36b43eeba923f53c4d5ffa59a6", features = ["kv-surrealkv", "kv-mem"] }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }

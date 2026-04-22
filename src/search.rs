@@ -169,6 +169,10 @@ pub async fn search_hybrid_with_config(
         search_memories_with_config(db, query_vec_for_mem, query, limit, project, cfg).await?;
     results.extend(mem_results);
 
+    // Run search (BM25 on lesson + prompt, score dampened by 0.7)
+    let run_results = search_runs_for_context(db, query, limit / 2, project).await?;
+    results.extend(run_results);
+
     // Re-sort and truncate before graph expansion — we only expand from the top-K
     // seeds, not every candidate, to keep the traversal cheap.
     results.sort_by(|a, b| {
@@ -535,6 +539,114 @@ async fn bump_memory_access(db: &Surreal<Db>, results: &[SearchResult]) {
     let q = "UPDATE hifz SET access_count += 1, last_accessed_at = time::now() WHERE id IN $ids";
     if let Err(e) = db.query(q).bind(("ids", mem_ids)).await {
         tracing::warn!("access bump failed: {e}");
+    }
+}
+
+/// Search closed runs with lessons for context integration.
+/// Runs with lessons are surfaced as SearchResults with obs_type = "run:task".
+/// Scores are dampened by 0.7 (runs are contextual, not authoritative).
+pub async fn search_runs_for_context(
+    db: &Surreal<Db>,
+    query: &str,
+    limit: usize,
+    project: Option<&str>,
+) -> Result<Vec<SearchResult>> {
+    #[derive(Debug, SurrealValue)]
+    struct RunRow {
+        id: Option<surrealdb::types::RecordId>,
+        prompt: Option<String>,
+        lesson: Option<String>,
+        outcome: Option<String>,
+        commit_id: Option<surrealdb::types::RecordId>,
+        ended_at: Option<String>,
+        session_id: Option<surrealdb::types::RecordId>,
+    }
+
+    let project_filter = if project.is_some() {
+        " AND project = $project"
+    } else {
+        ""
+    };
+
+    // BM25 search on lesson + prompt
+    let rrf_k = 60;
+    let sql = format!(
+        "search::rrf([\
+             (SELECT id, search::score(1) AS ft_score \
+              FROM run WHERE ended_at IS NOT NONE \
+                AND lesson IS NOT NONE AND lesson != ''{project_filter} \
+                AND prompt @1,OR@ $q \
+              ORDER BY ft_score DESC LIMIT {limit}),\
+             (SELECT id, search::score(2) AS ft_score \
+              FROM run WHERE ended_at IS NOT NONE \
+                AND lesson IS NOT NONE AND lesson != ''{project_filter} \
+                AND lesson @2,OR@ $q \
+              ORDER BY ft_score DESC LIMIT {limit})\
+         ], {limit}, {rrf_k})"
+    );
+
+    let mut q = db.query(&sql).bind(("q", query.to_string()));
+    if let Some(p) = project {
+        q = q.bind(("project", p.to_string()));
+    }
+    let mut response = q.await?;
+    let fused: Vec<RrfResult> = response.take(0)?;
+    if fused.is_empty() {
+        return Ok(vec![]);
+    }
+
+    let ids: Vec<surrealdb::types::RecordId> = fused.iter().filter_map(|r| r.id.clone()).collect();
+    let mut fetch = db
+        .query(
+            "SELECT id, prompt, lesson, outcome, commit_id, ended_at, session_id \
+             FROM run WHERE id IN $ids",
+        )
+        .bind(("ids", ids))
+        .await?;
+    let rows: Vec<RunRow> = fetch.take(0)?;
+
+    #[allow(clippy::mutable_key_type)]
+    let rrf_map: HashMap<_, _> = fused
+        .iter()
+        .filter_map(|r| Some((r.id.clone()?, r.rrf_score?)))
+        .collect();
+
+    let results: Vec<SearchResult> = rows
+        .into_iter()
+        .map(|row| {
+            let id = row.id.clone();
+            let rrf = id
+                .as_ref()
+                .and_then(|r| rrf_map.get(r).copied())
+                .unwrap_or(0.0);
+            // Dampen run scores by 0.7 (contextual, not authoritative)
+            let score = rrf * 0.7;
+
+            let title = row.prompt.clone().unwrap_or_default();
+            let narrative = row.lesson.clone().unwrap_or_default();
+            let outcome = row.outcome.clone().unwrap_or_default();
+
+            SearchResult {
+                id,
+                session_id: row.session_id.clone(),
+                title: truncate_str(&title, 80),
+                obs_type: format!("run:task:{outcome}"),
+                narrative,
+                timestamp: row.ended_at.unwrap_or_default(),
+                importance: 5,
+                score: Some(score),
+            }
+        })
+        .collect();
+
+    Ok(results)
+}
+
+fn truncate_str(s: &str, max: usize) -> String {
+    if s.len() <= max {
+        s.to_string()
+    } else {
+        format!("{}…", &s[..max])
     }
 }
 

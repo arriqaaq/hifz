@@ -87,19 +87,106 @@ async fn tier_semantic(db: &Surreal<Db>, ollama: &OllamaClient) -> Result<usize>
 }
 
 async fn tier_reflect(db: &Surreal<Db>) -> Result<usize> {
-    // Simple clustering by shared concepts — count distinct concept groups
+    use surrealdb::types::{RecordId, SurrealValue};
+
+    #[derive(Debug, SurrealValue)]
+    struct MemRow {
+        id: Option<RecordId>,
+        concepts: Option<Vec<String>>,
+    }
+
     let mut resp = db
-        .query("SELECT concepts FROM hifz WHERE is_latest = true LIMIT 100")
+        .query("SELECT id, concepts FROM hifz WHERE is_latest = true LIMIT 100")
         .await?;
-    let _rows: Vec<serde_json::Value> = resp.take(0)?;
-    // Simplified: just return 0 for now, full clustering requires more logic
-    Ok(0)
+    let rows: Vec<MemRow> = resp.take(0)?;
+
+    if rows.len() < 3 {
+        return Ok(0);
+    }
+
+    // Filter stop-concepts: remove any concept appearing in >50% of memories
+    let mut freq: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for row in &rows {
+        if let Some(ref concepts) = row.concepts {
+            for c in concepts {
+                *freq.entry(c.clone()).or_default() += 1;
+            }
+        }
+    }
+    let threshold = rows.len() / 2;
+    let stop_concepts: std::collections::HashSet<&str> = freq
+        .iter()
+        .filter(|(_, count)| **count > threshold)
+        .map(|(c, _)| c.as_str())
+        .collect();
+
+    // Build filtered concept sets per memory
+    let filtered: Vec<(Option<&RecordId>, std::collections::HashSet<String>)> = rows
+        .iter()
+        .map(|r| {
+            let concepts: std::collections::HashSet<String> = r
+                .concepts
+                .as_ref()
+                .map(|cs| {
+                    cs.iter()
+                        .filter(|c| !stop_concepts.contains(c.as_str()))
+                        .cloned()
+                        .collect()
+                })
+                .unwrap_or_default();
+            (r.id.as_ref(), concepts)
+        })
+        .collect();
+
+    // Pairwise Jaccard, collect clusters
+    let mut clusters: Vec<Vec<usize>> = Vec::new();
+    let mut clustered: std::collections::HashSet<usize> = std::collections::HashSet::new();
+
+    for i in 0..filtered.len() {
+        if clustered.contains(&i) || filtered[i].1.is_empty() {
+            continue;
+        }
+        let mut cluster = vec![i];
+        for j in (i + 1)..filtered.len() {
+            if clustered.contains(&j) || filtered[j].1.is_empty() {
+                continue;
+            }
+            let intersection = filtered[i].1.intersection(&filtered[j].1).count();
+            let union = filtered[i].1.union(&filtered[j].1).count();
+            if union > 0 && (intersection as f64 / union as f64) >= 0.4 {
+                cluster.push(j);
+            }
+        }
+        if cluster.len() >= 3 {
+            for &idx in &cluster {
+                clustered.insert(idx);
+            }
+            clusters.push(cluster);
+        }
+    }
+
+    // Create mem_link edges for each cluster
+    let mut count = 0;
+    for cluster in &clusters {
+        for i in 0..cluster.len() {
+            for j in (i + 1)..cluster.len() {
+                let from = filtered[cluster[i]].0;
+                let to = filtered[cluster[j]].0;
+                if let (Some(from_id), Some(to_id)) = (from, to) {
+                    let _ = crate::link::upsert_link(db, from_id, to_id, "cluster", 0.5).await;
+                }
+            }
+        }
+        count += 1;
+    }
+
+    Ok(count)
 }
 
 async fn tier_procedural(db: &Surreal<Db>, ollama: &OllamaClient) -> Result<usize> {
     let mut resp = db
         .query(
-            "SELECT title, content FROM hifz \
+            "SELECT title, content, strength FROM hifz \
              WHERE is_latest = true AND mem_type = 'pattern' \
              ORDER BY strength DESC LIMIT 20",
         )
@@ -186,6 +273,43 @@ async fn tier_decay(db: &Surreal<Db>, decay_days: i64) -> Result<usize> {
                         .bind(("strength", new_strength))
                         .await?;
                     decayed += 1;
+                }
+            }
+        }
+    }
+
+    // Also decay hifz table memories (longer period: 60 days)
+    let hifz_decay_days: i64 = 60;
+    let mut resp = db
+        .query(
+            "SELECT id, strength, last_accessed_at FROM hifz \
+             WHERE strength > 0.1 AND is_latest = true",
+        )
+        .await?;
+    let hifz_memories: Vec<serde_json::Value> = resp.take(0)?;
+
+    for mem in &hifz_memories {
+        let last_accessed = mem
+            .get("last_accessed_at")
+            .and_then(|v| v.as_str())
+            .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+            .map(|dt| dt.with_timezone(&chrono::Utc));
+
+        if let Some(last) = last_accessed {
+            let days_since = (now - last).num_days();
+            if days_since > hifz_decay_days {
+                let periods = days_since / hifz_decay_days;
+                let current_strength = mem.get("strength").and_then(|v| v.as_f64()).unwrap_or(1.0);
+                let new_strength = (current_strength * 0.9_f64.powi(periods as i32)).max(0.1);
+
+                if (new_strength - current_strength).abs() > 0.001 {
+                    if let Some(id) = mem.get("id").and_then(|v| v.as_str()) {
+                        db.query("UPDATE type::record($id) SET strength = $strength")
+                            .bind(("id", id.to_string()))
+                            .bind(("strength", new_strength))
+                            .await?;
+                        decayed += 1;
+                    }
                 }
             }
         }

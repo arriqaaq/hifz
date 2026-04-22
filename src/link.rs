@@ -152,7 +152,7 @@ pub async fn upsert_link(
         if let Some(id) = row.id {
             let old = row.score.unwrap_or(0.0);
             if score > old {
-                db.query("UPDATE type::thing($id) SET score = $score")
+                db.query("UPDATE type::record($id) SET score = $score")
                     .bind(("id", id))
                     .bind(("score", score))
                     .await?

@@ -12,6 +12,23 @@ async function main() {
 		return;
 	}
 	const sessionId = data.session_id || "unknown";
+	
+	// Send to /hifz/observe so Stop hook triggers run-close logic
+	try {
+		await fetch(`${REST_URL}/hifz/observe`, {
+			method: "POST",
+			headers: HEADERS,
+			body: JSON.stringify({
+				hookType: "Stop",
+				session_id: sessionId,
+				project: data.cwd || process.cwd(),
+				timestamp: new Date().toISOString()
+			}),
+			signal: AbortSignal.timeout(5e3)
+		});
+	} catch {}
+	
+	// Also end the session
 	try {
 		await fetch(`${REST_URL}/hifz/session/end`, {
 			method: "POST",

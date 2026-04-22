@@ -82,7 +82,7 @@ async fn find_expired_memories(db: &Surreal<Db>) -> Result<Vec<String>> {
 async fn find_contradictions(db: &Surreal<Db>) -> Result<Vec<String>> {
     // Load recent memories and check Jaccard similarity
     let mut resp = db
-        .query("SELECT id, title, content, concepts FROM hifz WHERE is_latest = true ORDER BY updated_at DESC LIMIT 100")
+        .query("SELECT id, title, content, concepts, updated_at FROM hifz WHERE is_latest = true ORDER BY updated_at DESC LIMIT 100")
         .await?;
     let memories: Vec<serde_json::Value> = resp.take(0)?;
 

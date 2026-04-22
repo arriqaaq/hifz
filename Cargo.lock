@@ -1389,6 +1389,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "869b0adbda23651a9c5c0c3d270aac9fcb52e8622a8f2b17e57802d7791962f2"
 
 [[package]]
+name = "env_home"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7f84e12ccf0a7ddc17a6c41c93326024c42920d7ee630d04950e6926645c0fe"
+
+[[package]]
 name = "equator"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2142,7 +2148,7 @@ dependencies = [
 
 [[package]]
 name = "hifz"
-version = "0.9.0"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -2164,6 +2170,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "which",
 ]
 
 [[package]]
@@ -5186,7 +5193,7 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 [[package]]
 name = "surrealdb"
 version = "3.1.0-alpha"
-source = "git+https://github.com/surrealdb/surrealdb#4a228b475b5e45da20026adce40094f41bc75a9e"
+source = "git+https://github.com/surrealdb/surrealdb?rev=876df15b11fabd36b43eeba923f53c4d5ffa59a6#876df15b11fabd36b43eeba923f53c4d5ffa59a6"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -5223,7 +5230,7 @@ dependencies = [
 [[package]]
 name = "surrealdb-core"
 version = "3.1.0-alpha"
-source = "git+https://github.com/surrealdb/surrealdb#4a228b475b5e45da20026adce40094f41bc75a9e"
+source = "git+https://github.com/surrealdb/surrealdb?rev=876df15b11fabd36b43eeba923f53c4d5ffa59a6#876df15b11fabd36b43eeba923f53c4d5ffa59a6"
 dependencies = [
  "addr",
  "affinitypool",
@@ -5337,9 +5344,10 @@ dependencies = [
 [[package]]
 name = "surrealdb-types"
 version = "3.1.0-alpha"
-source = "git+https://github.com/surrealdb/surrealdb#4a228b475b5e45da20026adce40094f41bc75a9e"
+source = "git+https://github.com/surrealdb/surrealdb?rev=876df15b11fabd36b43eeba923f53c4d5ffa59a6#876df15b11fabd36b43eeba923f53c4d5ffa59a6"
 dependencies = [
  "anyhow",
+ "async-channel",
  "bytes",
  "castaway",
  "chrono",
@@ -5352,19 +5360,21 @@ dependencies = [
  "regex",
  "rstest",
  "rust_decimal",
+ "semver",
  "serde",
  "serde_json",
  "surrealdb-protocol",
  "surrealdb-types-derive",
  "tracing",
  "ulid",
+ "url",
  "uuid",
 ]
 
 [[package]]
 name = "surrealdb-types-derive"
 version = "3.1.0-alpha"
-source = "git+https://github.com/surrealdb/surrealdb#4a228b475b5e45da20026adce40094f41bc75a9e"
+source = "git+https://github.com/surrealdb/surrealdb?rev=876df15b11fabd36b43eeba923f53c4d5ffa59a6#876df15b11fabd36b43eeba923f53c4d5ffa59a6"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -6485,6 +6495,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a28ac98ddc8b9274cb41bb4d9d4d5c425b6020c50c46f25559911905610b4a88"
 
 [[package]]
+name = "which"
+version = "7.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "24d643ce3fd3e5b54854602a080f34fb10ab75e0b813ee32d00ca2b44fa74762"
+dependencies = [
+ "either",
+ "env_home",
+ "rustix",
+ "winsafe",
+]
+
+[[package]]
 name = "winapi"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6913,6 +6935,12 @@ checksum = "09dac053f1cd375980747450bfc7250c264eaae0583872e845c0c7cd578872b5"
 dependencies = [
  "memchr",
 ]
+
+[[package]]
+name = "winsafe"
+version = "0.0.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d135d17ab770252ad95e9a872d365cf3090e3be864a34ab46f48555993efc904"
 
 [[package]]
 name = "wit-bindgen"

@@ -137,7 +137,7 @@ pub async fn upsert(
 
     if let Some(row) = existing.into_iter().next() {
         if let Some(id) = row.id {
-            db.query("UPDATE type::thing($id) SET count += 1, last_seen = $now")
+            db.query("UPDATE type::record($id) SET count += 1, last_seen = $now")
                 .bind(("id", id.clone()))
                 .bind(("now", now))
                 .await?

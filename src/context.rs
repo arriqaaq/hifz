@@ -6,6 +6,7 @@ use crate::core_mem;
 use crate::db::Db;
 use crate::embed::Embedder;
 use crate::rank;
+use crate::run;
 use crate::search;
 
 /// Generate context for a new session or compaction boundary.
@@ -92,7 +93,80 @@ pub async fn generate_context_with_query(
         context.push('\n');
     }
 
-    // 2. Recent high-importance observations for this project.
+    // 2. Consolidated semantic facts (from tier_semantic).
+    let mut sem_resp = db
+        .query(
+            "SELECT fact, confidence FROM semantic_hifz \
+             WHERE strength > 0.3 \
+             ORDER BY confidence DESC LIMIT 10",
+        )
+        .await
+        .ok();
+    let semantic_facts: Vec<serde_json::Value> = sem_resp
+        .as_mut()
+        .and_then(|r| r.take(0).ok())
+        .unwrap_or_default();
+
+    if !semantic_facts.is_empty() && tokens_used < token_budget {
+        context.push_str("# Known facts\n\n");
+        for f in &semantic_facts {
+            let fact = f.get("fact").and_then(|v| v.as_str()).unwrap_or("");
+            if fact.is_empty() {
+                continue;
+            }
+            let entry = format!("- {fact}\n");
+            let est_tokens = entry.len() / 4;
+            if tokens_used + est_tokens > token_budget {
+                break;
+            }
+            context.push_str(&entry);
+            tokens_used += est_tokens;
+        }
+        context.push('\n');
+    }
+
+    // 3. Consolidated procedural knowledge (from tier_procedural).
+    let mut proc_resp = db
+        .query(
+            "SELECT name, steps, trigger_condition, frequency FROM procedural_hifz \
+             WHERE strength > 0.3 \
+             ORDER BY frequency DESC LIMIT 5",
+        )
+        .await
+        .ok();
+    let procedures: Vec<serde_json::Value> = proc_resp
+        .as_mut()
+        .and_then(|r| r.take(0).ok())
+        .unwrap_or_default();
+
+    if !procedures.is_empty() && tokens_used < token_budget {
+        context.push_str("# Procedures\n\n");
+        for p in &procedures {
+            let name = p.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            let trigger = p
+                .get("trigger_condition")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let steps: Vec<&str> = p
+                .get("steps")
+                .and_then(|v| v.as_array())
+                .map(|arr| arr.iter().filter_map(|s| s.as_str()).collect())
+                .unwrap_or_default();
+            if name.is_empty() || steps.is_empty() {
+                continue;
+            }
+            let entry = format!("- **{name}** (when: {trigger}): {}\n", steps.join(" -> "));
+            let est_tokens = entry.len() / 4;
+            if tokens_used + est_tokens > token_budget {
+                break;
+            }
+            context.push_str(&entry);
+            tokens_used += est_tokens;
+        }
+        context.push('\n');
+    }
+
+    // 4. Recent high-importance observations for this project.
     let mut obs_resp = db
         .query(
             "SELECT title, narrative, obs_type, importance, timestamp \
@@ -111,6 +185,37 @@ pub async fn generate_context_with_query(
             let title = o.get("title").and_then(|v| v.as_str()).unwrap_or("");
             let narrative = o.get("narrative").and_then(|v| v.as_str()).unwrap_or("");
             let entry = format!("- **{title}**: {narrative}\n");
+            let est_tokens = entry.len() / 4;
+            if tokens_used + est_tokens > token_budget {
+                break;
+            }
+            context.push_str(&entry);
+            tokens_used += est_tokens;
+        }
+    }
+
+    // 5. Recent task outcomes from closed runs (lessons learned).
+    let runs = run::recent_with_lessons(db, project, effective_query, 8)
+        .await
+        .unwrap_or_default();
+    if !runs.is_empty() && tokens_used < token_budget {
+        context.push_str("\n# Recent task outcomes\n\n");
+        for r in &runs {
+            let prompt_preview = r
+                .prompt
+                .as_deref()
+                .unwrap_or("")
+                .chars()
+                .take(60)
+                .collect::<String>();
+            let lesson = r.lesson.as_deref().unwrap_or("");
+            let outcome = r.outcome.as_deref().unwrap_or("success");
+            let status_icon = match outcome {
+                "committed" => "✓",
+                "uncommitted" => "○",
+                _ => "•",
+            };
+            let entry = format!("- {status_icon} **{prompt_preview}...**: {lesson}\n");
             let est_tokens = entry.len() / 4;
             if tokens_used + est_tokens > token_budget {
                 break;
@@ -254,7 +359,7 @@ async fn synthesise_query(db: &Surreal<Db>, project: &str) -> Result<String> {
         .query(
             "SELECT VALUE title FROM observation \
              WHERE session_id.project = $project AND importance >= 5 \
-             ORDER BY timestamp DESC LIMIT 5",
+             ORDER BY importance DESC LIMIT 5",
         )
         .bind(("project", project.to_string()))
         .await?;

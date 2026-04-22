@@ -39,7 +39,7 @@ pub async fn generate_digest(db: &Surreal<Db>, project: &str) -> Result<ProjectD
     // Get concept frequencies
     let mut resp = db
         .query(
-            "SELECT concepts FROM observation \
+            "SELECT concepts, timestamp FROM observation \
              WHERE session_id.project = $project \
              ORDER BY timestamp DESC LIMIT 200",
         )
@@ -63,7 +63,7 @@ pub async fn generate_digest(db: &Surreal<Db>, project: &str) -> Result<ProjectD
     // Get file frequencies
     let mut resp = db
         .query(
-            "SELECT files FROM observation \
+            "SELECT files, timestamp FROM observation \
              WHERE session_id.project = $project \
              ORDER BY timestamp DESC LIMIT 200",
         )

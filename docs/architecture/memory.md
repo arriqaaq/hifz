@@ -14,7 +14,7 @@ This document is the ground truth for hifz's memory model. It is updated at the 
 | 1c — Query-aware injection + MMR-lite (mem_type + first concept) | shipped |
 | 2 — Core / working memory | shipped |
 | 3 — Graph linking (`mem_link`) | shipped |
-| 4 — Entities + episodes (auto-episode in observe pipeline) | shipped |
+| 4 — Entities + runs (auto-run in observe pipeline) | shipped |
 | 5 — Memory Evolution (opt-in LLM, `HIFZ_LLM_EVOLVE=true`) | shipped |
 | 6 — Eval harness (`memory-bench`) | shipped |
 | 7a — `diversify_by_session` memory cap fix + regression test | shipped |
@@ -32,16 +32,16 @@ This document is the ground truth for hifz's memory model. It is updated at the 
 ```mermaid
 erDiagram
     SESSION ||--o{ OBSERVATION : has
-    SESSION ||--o{ EPISODE : contains
+    SESSION ||--o{ RUN : contains
     SESSION ||--o{ SUMMARY : produces
-    EPISODE ||--o{ OBSERVATION : groups
+    RUN ||--o{ OBSERVATION : groups
     HIFZ ||--o{ MEM_LINK : "from/to"
     HIFZ }o--o{ ENTITY : about
     OBSERVATION }o--o{ ENTITY : mentions
     HIFZ_CORE ||--|| PROJECT : "per-project singleton"
     HIFZ ||--|{ PROJECT : scoped
     OBSERVATION ||--|{ PROJECT : scoped
-    EPISODE ||--|{ PROJECT : scoped
+    RUN ||--|{ PROJECT : scoped
 
     HIFZ {
         string project
@@ -71,7 +71,7 @@ erDiagram
         string project
         int count
     }
-    EPISODE {
+    RUN {
         record session_id
         string prompt
         string outcome
@@ -93,7 +93,7 @@ erDiagram
 - **`hifz`** — curated, project-scoped long-term memory. Embedded + indexed + linked. May be evolved.
 - **`semantic_hifz`** — facts consolidated from sessions (tier 1 of existing consolidation). May be evolved.
 - **`procedural_hifz`** — workflows consolidated from observations (tier 3). May be evolved.
-- **`episode`** — task-scoped trajectory (new, Phase 4).
+- **`run`** — task-scoped trajectory (new, Phase 4).
 - **`hifz_core`** — per-project singleton: identity, goals, invariants, watchlist (new, Phase 2).
 - **`mem_link`** — graph edges between memories (new, Phase 3).
 - **`entity`** — typed named things mentioned by observations and memories (new, Phase 4).
@@ -276,7 +276,7 @@ flowchart LR
     P1["Phase 1<br/>Retrieval quality"]:::core
     P2["Phase 2<br/>Core memory"]:::core
     P3["Phase 3<br/>Graph linking"]:::graph
-    P4["Phase 4<br/>Entities + episodes"]:::graph
+    P4["Phase 4<br/>Entities + runs"]:::graph
     P5["Phase 5<br/>Evolution (LLM opt-in)"]:::llm
 
     P6 --> P1

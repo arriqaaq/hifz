@@ -99,7 +99,7 @@ pub async fn evolve_one(
     memory_id: &RecordId,
 ) -> Result<EvolveReport> {
     let mut resp = db
-        .query("SELECT id, title, content, keywords, tags, context FROM type::thing($id)")
+        .query("SELECT id, title, content, keywords, tags, context FROM type::record($id)")
         .bind(("id", memory_id.clone()))
         .await?;
     let new_rows: Vec<MemoryRow> = resp.take(0).unwrap_or_default();
@@ -157,7 +157,7 @@ async fn apply_updates(
         if any {
             let _ = db
                 .query(
-                    "UPDATE type::thing($id) SET \
+                    "UPDATE type::record($id) SET \
                      keywords = array::distinct(array::concat(keywords, $kw)), \
                      tags = array::distinct(array::concat(tags, $tg)), \
                      context = $ctx",
@@ -276,7 +276,7 @@ async fn resolve_id(db: &Surreal<Db>, id_str: &str) -> Option<RecordId> {
 /// already in `src/forget.rs`.
 async fn mark_superseded(db: &Surreal<Db>, older: &RecordId, newer: &RecordId) -> Result<()> {
     db.query(
-        "UPDATE type::thing($old) SET is_latest = false, \
+        "UPDATE type::record($old) SET is_latest = false, \
          supersedes = array::distinct(array::concat(supersedes ?? [], [$new]))",
     )
     .bind(("old", older.clone()))

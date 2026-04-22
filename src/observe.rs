@@ -1,14 +1,19 @@
+use std::path::Path;
+
 use anyhow::Result;
 use surrealdb::Surreal;
 use surrealdb::types::{RecordId, SurrealValue};
 
+use crate::commit;
 use crate::compress::{compress_llm, compress_synthetic};
 use crate::db::Db;
 use crate::dedup::DedupMap;
 use crate::embed::Embedder;
-use crate::episode;
+use crate::git_detect;
+use crate::ground;
 use crate::models::HookPayload;
 use crate::ollama::OllamaClient;
+use crate::run;
 
 /// Capture a raw observation from a Claude Code hook.
 /// Deduplicates, compresses, embeds, and stores.
@@ -19,9 +24,11 @@ pub async fn observe(
     ollama: Option<&OllamaClient>,
     auto_compress: bool,
     payload: HookPayload,
+    git_path: Option<&Path>,
 ) -> Result<Option<String>> {
-    // Episode lifecycle — fire before dedup so lifecycle events aren't dropped.
-    // On UserPromptSubmit start a new episode; on Stop/TaskCompleted close the open one.
+    // Run lifecycle — fire before dedup so lifecycle events aren't dropped.
+    // Runs are task-scoped: UserPromptSubmit appends to open run or starts new.
+    // TaskCompleted/Stop close the run.
     match payload.hook_type.as_str() {
         "UserPromptSubmit" | "prompt_submit" => {
             let prompt = payload
@@ -31,18 +38,44 @@ pub async fn observe(
                 .unwrap_or("")
                 .to_string();
             ensure_session(db, &payload).await?;
-            if let Some(session_rid) = session_record_id(db, &payload.session_id).await {
-                let _ = episode::start(db, &session_rid, &payload.project, &prompt).await;
-            }
-        }
-        "Stop" | "stop" | "TaskCompleted" | "task_completed" => {
-            if let Some(open) = latest_open_episode(db, &payload.session_id)
+
+            // Check if run already open for this session
+            if let Some(open_run) = latest_open_run(db, &payload.session_id)
                 .await
                 .ok()
                 .flatten()
             {
-                let _ = episode::close(db, &open, "success", None).await;
+                // Append prompt to existing run (don't close)
+                let _ = run::append_prompt(db, &open_run, &prompt).await;
+            } else {
+                // No open run — start new one
+                if let Some(session_rid) = session_record_id(db, &payload.session_id).await {
+                    if let Ok(Some(run_id)) =
+                        run::start(db, &session_rid, &payload.project, &prompt).await
+                    {
+                        // Link to active plan if one exists
+                        if let Ok(Some(active_plan)) =
+                            crate::plan::get_active(db, &payload.project).await
+                        {
+                            if let Some(plan_id) = active_plan.id.as_ref() {
+                                let _ = run::set_plan(db, &run_id, plan_id).await;
+                            }
+                        }
+                    }
+                }
             }
+        }
+        "Stop" | "stop" | "TaskCompleted" | "task_completed" => {
+            if let Some(open) = latest_open_run(db, &payload.session_id)
+                .await
+                .ok()
+                .flatten()
+            {
+                let outcome = run::detect_uncommitted_outcome(db, &open).await;
+                let _ = run::close(db, &open, &outcome, None).await;
+            }
+            // Decay memories from uncommitted runs in this session
+            let _ = ground::decay_uncommitted(db, &payload.session_id).await;
         }
         _ => {}
     }
@@ -86,20 +119,32 @@ pub async fn observe(
         compress_synthetic(&payload)
     };
 
-    // Generate embedding
-    let embed_text = format!("{} {}", compressed.title, compressed.narrative);
+    let facts_text = if compressed.facts.is_empty() {
+        None
+    } else {
+        Some(compressed.facts.join(" "))
+    };
+
+    // Generate embedding — include facts, concepts, files for richer vectors
+    let mut embed_text = format!("{}\n{}", compressed.title, compressed.narrative);
+    if let Some(ref ft) = facts_text {
+        embed_text.push_str("\nfacts: ");
+        embed_text.push_str(ft);
+    }
+    if !compressed.concepts.is_empty() {
+        embed_text.push_str("\nconcepts: ");
+        embed_text.push_str(&compressed.concepts.join(", "));
+    }
+    if !compressed.files.is_empty() {
+        embed_text.push_str("\nfiles: ");
+        embed_text.push_str(&compressed.files.join(", "));
+    }
     let embedding = match embedder.embed_single(&embed_text) {
         Ok(vec) => Some(vec),
         Err(e) => {
             tracing::warn!("Embedding failed: {e}");
             None
         }
-    };
-
-    let facts_text = if compressed.facts.is_empty() {
-        None
-    } else {
-        Some(compressed.facts.join(" "))
     };
 
     // Store in SurrealDB
@@ -145,10 +190,20 @@ pub async fn observe(
     let created: Vec<Created> = response.take(0).unwrap_or_default();
     let new_obs_id = created.into_iter().next().and_then(|c| c.id);
 
-    // Append to the open episode (if any) for this session.
+    // Append to the open run (if any) for this session.
     if let Some(obs_id) = new_obs_id.as_ref() {
-        if let Ok(Some(ep)) = latest_open_episode(db, &payload.session_id).await {
-            let _ = episode::append(db, &ep, obs_id).await;
+        match latest_open_run(db, &payload.session_id).await {
+            Ok(Some(r)) => {
+                if let Err(e) = run::append(db, &r, obs_id).await {
+                    tracing::warn!("run::append failed: {e}");
+                }
+            }
+            Ok(None) => {
+                tracing::debug!("no open run for session {}", payload.session_id);
+            }
+            Err(e) => {
+                tracing::warn!("latest_open_run lookup failed: {e}");
+            }
         }
     }
 
@@ -156,6 +211,60 @@ pub async fn observe(
     db.query("UPDATE type::record($sid) SET observation_count += 1")
         .bind(("sid", format!("session:{}", payload.session_id)))
         .await?;
+
+    // Detect git commits from Bash tool output
+    tracing::debug!(
+        tool_name = tool_name,
+        hook_type = %payload.hook_type,
+        has_tool_input = payload.data.get("tool_input").or_else(|| payload.data.get("toolInput")).is_some(),
+        has_tool_output = payload.data.get("tool_output").or_else(|| payload.data.get("toolOutput")).is_some(),
+        "git_detect: checking observation"
+    );
+    if tool_name == "Bash" || tool_name == "Shell" {
+        let command_str = payload
+            .data
+            .get("tool_input")
+            .or_else(|| payload.data.get("toolInput"))
+            .and_then(|ti| ti.get("command"))
+            .and_then(|c| c.as_str())
+            .unwrap_or("");
+        let output_str = payload
+            .data
+            .get("tool_output")
+            .or_else(|| payload.data.get("toolOutput"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        tracing::info!(
+            command = command_str,
+            output_len = output_str.len(),
+            output_preview = &output_str[..output_str.len().min(200)],
+            "git_detect: Bash tool, checking for commit"
+        );
+        let detected = git_detect::detect_commit(&payload.data);
+        tracing::info!(detected = detected.is_some(), "git_detect: result");
+        if let Some(detected) = detected {
+            let session_rid = session_record_id(db, &payload.session_id).await;
+            let run_rid = latest_open_run(db, &payload.session_id)
+                .await
+                .ok()
+                .flatten();
+            let data = commit::CommitData {
+                sha: detected.sha,
+                message: detected.message,
+                author: String::new(),
+                branch: detected.branch,
+                project: payload.project.clone(),
+                files_changed: vec![],
+                insertions: None,
+                deletions: None,
+                is_amend: false,
+                timestamp: payload.timestamp.clone(),
+            };
+            if let Err(e) = commit::record_commit(db, data, session_rid, run_rid, git_path).await {
+                tracing::warn!("commit recording failed: {e}");
+            }
+        }
+    }
 
     Ok(Some(compressed.title))
 }
@@ -168,27 +277,38 @@ async fn session_record_id(db: &Surreal<Db>, session_id: &str) -> Option<RecordI
         id: Option<RecordId>,
     }
     let sid = format!("session:{}", session_id);
-    let mut resp = db
+    let resp = db
         .query("SELECT id FROM type::record($sid)")
-        .bind(("sid", sid))
-        .await
-        .ok()?;
+        .bind(("sid", sid.clone()))
+        .await;
+    let mut resp = match resp {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!("session_record_id query failed for {sid}: {e}");
+            return None;
+        }
+    };
     let rows: Vec<Row> = resp.take(0).ok()?;
-    rows.into_iter().next().and_then(|r| r.id)
+    let result = rows.into_iter().next().and_then(|r| r.id);
+    if result.is_none() {
+        tracing::debug!("session_record_id: no record found for {sid}");
+    }
+    result
 }
 
-/// Look up the most recent open episode for a session (ended_at IS NONE).
-async fn latest_open_episode(db: &Surreal<Db>, session_id: &str) -> Result<Option<RecordId>> {
+/// Look up the most recent open run for a session (ended_at IS NONE).
+async fn latest_open_run(db: &Surreal<Db>, session_id: &str) -> Result<Option<RecordId>> {
     let Some(sid) = session_record_id(db, session_id).await else {
         return Ok(None);
     };
     #[derive(Debug, SurrealValue)]
     struct Row {
         id: Option<RecordId>,
+        started_at: Option<String>,
     }
     let mut resp = db
         .query(
-            "SELECT id FROM episode \
+            "SELECT id, started_at FROM run \
              WHERE session_id = $sid AND ended_at IS NONE \
              ORDER BY started_at DESC LIMIT 1",
         )

@@ -12,6 +12,7 @@ pub struct Session {
     pub ended_at: Option<String>,
     pub status: String,
     pub observation_count: i64,
+    pub name: Option<String>,
     pub model: Option<String>,
     pub tags: Option<Vec<String>>,
 }
@@ -89,19 +90,61 @@ pub struct Entity {
     pub count: i64,
 }
 
-// --- Episode (Phase 4) ---
+// --- Commit (git commit tracking) ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
-pub struct Episode {
+pub struct Commit {
+    pub id: Option<surrealdb::types::RecordId>,
+    pub sha: String,
+    pub message: String,
+    pub author: String,
+    pub branch: String,
+    pub project: String,
+    pub files_changed: Vec<String>,
+    pub insertions: Option<i64>,
+    pub deletions: Option<i64>,
+    pub is_amend: bool,
+    pub session_id: Option<surrealdb::types::RecordId>,
+    pub run_id: Option<surrealdb::types::RecordId>,
+    pub plan_id: Option<surrealdb::types::RecordId>,
+    pub timestamp: String,
+    pub created_at: String,
+}
+
+// --- Run (Phase 4) ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
+pub struct Run {
     pub id: Option<surrealdb::types::RecordId>,
     pub session_id: surrealdb::types::RecordId,
     pub project: String,
     pub started_at: String,
     pub ended_at: Option<String>,
     pub prompt: String,
+    pub prompts: Option<Vec<String>>,
     pub outcome: String,
     pub observation_ids: Vec<surrealdb::types::RecordId>,
     pub lesson: Option<String>,
+    pub commit_id: Option<surrealdb::types::RecordId>,
+    pub plan_id: Option<surrealdb::types::RecordId>,
+}
+
+// --- Plan (first-class plan tracking) ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
+pub struct Plan {
+    pub id: Option<surrealdb::types::RecordId>,
+    pub file_path: String,
+    pub title: String,
+    pub content: String,
+    pub status: String,
+    pub project: String,
+    pub concepts: Vec<String>,
+    pub files: Vec<String>,
+    pub session_id: Option<surrealdb::types::RecordId>,
+    pub commit_id: Option<surrealdb::types::RecordId>,
+    pub created_at: String,
+    pub completed_at: Option<String>,
 }
 
 // --- Core memory (per-project always-on block) ---
@@ -265,4 +308,5 @@ pub const HOOK_TYPES: &[&str] = &[
     "task_completed",
     "stop",
     "session_end",
+    "git_commit",
 ];

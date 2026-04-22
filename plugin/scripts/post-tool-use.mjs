@@ -12,6 +12,10 @@ async function main() {
 		return;
 	}
 	const sessionId = data.session_id || "unknown";
+	// Debug: log keys and tool_output presence
+	const fs = await import("fs");
+	const debugLine = `${new Date().toISOString()} keys=${Object.keys(data).join(",")} tool_name=${data.tool_name} has_tool_output=${data.tool_output != null} has_output=${data.output != null} has_result=${data.result != null} tool_output_type=${typeof data.tool_output} output_type=${typeof data.output}\n`;
+	fs.appendFileSync("/tmp/hifz-hook-debug.log", debugLine);
 	try {
 		await fetch(`${REST_URL}/hifz/observe`, {
 			method: "POST",
@@ -25,7 +29,7 @@ async function main() {
 				data: {
 					tool_name: data.tool_name,
 					tool_input: data.tool_input,
-					tool_output: truncate(data.tool_output, 8e3)
+					tool_output: truncate(data.tool_response || data.tool_output, 8e3)
 				}
 			}),
 			signal: AbortSignal.timeout(3e3)

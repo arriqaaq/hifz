@@ -38,16 +38,28 @@ pub async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {
         .and_then(|v| v.first().and_then(|r| r.get("c").and_then(|c| c.as_i64())))
         .unwrap_or(0);
 
+    let commits: i64 = state
+        .db
+        .query("SELECT count() AS c FROM commit GROUP ALL")
+        .await
+        .ok()
+        .and_then(|mut r| r.take::<Vec<serde_json::Value>>(0).ok())
+        .and_then(|v| v.first().and_then(|r| r.get("c").and_then(|c| c.as_i64())))
+        .unwrap_or(0);
+
     Json(serde_json::json!({
         "status": "healthy",
         "version": env!("CARGO_PKG_VERSION"),
         "sessions": sessions,
         "observations": observations,
         "memories": memories,
+        "commits": commits,
         "uptime_seconds": uptime,
         "embedding_provider": "fastembed",
         "embedding_dimensions": state.embedder.dimension(),
         "ollama": state.ollama.is_some(),
+        "git_available": state.git_path.is_some(),
+        "git_path": state.git_path.as_ref().map(|p| p.display().to_string()),
     }))
 }
 
@@ -112,14 +124,124 @@ pub async fn session_end(
 ) -> Json<serde_json::Value> {
     let now = chrono::Utc::now().to_rfc3339();
     let sid = format!("session:{}", body.session_id);
+
+    let name = derive_session_name(&state.db, &sid).await;
+
     let _ = state
         .db
-        .query("UPDATE type::record($sid) SET ended_at = $now, status = 'completed'")
+        .query("UPDATE type::record($sid) SET ended_at = $now, status = 'completed', name = $name")
         .bind(("sid", sid.clone()))
         .bind(("now", now.clone()))
+        .bind(("name", name))
         .await;
 
     Json(serde_json::json!({"status": "ok"}))
+}
+
+async fn derive_session_name(db: &surrealdb::Surreal<crate::db::Db>, sid: &str) -> Option<String> {
+    #[derive(Debug, surrealdb::types::SurrealValue)]
+    struct PromptRow {
+        prompt: Option<String>,
+    }
+    #[derive(Debug, surrealdb::types::SurrealValue)]
+    struct TitleRow {
+        title: Option<String>,
+    }
+    #[derive(Debug, surrealdb::types::SurrealValue)]
+    struct ProjectRow {
+        project: Option<String>,
+    }
+
+    // Try first run prompt
+    if let Ok(mut resp) = db
+        .query(
+            "SELECT prompt, started_at FROM run \
+             WHERE session_id = type::record($sid) \
+             ORDER BY started_at ASC LIMIT 1",
+        )
+        .bind(("sid", sid.to_string()))
+        .await
+    {
+        let rows: Vec<PromptRow> = resp.take(0).unwrap_or_default();
+        if let Some(prompt) = rows.into_iter().next().and_then(|r| r.prompt) {
+            let trimmed = prompt.trim();
+            if trimmed.len() > 5 {
+                return Some(truncate_at_word(trimmed, 80));
+            }
+        }
+    }
+
+    // Fallback: first high-importance non-conversation observation title
+    if let Ok(mut resp) = db
+        .query(
+            "SELECT title, importance, timestamp FROM observation \
+             WHERE session_id = type::record($sid) \
+               AND obs_type NOT IN ['conversation'] \
+             ORDER BY importance DESC, timestamp ASC LIMIT 1",
+        )
+        .bind(("sid", sid.to_string()))
+        .await
+    {
+        let rows: Vec<TitleRow> = resp.take(0).unwrap_or_default();
+        if let Some(title) = rows.into_iter().next().and_then(|r| r.title) {
+            let trimmed = title.trim();
+            if trimmed.len() > 3 {
+                return Some(truncate_at_word(trimmed, 80));
+            }
+        }
+    }
+
+    // Last fallback: project basename + date
+    if let Ok(mut resp) = db
+        .query("SELECT project FROM type::record($sid)")
+        .bind(("sid", sid.to_string()))
+        .await
+    {
+        let rows: Vec<ProjectRow> = resp.take(0).unwrap_or_default();
+        if let Some(project) = rows.into_iter().next().and_then(|r| r.project) {
+            let basename = project.rsplit('/').next().unwrap_or(&project);
+            let date = chrono::Utc::now().format("%b %d");
+            return Some(format!("{basename} — {date}"));
+        }
+    }
+
+    None
+}
+
+fn truncate_at_word(s: &str, max: usize) -> String {
+    if s.len() <= max {
+        return s.to_string();
+    }
+    match s[..max].rfind(' ') {
+        Some(pos) if pos > max / 2 => format!("{}…", &s[..pos]),
+        _ => format!("{}…", &s[..max]),
+    }
+}
+
+pub async fn session_get(
+    State(state): State<AppState>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    let sid = if id.starts_with("session:") {
+        id.clone()
+    } else {
+        format!("session:{id}")
+    };
+
+    let mut resp = match state
+        .db
+        .query("SELECT * FROM type::record($sid)")
+        .bind(("sid", sid))
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => return Json(serde_json::json!({"error": e.to_string()})),
+    };
+    let rows: Vec<serde_json::Value> = resp.take(0).unwrap_or_default();
+    match rows.into_iter().next() {
+        Some(session) => Json(session),
+        None => Json(serde_json::json!({"error": "session not found"})),
+    }
 }
 
 pub async fn sessions_list(
@@ -154,6 +276,7 @@ pub async fn observe(
         state.ollama.as_deref(),
         state.auto_compress,
         payload,
+        state.git_path.as_deref(),
     )
     .await
     {
@@ -209,6 +332,8 @@ pub struct RememberReq {
     pub concepts: Option<Vec<String>>,
     pub files: Option<Vec<String>>,
     pub project: Option<String>,
+    #[serde(rename = "sessionId")]
+    pub session_id: Option<String>,
 }
 
 pub async fn remember(
@@ -220,6 +345,13 @@ pub async fn remember(
     let files = body.files.unwrap_or_default();
     let project = body.project.as_deref().unwrap_or("global");
 
+    // Resolve session: explicit > auto-detect active session for project
+    let session_rid = if let Some(ref sid) = body.session_id {
+        resolve_session_rid(&state, sid).await
+    } else {
+        auto_detect_active_session(&state.db, project).await
+    };
+
     let save_result = crate::remember::save(
         &state.db,
         &state.embedder,
@@ -229,6 +361,7 @@ pub async fn remember(
         &body.content,
         &concepts,
         &files,
+        session_rid,
     )
     .await;
 
@@ -244,7 +377,7 @@ pub async fn remember(
                         // Look up the freshly-created memory id by title+project+latest-created.
                         let mut resp = match db
                             .query(
-                                "SELECT id FROM hifz \
+                                "SELECT id, created_at FROM hifz \
                                  WHERE title = $title AND project = $project \
                                  ORDER BY created_at DESC LIMIT 1",
                             )
@@ -330,24 +463,179 @@ pub async fn context(
     }
 }
 
-// --- Episodes (Phase 4) ---
+// --- Runs (Phase 4) ---
 
 #[derive(Deserialize)]
-pub struct EpisodesReq {
+pub struct RunsReq {
     pub query: String,
     pub project: Option<String>,
     pub limit: Option<usize>,
 }
 
-pub async fn episodes_search(
+pub async fn runs_search(
     State(state): State<AppState>,
-    Json(body): Json<EpisodesReq>,
+    Json(body): Json<RunsReq>,
 ) -> Json<serde_json::Value> {
     let limit = body.limit.unwrap_or(10);
-    match crate::episode::search(&state.db, body.project.as_deref(), &body.query, limit).await {
-        Ok(rows) => Json(serde_json::json!({"episodes": rows, "count": rows.len()})),
+    match crate::run::search(&state.db, body.project.as_deref(), &body.query, limit).await {
+        Ok(rows) => Json(serde_json::json!({"runs": rows, "count": rows.len()})),
         Err(e) => Json(serde_json::json!({"error": e.to_string()})),
     }
+}
+
+/// GET /hifz/run/:id - get run with its observations
+pub async fn run_detail(
+    State(state): State<AppState>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    let run_rid = if id.starts_with("run:") {
+        id.clone()
+    } else {
+        format!("run:{id}")
+    };
+
+    // Get the run
+    let mut resp = match state
+        .db
+        .query("SELECT * FROM type::record($rid)")
+        .bind(("rid", run_rid.clone()))
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => return Json(serde_json::json!({"error": e.to_string()})),
+    };
+    let runs: Vec<serde_json::Value> = resp.take(0).unwrap_or_default();
+    let Some(run) = runs.into_iter().next() else {
+        return Json(serde_json::json!({"error": "run not found"}));
+    };
+
+    // Get the observations for this run
+    let mut obs_resp = match state
+        .db
+        .query(
+            "SELECT * FROM observation WHERE id IN (SELECT VALUE observation_ids FROM type::record($rid))[0] ORDER BY timestamp ASC"
+        )
+        .bind(("rid", run_rid))
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => return Json(serde_json::json!({"error": e.to_string()})),
+    };
+    let observations: Vec<serde_json::Value> = obs_resp.take(0).unwrap_or_default();
+
+    Json(serde_json::json!({
+        "run": run,
+        "observations": observations
+    }))
+}
+
+// --- Observations search (raw events only) ---
+
+#[derive(Deserialize)]
+pub struct ObservationsReq {
+    pub query: Option<String>,
+    pub project: Option<String>,
+    pub session_id: Option<String>,
+    pub limit: Option<usize>,
+}
+
+pub async fn observations_search(
+    State(state): State<AppState>,
+    Query(params): Query<ObservationsReq>,
+) -> Json<serde_json::Value> {
+    let limit = params.limit.unwrap_or(100);
+    let query = params.query.as_deref().unwrap_or("*");
+
+    // Build query based on filters
+    let mut sql = String::from("SELECT * FROM observation");
+    let mut conditions = Vec::new();
+
+    if let Some(ref sid) = params.session_id {
+        conditions.push(format!("session_id = type::record('session:{}')", sid));
+    }
+
+    if !query.is_empty() && query != "*" {
+        // BM25 search on title and narrative
+        conditions.push(format!("(title @@ $q OR narrative @@ $q)"));
+    }
+
+    if !conditions.is_empty() {
+        sql.push_str(" WHERE ");
+        sql.push_str(&conditions.join(" AND "));
+    }
+
+    sql.push_str(&format!(" ORDER BY timestamp DESC LIMIT {limit}"));
+
+    let mut resp = if query != "*" && !query.is_empty() {
+        match state.db.query(&sql).bind(("q", query)).await {
+            Ok(r) => r,
+            Err(e) => return Json(serde_json::json!({"error": e.to_string()})),
+        }
+    } else {
+        match state.db.query(&sql).await {
+            Ok(r) => r,
+            Err(e) => return Json(serde_json::json!({"error": e.to_string()})),
+        }
+    };
+
+    let observations: Vec<serde_json::Value> = resp.take(0).unwrap_or_default();
+    Json(serde_json::json!({"observations": observations, "count": observations.len()}))
+}
+
+// --- Memories search (hifz table only) ---
+
+#[derive(Deserialize)]
+pub struct MemoriesReq {
+    pub query: Option<String>,
+    pub project: Option<String>,
+    pub mem_type: Option<String>,
+    pub limit: Option<usize>,
+}
+
+pub async fn memories_search(
+    State(state): State<AppState>,
+    Query(params): Query<MemoriesReq>,
+) -> Json<serde_json::Value> {
+    let limit = params.limit.unwrap_or(50);
+    let query = params.query.as_deref().unwrap_or("*");
+
+    // Build query with filters
+    let mut conditions = vec!["is_latest = true".to_string()];
+
+    if let Some(ref project) = params.project {
+        conditions.push(format!("(project = '{}' OR project = 'global')", project));
+    }
+
+    if let Some(ref mem_type) = params.mem_type {
+        conditions.push(format!("mem_type = '{}'", mem_type));
+    }
+
+    let where_clause = conditions.join(" AND ");
+
+    let sql = if query.is_empty() || query == "*" {
+        format!("SELECT * FROM hifz WHERE {where_clause} ORDER BY created_at DESC LIMIT {limit}")
+    } else {
+        format!(
+            "SELECT *, search::score(1) + search::score(2) AS _score FROM hifz \
+             WHERE {where_clause} AND (title @1@ $q OR content @2@ $q) \
+             ORDER BY _score DESC LIMIT {limit}"
+        )
+    };
+
+    let mut resp = if query != "*" && !query.is_empty() {
+        match state.db.query(&sql).bind(("q", query)).await {
+            Ok(r) => r,
+            Err(e) => return Json(serde_json::json!({"error": e.to_string()})),
+        }
+    } else {
+        match state.db.query(&sql).await {
+            Ok(r) => r,
+            Err(e) => return Json(serde_json::json!({"error": e.to_string()})),
+        }
+    };
+
+    let memories: Vec<serde_json::Value> = resp.take(0).unwrap_or_default();
+    Json(serde_json::json!({"memories": memories, "count": memories.len()}))
 }
 
 // --- Core memory (always-on per-project block) ---
@@ -502,6 +790,22 @@ pub async fn export(State(state): State<AppState>) -> Json<serde_json::Value> {
         .and_then(|mut r| r.take(0).ok())
         .unwrap_or_default();
 
+    let runs: Vec<serde_json::Value> = state
+        .db
+        .query("SELECT * FROM run ORDER BY started_at DESC")
+        .await
+        .ok()
+        .and_then(|mut r| r.take(0).ok())
+        .unwrap_or_default();
+
+    let commits: Vec<serde_json::Value> = state
+        .db
+        .query("SELECT * FROM commit ORDER BY timestamp DESC")
+        .await
+        .ok()
+        .and_then(|mut r| r.take(0).ok())
+        .unwrap_or_default();
+
     Json(serde_json::json!({
         "version": env!("CARGO_PKG_VERSION"),
         "exported_at": chrono::Utc::now().to_rfc3339(),
@@ -510,7 +814,344 @@ pub async fn export(State(state): State<AppState>) -> Json<serde_json::Value> {
         "memories": memories,
         "semantic_memories": semantic,
         "procedural_memories": procedural,
+        "runs": runs,
+        "commits": commits,
     }))
+}
+
+// --- Commits (git tracking) ---
+
+#[derive(Deserialize)]
+pub struct CommitReq {
+    pub sha: String,
+    pub message: String,
+    #[serde(default)]
+    pub author: String,
+    #[serde(default)]
+    pub branch: String,
+    pub project: String,
+    #[serde(default)]
+    pub files_changed: Vec<String>,
+    pub insertions: Option<i64>,
+    pub deletions: Option<i64>,
+    #[serde(default)]
+    pub is_amend: bool,
+    #[serde(rename = "sessionId")]
+    pub session_id: Option<String>,
+    #[serde(default = "default_timestamp")]
+    pub timestamp: String,
+}
+
+fn default_timestamp() -> String {
+    chrono::Utc::now().to_rfc3339()
+}
+
+pub async fn commit(
+    State(state): State<AppState>,
+    Json(body): Json<CommitReq>,
+) -> Json<serde_json::Value> {
+    let session_rid = if let Some(ref sid) = body.session_id {
+        resolve_session_rid(&state, sid).await
+    } else {
+        None
+    };
+
+    let run_rid = if let Some(ref sid) = body.session_id {
+        resolve_open_run(&state, sid).await
+    } else {
+        None
+    };
+
+    let data = crate::commit::CommitData {
+        sha: body.sha,
+        message: body.message,
+        author: body.author,
+        branch: body.branch,
+        project: body.project,
+        files_changed: body.files_changed,
+        insertions: body.insertions,
+        deletions: body.deletions,
+        is_amend: body.is_amend,
+        timestamp: body.timestamp,
+    };
+
+    match crate::commit::record_commit(
+        &state.db,
+        data,
+        session_rid,
+        run_rid,
+        state.git_path.as_deref(),
+    )
+    .await
+    {
+        Ok(Some(_id)) => Json(serde_json::json!({"status": "ok"})),
+        Ok(None) => Json(serde_json::json!({"status": "duplicate"})),
+        Err(e) => Json(serde_json::json!({"status": "error", "error": e.to_string()})),
+    }
+}
+
+pub async fn commits_list(
+    State(state): State<AppState>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Json<serde_json::Value> {
+    let project = params.get("project").map(|s| s.as_str()).unwrap_or("");
+    let branch = params.get("branch").map(|s| s.as_str());
+    let limit: usize = params
+        .get("limit")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(10);
+    let sha = params.get("sha").map(|s| s.as_str());
+
+    if let Some(sha) = sha {
+        let mut resp = state
+            .db
+            .query("SELECT * FROM commit WHERE sha = $sha LIMIT 1")
+            .bind(("sha", sha.to_string()))
+            .await
+            .unwrap();
+        let rows: Vec<serde_json::Value> = resp.take(0).unwrap_or_default();
+        return Json(serde_json::json!({"commits": rows}));
+    }
+
+    let session_id = params.get("session_id").map(|s| s.as_str());
+
+    let mut conditions = Vec::new();
+    if !project.is_empty() {
+        conditions.push("project = $project");
+    }
+    if branch.is_some() {
+        conditions.push("branch = $branch");
+    }
+    if session_id.is_some() {
+        conditions.push("session_id = type::record($session_id)");
+    }
+
+    let where_clause = if conditions.is_empty() {
+        String::new()
+    } else {
+        format!(" WHERE {}", conditions.join(" AND "))
+    };
+
+    let sql = format!("SELECT * FROM commit{where_clause} ORDER BY created_at DESC LIMIT {limit}");
+
+    let mut q = state.db.query(&sql);
+    if !project.is_empty() {
+        q = q.bind(("project", project.to_string()));
+    }
+    if let Some(b) = branch {
+        q = q.bind(("branch", b.to_string()));
+    }
+    if let Some(sid) = session_id {
+        let full_sid = if sid.starts_with("session:") {
+            sid.to_string()
+        } else {
+            format!("session:{sid}")
+        };
+        q = q.bind(("session_id", full_sid));
+    }
+    let mut resp = q.await.unwrap();
+    let commits: Vec<serde_json::Value> = resp.take(0).unwrap_or_default();
+    Json(serde_json::json!({"commits": commits}))
+}
+
+pub async fn commit_diff(
+    State(state): State<AppState>,
+    axum::extract::Path(sha): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    // Look up the commit to get the project path
+    let mut resp = match state
+        .db
+        .query("SELECT project FROM commit WHERE sha = $sha LIMIT 1")
+        .bind(("sha", sha.clone()))
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => return Json(serde_json::json!({"error": e.to_string()})),
+    };
+
+    #[derive(Debug, SurrealValue)]
+    struct ProjectRow {
+        project: Option<String>,
+    }
+    let rows: Vec<ProjectRow> = resp.take(0).unwrap_or_default();
+    let project = match rows.into_iter().next().and_then(|r| r.project) {
+        Some(p) => p,
+        None => return Json(serde_json::json!({"error": "commit not found"})),
+    };
+
+    let Some(ref git) = state.git_path else {
+        return Json(serde_json::json!({"error": "git not available"}));
+    };
+
+    let output = std::process::Command::new(git)
+        .args(["show", "--stat", "--patch", "--format=", &sha])
+        .current_dir(&project)
+        .output();
+
+    match output {
+        Ok(o) if o.status.success() => {
+            let diff = String::from_utf8_lossy(&o.stdout).to_string();
+            Json(serde_json::json!({"sha": sha, "diff": diff}))
+        }
+        Ok(o) => {
+            let err = String::from_utf8_lossy(&o.stderr).to_string();
+            Json(serde_json::json!({"error": err}))
+        }
+        Err(e) => Json(serde_json::json!({"error": e.to_string()})),
+    }
+}
+
+async fn resolve_session_rid(
+    state: &AppState,
+    session_id: &str,
+) -> Option<surrealdb::types::RecordId> {
+    #[derive(surrealdb::types::SurrealValue, Debug)]
+    struct Row {
+        id: Option<surrealdb::types::RecordId>,
+    }
+    let sid = format!("session:{session_id}");
+    let mut resp = state
+        .db
+        .query("SELECT id FROM type::record($sid)")
+        .bind(("sid", sid))
+        .await
+        .ok()?;
+    let rows: Vec<Row> = resp.take(0).ok()?;
+    rows.into_iter().next().and_then(|r| r.id)
+}
+
+async fn auto_detect_active_session(
+    db: &surrealdb::Surreal<crate::db::Db>,
+    project: &str,
+) -> Option<surrealdb::types::RecordId> {
+    #[derive(surrealdb::types::SurrealValue, Debug)]
+    struct Row {
+        id: Option<surrealdb::types::RecordId>,
+    }
+    let mut resp = db
+        .query(
+            "SELECT id, started_at FROM session \
+             WHERE project = $project AND status = 'active' \
+             ORDER BY started_at DESC LIMIT 1",
+        )
+        .bind(("project", project.to_string()))
+        .await
+        .ok()?;
+    let rows: Vec<Row> = resp.take(0).ok()?;
+    rows.into_iter().next().and_then(|r| r.id)
+}
+
+async fn resolve_open_run(
+    state: &AppState,
+    session_id: &str,
+) -> Option<surrealdb::types::RecordId> {
+    let sid_rid = resolve_session_rid(state, session_id).await?;
+    #[derive(surrealdb::types::SurrealValue, Debug)]
+    struct Row {
+        id: Option<surrealdb::types::RecordId>,
+    }
+    let mut resp = state
+        .db
+        .query(
+            "SELECT id, started_at FROM run \
+             WHERE session_id = $sid AND ended_at IS NONE \
+             ORDER BY started_at DESC LIMIT 1",
+        )
+        .bind(("sid", sid_rid))
+        .await
+        .ok()?;
+    let rows: Vec<Row> = resp.take(0).ok()?;
+    rows.into_iter().next().and_then(|r| r.id)
+}
+
+// --- Plans ---
+
+pub async fn plan_upsert(
+    State(state): State<AppState>,
+    Json(body): Json<crate::plan::PlanUpsertRequest>,
+) -> Json<serde_json::Value> {
+    match crate::plan::upsert(&state.db, &body).await {
+        Ok(plan) => Json(serde_json::json!({
+            "status": "ok",
+            "plan": serde_json::to_value(plan).unwrap_or_default()
+        })),
+        Err(e) => Json(serde_json::json!({"status": "error", "error": e.to_string()})),
+    }
+}
+
+pub async fn plans_list(
+    State(state): State<AppState>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Json<serde_json::Value> {
+    let project = params.get("project").map(|s| s.as_str()).unwrap_or("");
+    let status = params.get("status").map(|s| s.as_str());
+    let limit: usize = params
+        .get("limit")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(10);
+
+    match crate::plan::list(&state.db, project, status, limit).await {
+        Ok(plans) => Json(serde_json::json!({"plans": plans})),
+        Err(e) => Json(serde_json::json!({"error": e.to_string()})),
+    }
+}
+
+pub async fn plan_current(
+    State(state): State<AppState>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Json<serde_json::Value> {
+    let project = params.get("project").map(|s| s.as_str()).unwrap_or("");
+    match crate::plan::get_active(&state.db, project).await {
+        Ok(Some(plan)) => Json(serde_json::to_value(plan).unwrap_or_default()),
+        Ok(None) => Json(serde_json::json!(null)),
+        Err(e) => Json(serde_json::json!({"error": e.to_string()})),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct PlanCompleteReq {
+    pub commit_id: Option<String>,
+}
+
+pub async fn plan_complete(
+    State(state): State<AppState>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+    Json(body): Json<PlanCompleteReq>,
+) -> Json<serde_json::Value> {
+    match crate::plan::complete(&state.db, &id, body.commit_id.as_deref()).await {
+        Ok(()) => Json(serde_json::json!({"status": "ok"})),
+        Err(e) => Json(serde_json::json!({"error": e.to_string()})),
+    }
+}
+
+pub async fn plan_abandon(
+    State(state): State<AppState>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    match crate::plan::abandon(&state.db, &id).await {
+        Ok(()) => Json(serde_json::json!({"status": "ok"})),
+        Err(e) => Json(serde_json::json!({"error": e.to_string()})),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct PlanActivateReq {
+    pub project: String,
+    pub plan_id: Option<String>,
+}
+
+pub async fn plan_activate(
+    State(state): State<AppState>,
+    Json(body): Json<PlanActivateReq>,
+) -> Json<serde_json::Value> {
+    match crate::plan::activate(&state.db, &body.project, body.plan_id.as_deref()).await {
+        Ok(Some(plan)) => Json(serde_json::json!({
+            "status": "ok",
+            "plan": serde_json::to_value(plan).unwrap_or_default()
+        })),
+        Ok(None) => Json(serde_json::json!({"status": "no_active_plan"})),
+        Err(e) => Json(serde_json::json!({"error": e.to_string()})),
+    }
 }
 
 // --- Timeline ---

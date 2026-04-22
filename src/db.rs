@@ -51,6 +51,7 @@ DEFINE FIELD IF NOT EXISTS ended_at          ON session TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS status            ON session TYPE string;
 DEFINE FIELD IF NOT EXISTS observation_count ON session TYPE int DEFAULT 0;
 DEFINE FIELD IF NOT EXISTS model             ON session TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS name              ON session TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS tags              ON session TYPE option<array<string>>;
 DEFINE INDEX IF NOT EXISTS session_project   ON TABLE session FIELDS project;
 DEFINE INDEX IF NOT EXISTS session_status    ON TABLE session FIELDS status;
@@ -102,6 +103,7 @@ DEFINE FIELD IF NOT EXISTS parent_id     ON hifz TYPE option<record<hifz>>;
 DEFINE FIELD IF NOT EXISTS supersedes    ON hifz TYPE option<array<record<hifz>>>;
 DEFINE FIELD IF NOT EXISTS is_latest     ON hifz TYPE bool DEFAULT true;
 DEFINE FIELD IF NOT EXISTS forget_after  ON hifz TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS commit_ids    ON hifz TYPE array<record<commit>> DEFAULT [];
 DEFINE FIELD IF NOT EXISTS created_at    ON hifz TYPE string;
 DEFINE FIELD IF NOT EXISTS updated_at    ON hifz TYPE string;
 DEFINE INDEX IF NOT EXISTS mem_title_ft  ON TABLE hifz
@@ -159,25 +161,28 @@ DEFINE FIELD IF NOT EXISTS last_seen  ON entity TYPE string;
 DEFINE FIELD IF NOT EXISTS count      ON entity TYPE int DEFAULT 1;
 DEFINE INDEX IF NOT EXISTS entity_unique ON TABLE entity FIELDS kind, name, project UNIQUE;
 
--- === EPISODES (Phase 4) ===
+-- === RUNS (Phase 4) ===
 -- A task-scoped trajectory inside a session: UserPromptSubmit → … → Stop/TaskCompleted.
-DEFINE TABLE IF NOT EXISTS episode SCHEMAFULL;
-DEFINE FIELD IF NOT EXISTS session_id      ON episode TYPE record<session>;
-DEFINE FIELD IF NOT EXISTS project         ON episode TYPE string;
-DEFINE FIELD IF NOT EXISTS started_at      ON episode TYPE string;
-DEFINE FIELD IF NOT EXISTS ended_at        ON episode TYPE option<string>;
-DEFINE FIELD IF NOT EXISTS prompt          ON episode TYPE string;
-DEFINE FIELD IF NOT EXISTS outcome         ON episode TYPE string DEFAULT 'unknown';
-DEFINE FIELD IF NOT EXISTS observation_ids ON episode TYPE array<record<observation>> DEFAULT [];
-DEFINE FIELD IF NOT EXISTS lesson          ON episode TYPE option<string>;
-DEFINE INDEX IF NOT EXISTS ep_project ON TABLE episode FIELDS project;
-DEFINE INDEX IF NOT EXISTS ep_session ON TABLE episode FIELDS session_id;
-DEFINE ANALYZER IF NOT EXISTS ep_analyzer TOKENIZERS blank, class
+DEFINE TABLE IF NOT EXISTS run SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS session_id      ON run TYPE record<session>;
+DEFINE FIELD IF NOT EXISTS project         ON run TYPE string;
+DEFINE FIELD IF NOT EXISTS started_at      ON run TYPE string;
+DEFINE FIELD IF NOT EXISTS ended_at        ON run TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS prompt          ON run TYPE string;
+DEFINE FIELD IF NOT EXISTS prompts         ON run TYPE option<array<string>>;
+DEFINE FIELD IF NOT EXISTS outcome         ON run TYPE string DEFAULT 'unknown';
+DEFINE FIELD IF NOT EXISTS observation_ids ON run TYPE array<record<observation>> DEFAULT [];
+DEFINE FIELD IF NOT EXISTS lesson          ON run TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS commit_id       ON run TYPE option<record<commit>>;
+DEFINE FIELD IF NOT EXISTS plan_id         ON run TYPE option<record<plan>>;
+DEFINE INDEX IF NOT EXISTS run_project ON TABLE run FIELDS project;
+DEFINE INDEX IF NOT EXISTS run_session ON TABLE run FIELDS session_id;
+DEFINE ANALYZER IF NOT EXISTS run_analyzer TOKENIZERS blank, class
   FILTERS lowercase, snowball(english);
-DEFINE INDEX IF NOT EXISTS ep_prompt_ft ON TABLE episode
-  FIELDS prompt FULLTEXT ANALYZER ep_analyzer BM25 CONCURRENTLY;
-DEFINE INDEX IF NOT EXISTS ep_lesson_ft ON TABLE episode
-  FIELDS lesson FULLTEXT ANALYZER ep_analyzer BM25 CONCURRENTLY;
+DEFINE INDEX IF NOT EXISTS run_prompt_ft ON TABLE run
+  FIELDS prompt FULLTEXT ANALYZER run_analyzer BM25 CONCURRENTLY;
+DEFINE INDEX IF NOT EXISTS run_lesson_ft ON TABLE run
+  FIELDS lesson FULLTEXT ANALYZER run_analyzer BM25 CONCURRENTLY;
 
 -- === GRAPH LINKS BETWEEN MEMORIES (Phase 3) ===
 -- Typed relation edge. `via` distinguishes the reason two memories are linked:
@@ -193,6 +198,42 @@ DEFINE FIELD IF NOT EXISTS score      ON mem_link TYPE float;
 DEFINE FIELD IF NOT EXISTS via        ON mem_link TYPE string;
 DEFINE FIELD IF NOT EXISTS created_at ON mem_link TYPE string;
 DEFINE INDEX IF NOT EXISTS mem_link_via ON TABLE mem_link FIELDS via;
+
+-- === COMMIT TRACKING ===
+DEFINE TABLE IF NOT EXISTS commit SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS sha            ON commit TYPE string;
+DEFINE FIELD IF NOT EXISTS message        ON commit TYPE string;
+DEFINE FIELD IF NOT EXISTS author         ON commit TYPE string;
+DEFINE FIELD IF NOT EXISTS branch         ON commit TYPE string;
+DEFINE FIELD IF NOT EXISTS project        ON commit TYPE string;
+DEFINE FIELD IF NOT EXISTS files_changed  ON commit TYPE array<string> DEFAULT [];
+DEFINE FIELD IF NOT EXISTS insertions     ON commit TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS deletions      ON commit TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS is_amend       ON commit TYPE bool DEFAULT false;
+DEFINE FIELD IF NOT EXISTS session_id     ON commit TYPE option<record<session>>;
+DEFINE FIELD IF NOT EXISTS run_id         ON commit TYPE option<record<run>>;
+DEFINE FIELD IF NOT EXISTS plan_id        ON commit TYPE option<record<plan>>;
+DEFINE FIELD IF NOT EXISTS timestamp      ON commit TYPE string;
+DEFINE FIELD IF NOT EXISTS created_at     ON commit TYPE string;
+DEFINE INDEX IF NOT EXISTS commit_sha     ON TABLE commit FIELDS sha UNIQUE;
+DEFINE INDEX IF NOT EXISTS commit_project ON TABLE commit FIELDS project;
+
+-- === PLAN TRACKING ===
+DEFINE TABLE IF NOT EXISTS plan SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS file_path      ON plan TYPE string;
+DEFINE FIELD IF NOT EXISTS title          ON plan TYPE string;
+DEFINE FIELD IF NOT EXISTS content        ON plan TYPE string;
+DEFINE FIELD IF NOT EXISTS status         ON plan TYPE string DEFAULT 'active';
+DEFINE FIELD IF NOT EXISTS project        ON plan TYPE string;
+DEFINE FIELD IF NOT EXISTS concepts       ON plan TYPE array<string> DEFAULT [];
+DEFINE FIELD IF NOT EXISTS files          ON plan TYPE array<string> DEFAULT [];
+DEFINE FIELD IF NOT EXISTS session_id     ON plan TYPE option<record<session>>;
+DEFINE FIELD IF NOT EXISTS commit_id      ON plan TYPE option<record<commit>>;
+DEFINE FIELD IF NOT EXISTS created_at     ON plan TYPE string;
+DEFINE FIELD IF NOT EXISTS completed_at   ON plan TYPE option<string>;
+DEFINE INDEX IF NOT EXISTS plan_project   ON TABLE plan FIELDS project;
+DEFINE INDEX IF NOT EXISTS plan_status    ON TABLE plan FIELDS status;
+DEFINE INDEX IF NOT EXISTS plan_file_path ON TABLE plan FIELDS file_path UNIQUE;
 
 DEFINE TABLE IF NOT EXISTS procedural_hifz SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS name              ON procedural_hifz TYPE string;

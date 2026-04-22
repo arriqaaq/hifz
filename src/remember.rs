@@ -22,11 +22,14 @@ pub async fn save(
     content: &str,
     concepts: &[String],
     files: &[String],
+    session_id: Option<RecordId>,
 ) -> Result<String> {
     let now = chrono::Utc::now().to_rfc3339();
 
     let embed_text = build_embed_text(title, content, concepts, files);
     let embedding = embedder.embed_single(&embed_text)?;
+
+    let session_ids: Vec<RecordId> = session_id.into_iter().collect();
 
     #[derive(Debug, SurrealValue)]
     struct Created {
@@ -44,7 +47,7 @@ pub async fn save(
              files = $files, \
              keywords = [], \
              tags = [], \
-             session_ids = [], \
+             session_ids = $session_ids, \
              strength = 1.0, \
              access_count = 0, \
              last_accessed_at = $now, \
@@ -61,6 +64,7 @@ pub async fn save(
         .bind(("content", content.to_string()))
         .bind(("concepts", concepts.to_vec()))
         .bind(("files", files.to_vec()))
+        .bind(("session_ids", session_ids))
         .bind(("embedding", embedding.clone()))
         .bind(("now", now))
         .await?;

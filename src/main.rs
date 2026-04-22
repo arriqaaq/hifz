@@ -110,6 +110,16 @@ async fn async_main(cli: Cli) -> Result<()> {
                 None
             };
 
+            let git_path = which::which("git").ok();
+            if let Some(ref p) = git_path {
+                tracing::info!("Git: {}", p.display());
+            } else {
+                tracing::warn!(
+                    "git binary not found on PATH — commit enrichment \
+                     (files_changed, insertions, deletions) will be unavailable"
+                );
+            }
+
             let config = hifz::config::load_config();
             tracing::info!("REST API: http://127.0.0.1:{port}/hifz/*");
             tracing::info!("Embeddings: fastembed ({} dims)", embedder.dimension());
@@ -122,6 +132,7 @@ async fn async_main(cli: Cli) -> Result<()> {
                 config.auto_compress,
                 config.token_budget,
                 config.llm_evolve,
+                git_path,
             )
             .await?;
         }

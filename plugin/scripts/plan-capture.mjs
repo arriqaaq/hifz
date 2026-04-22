@@ -50,15 +50,17 @@ async function main() {
 	const truncated = content.length > MAX ? content.slice(0, MAX) + "\n\n[...truncated]" : content;
 
 	try {
-		await fetch(`${REST_URL}/hifz/remember`, {
+		await fetch(`${REST_URL}/hifz/plan`, {
 			method: "POST",
 			headers: HEADERS,
 			body: JSON.stringify({
-				title: `Plan: ${title}`,
+				file_path: filePath,
+				title,
 				content: truncated,
-				type: "architecture",
+				project: data.cwd || process.cwd(),
 				concepts: Array.from(concepts),
-				files
+				files,
+				session_id: data.session_id
 			}),
 			signal: AbortSignal.timeout(3000)
 		});

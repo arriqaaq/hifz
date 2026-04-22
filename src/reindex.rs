@@ -65,7 +65,7 @@ pub async fn reindex_memories(db: &Surreal<Db>, embedder: &Embedder) -> Result<R
             if let Some(sids) = row.session_ids.as_ref() {
                 if let Some(first) = sids.first() {
                     let mut sresp = db
-                        .query("SELECT VALUE project FROM type::thing($sid)")
+                        .query("SELECT VALUE project FROM type::record($sid)")
                         .bind(("sid", first.clone()))
                         .await?;
                     let proj: Option<String> = sresp
@@ -73,7 +73,7 @@ pub async fn reindex_memories(db: &Surreal<Db>, embedder: &Embedder) -> Result<R
                         .ok()
                         .and_then(|v: Vec<String>| v.into_iter().next());
                     if let Some(p) = proj {
-                        db.query("UPDATE type::thing($id) SET project = $p")
+                        db.query("UPDATE type::record($id) SET project = $p")
                             .bind(("id", id.clone()))
                             .bind(("p", p))
                             .await?;
@@ -93,7 +93,7 @@ pub async fn reindex_memories(db: &Surreal<Db>, embedder: &Embedder) -> Result<R
             let files = row.files.clone().unwrap_or_default();
             let text = build_embed_text(&title, &content, &concepts, &files);
             let vec = embedder.embed_single(&text)?;
-            db.query("UPDATE type::thing($id) SET embedding = $v")
+            db.query("UPDATE type::record($id) SET embedding = $v")
                 .bind(("id", id.clone()))
                 .bind(("v", vec))
                 .await?;

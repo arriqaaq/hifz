@@ -30,7 +30,7 @@ pub struct Observation {
     pub facts: Vec<String>,
     pub facts_text: Option<String>,
     pub narrative: String,
-    pub concepts: Vec<String>,
+    pub keywords: Vec<String>,
     pub files: Vec<String>,
     pub importance: i64,
     pub confidence: Option<f64>,
@@ -49,23 +49,21 @@ pub struct RawObservation {
     pub data: serde_json::Value,
 }
 
-// --- Memory (consolidated long-term) ---
+// --- Memory (long-term, A-mem aligned) ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
-pub struct Hifz {
+pub struct Memory {
     pub id: Option<surrealdb::types::RecordId>,
     pub project: String,
-    pub mem_type: String,
+    pub category: String,
     pub title: String,
     pub content: String,
-    pub concepts: Vec<String>,
-    pub files: Vec<String>,
     pub keywords: Vec<String>,
+    pub files: Vec<String>,
     pub tags: Vec<String>,
     pub context: Option<String>,
-    pub session_ids: Vec<surrealdb::types::RecordId>,
     pub strength: f64,
-    pub access_count: i64,
+    pub retrieval_count: i64,
     pub last_accessed_at: String,
     pub embedding: Option<Vec<f32>>,
     pub version: i64,
@@ -77,7 +75,7 @@ pub struct Hifz {
     pub updated_at: String,
 }
 
-// --- Entity (Phase 4) ---
+// --- Entity ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
 pub struct Entity {
@@ -111,7 +109,7 @@ pub struct Commit {
     pub created_at: String,
 }
 
-// --- Run (Phase 4) ---
+// --- Run ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
 pub struct Run {
@@ -129,7 +127,7 @@ pub struct Run {
     pub plan_id: Option<surrealdb::types::RecordId>,
 }
 
-// --- Plan (first-class plan tracking) ---
+// --- Plan ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
 pub struct Plan {
@@ -139,7 +137,7 @@ pub struct Plan {
     pub content: String,
     pub status: String,
     pub project: String,
-    pub concepts: Vec<String>,
+    pub keywords: Vec<String>,
     pub files: Vec<String>,
     pub session_id: Option<surrealdb::types::RecordId>,
     pub commit_id: Option<surrealdb::types::RecordId>,
@@ -172,19 +170,19 @@ pub struct SessionSummary {
     pub narrative: String,
     pub key_decisions: Vec<String>,
     pub files_modified: Vec<String>,
-    pub concepts: Vec<String>,
+    pub keywords: Vec<String>,
     pub observation_count: i64,
 }
 
 // --- Consolidation Tiers ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
-pub struct SemanticHifz {
+pub struct SemanticMemory {
     pub id: Option<surrealdb::types::RecordId>,
     pub fact: String,
     pub confidence: f64,
     pub source_sessions: Vec<surrealdb::types::RecordId>,
-    pub access_count: i64,
+    pub retrieval_count: i64,
     pub strength: f64,
     pub last_accessed_at: String,
     pub created_at: String,
@@ -192,7 +190,7 @@ pub struct SemanticHifz {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
-pub struct ProceduralHifz {
+pub struct ProceduralMemory {
     pub id: Option<surrealdb::types::RecordId>,
     pub name: String,
     pub steps: Vec<String>,
@@ -216,6 +214,8 @@ pub struct SearchResult {
     pub timestamp: String,
     pub importance: i64,
     pub score: Option<f64>,
+    #[serde(default)]
+    pub is_neighbor: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
@@ -242,15 +242,15 @@ pub struct HealthStatus {
 pub struct ProjectDigest {
     pub project: String,
     pub updated_at: String,
-    pub top_concepts: Vec<ConceptFreq>,
+    pub top_keywords: Vec<KeywordFreq>,
     pub top_files: Vec<FileFreq>,
     pub session_count: i64,
     pub total_observations: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConceptFreq {
-    pub concept: String,
+pub struct KeywordFreq {
+    pub keyword: String,
     pub frequency: i64,
 }
 
@@ -260,7 +260,7 @@ pub struct FileFreq {
     pub frequency: i64,
 }
 
-// --- Hook payload from Claude Code ---
+// --- Hook payload from agent harness ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HookPayload {
@@ -271,7 +271,54 @@ pub struct HookPayload {
     pub project: String,
     pub cwd: String,
     pub timestamp: String,
+    #[serde(default)]
+    pub source: Option<String>,
     pub data: serde_json::Value,
+}
+
+// --- Canonical event vocabulary ---
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum HifzEvent {
+    SessionStart,
+    PromptSubmit,
+    ToolStart,
+    ToolComplete,
+    ToolFailed,
+    PreCompact,
+    PostCompact,
+    SubagentStart,
+    SubagentStop,
+    Notification,
+    TaskCompleted,
+    SessionStop,
+    SessionEnd,
+    GitCommit,
+    Unknown(String),
+}
+
+impl From<&str> for HifzEvent {
+    fn from(s: &str) -> Self {
+        match s {
+            "UserPromptSubmit" | "prompt_submit" => Self::PromptSubmit,
+            "PreToolUse" | "pre_tool_use" | "tool_start" => Self::ToolStart,
+            "PostToolUse" | "post_tool_use" | "tool_complete" => Self::ToolComplete,
+            "PostToolUseFailure" | "PostToolFailure" | "post_tool_failure" | "tool_failed" => {
+                Self::ToolFailed
+            }
+            "SessionStart" | "session_start" => Self::SessionStart,
+            "Stop" | "stop" | "session_stop" => Self::SessionStop,
+            "TaskCompleted" | "task_completed" => Self::TaskCompleted,
+            "SessionEnd" | "session_end" => Self::SessionEnd,
+            "PreCompact" | "pre_compact" => Self::PreCompact,
+            "PostCompact" | "post_compact" => Self::PostCompact,
+            "SubagentStart" | "subagent_start" => Self::SubagentStart,
+            "SubagentStop" | "subagent_stop" => Self::SubagentStop,
+            "Notification" | "notification" => Self::Notification,
+            "git_commit" => Self::GitCommit,
+            other => Self::Unknown(other.to_string()),
+        }
+    }
 }
 
 // --- Observation types ---
@@ -292,21 +339,4 @@ pub const OBS_TYPES: &[&str] = &[
     "task",
     "compaction_summary",
     "other",
-];
-
-pub const HOOK_TYPES: &[&str] = &[
-    "session_start",
-    "prompt_submit",
-    "pre_tool_use",
-    "post_tool_use",
-    "post_tool_failure",
-    "pre_compact",
-    "post_compact",
-    "subagent_start",
-    "subagent_stop",
-    "notification",
-    "task_completed",
-    "stop",
-    "session_end",
-    "git_commit",
 ];

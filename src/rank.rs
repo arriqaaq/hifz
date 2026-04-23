@@ -16,17 +16,17 @@ pub const ACCESS_COEF: f64 = 0.1;
 pub const ACCESS_CAP: i64 = 20;
 
 /// Compute the recency × access multiplier for a memory row.
-pub fn recency_access_boost(created_at: &str, access_count: i64) -> f64 {
+pub fn recency_access_boost(created_at: &str, retrieval_count: i64) -> f64 {
     let age_days = age_days_since(created_at);
     let recency = (-age_days / HALF_LIFE_DAYS).exp();
-    let access = 1.0 + ACCESS_COEF * (access_count.clamp(0, ACCESS_CAP) as f64);
+    let access = 1.0 + ACCESS_COEF * (retrieval_count.clamp(0, ACCESS_CAP) as f64);
     recency * access
 }
 
 /// Compose a final ranking score from a base score (e.g. strength or RRF)
 /// and the recency/access boost.
-pub fn final_score(base: f64, created_at: &str, access_count: i64) -> f64 {
-    base * recency_access_boost(created_at, access_count)
+pub fn final_score(base: f64, created_at: &str, retrieval_count: i64) -> f64 {
+    base * recency_access_boost(created_at, retrieval_count)
 }
 
 fn age_days_since(created_at: &str) -> f64 {

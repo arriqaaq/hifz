@@ -121,7 +121,7 @@ async fn async_main(cli: Cli) -> Result<()> {
             }
 
             let config = hifz::config::load_config();
-            tracing::info!("REST API: http://127.0.0.1:{port}/hifz/*");
+            tracing::info!("REST API: http://127.0.0.1:{port}/api/v1/*");
             tracing::info!("Embeddings: fastembed ({} dims)", embedder.dimension());
 
             hifz::web::serve(
@@ -165,7 +165,11 @@ async fn async_main(cli: Cli) -> Result<()> {
 
         Command::Status => {
             let client = reqwest::Client::new();
-            match client.get("http://127.0.0.1:3111/hifz/health").send().await {
+            match client
+                .get("http://127.0.0.1:3111/api/v1/health")
+                .send()
+                .await
+            {
                 Ok(resp) => {
                     let body: serde_json::Value = resp.json().await?;
                     println!("{}", serde_json::to_string_pretty(&body)?);

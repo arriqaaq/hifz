@@ -111,7 +111,7 @@ pub async fn record_commit(
 
     // Strengthen related memories
     if session_id.is_some() {
-        let _ = ground::on_commit(db, cid, &data.project, &data.files_changed).await;
+        let _ = ground::on_commit(db, &data.project, &data.files_changed).await;
     }
 
     // Link commit to active plan and check for auto-completion
@@ -165,13 +165,13 @@ pub async fn create_summary_from_run(
         title: Option<String>,
         narrative: Option<String>,
         files: Option<Vec<String>>,
-        concepts: Option<Vec<String>>,
+        keywords: Option<Vec<String>>,
         importance: Option<i64>,
     }
 
     let mut resp = db
         .query(
-            "SELECT title, narrative, files, concepts, importance FROM observation \
+            "SELECT title, narrative, files, keywords, importance FROM observation \
              WHERE id IN (SELECT VALUE observation_ids FROM type::record($rid))[0] \
              ORDER BY importance DESC LIMIT 10",
         )
@@ -194,9 +194,9 @@ pub async fn create_summary_from_run(
         .collect::<std::collections::HashSet<_>>()
         .into_iter()
         .collect();
-    let all_concepts: Vec<String> = obs
+    let all_keywords: Vec<String> = obs
         .iter()
-        .flat_map(|o| o.concepts.clone().unwrap_or_default())
+        .flat_map(|o| o.keywords.clone().unwrap_or_default())
         .collect::<std::collections::HashSet<_>>()
         .into_iter()
         .collect();
@@ -209,7 +209,7 @@ pub async fn create_summary_from_run(
          session_id = $sid, project = $project, created_at = $now, \
          title = $title, narrative = $narrative, \
          key_decisions = $key_decisions, files_modified = $files, \
-         concepts = $concepts, observation_count = $obs_count",
+         keywords = $keywords, observation_count = $obs_count",
     )
     .bind(("sid", session_id.clone()))
     .bind(("project", project.to_string()))
@@ -218,7 +218,7 @@ pub async fn create_summary_from_run(
     .bind(("narrative", narratives.join(" ")))
     .bind(("key_decisions", key_decisions))
     .bind(("files", all_files))
-    .bind(("concepts", all_concepts))
+    .bind(("keywords", all_keywords))
     .bind(("obs_count", obs.len() as i64))
     .await?
     .check()?;

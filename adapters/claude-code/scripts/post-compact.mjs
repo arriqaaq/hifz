@@ -13,7 +13,7 @@ async function main() {
 		return;
 	}
 	try {
-		await fetch(`${REST_URL}/hifz/observe`, {
+		await fetch(`${REST_URL}/api/v1/agent/observe`, {
 			method: "POST",
 			headers: HEADERS,
 			body: JSON.stringify({

@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { searchMemories, forget } from '$lib/api';
-  import type { Hifz } from '$lib/types';
+  import type { Memory } from '$lib/types';
   import LoadingSpinner from '$lib/components/common/LoadingSpinner.svelte';
 
-  let memories = $state<Hifz[]>([]);
+  let memories = $state<Memory[]>([]);
   let loading = $state(true);
   let query = $state('');
   let error = $state('');
@@ -59,8 +59,8 @@
     expandedId = expandedId === id ? null : id;
   }
 
-  function typeColor(memType: string): string {
-    switch (memType) {
+  function typeColor(category: string): string {
+    switch (category) {
       case 'pattern': return 'badge-purple';
       case 'preference': return 'badge-cyan';
       case 'architecture': return 'badge-blue';
@@ -96,11 +96,11 @@
       {@const isExpanded = expandedId === memId}
       <div class="card mem-card" class:expanded={isExpanded}>
         <button class="mem-header" onclick={() => toggleExpand(memId)}>
-          <span class="badge {typeColor(mem.mem_type)}">{mem.mem_type}</span>
+          <span class="badge {typeColor(mem.category)}">{mem.category}</span>
           <span class="mem-title">{mem.title}</span>
           <span class="mem-stats">
             <span title="Strength">&#9679; {(mem.strength ?? 1).toFixed(2)}</span>
-            <span title="Access count">&#128065; {mem.access_count ?? 0}</span>
+            <span title="Retrieval count">&#128065; {mem.retrieval_count ?? 0}</span>
           </span>
           <span class="expand-icon">{isExpanded ? '−' : '+'}</span>
         </button>
@@ -114,9 +114,9 @@
             <pre class="content-text">{mem.content}</pre>
           </div>
 
-          {#if (mem.concepts && mem.concepts.length > 0) || (mem.files && mem.files.length > 0)}
+          {#if (mem.keywords && mem.keywords.length > 0) || (mem.files && mem.files.length > 0)}
             <div class="mem-tags">
-              {#each mem.concepts || [] as c}
+              {#each mem.keywords || [] as c}
                 <span class="badge badge-yellow">{c}</span>
               {/each}
               {#each mem.files || [] as f}

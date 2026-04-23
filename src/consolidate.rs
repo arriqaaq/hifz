@@ -20,7 +20,7 @@ pub async fn run_consolidation(
     }
 
     // Tier 2: Reflect — cluster related memories (no LLM needed)
-    // This is a simpler version that groups by shared concepts
+    // This is a simpler version that groups by shared keywords
     result.clusters_created = tier_reflect(db).await.unwrap_or(0);
 
     // Tier 3: Procedural — extract workflows (requires LLM)
@@ -71,9 +71,9 @@ async fn tier_semantic(db: &Surreal<Db>, ollama: &OllamaClient) -> Result<usize>
         }
 
         db.query(
-            "CREATE semantic_hifz SET \
+            "CREATE semantic_memory SET \
              fact = $fact, confidence = $confidence, \
-             source_sessions = [], access_count = 0, strength = 1.0, \
+             retrieval_count = 0, strength = 1.0, \
              last_accessed_at = $now, created_at = $now, updated_at = $now",
         )
         .bind(("fact", fact))
@@ -92,11 +92,11 @@ async fn tier_reflect(db: &Surreal<Db>) -> Result<usize> {
     #[derive(Debug, SurrealValue)]
     struct MemRow {
         id: Option<RecordId>,
-        concepts: Option<Vec<String>>,
+        keywords: Option<Vec<String>>,
     }
 
     let mut resp = db
-        .query("SELECT id, concepts FROM hifz WHERE is_latest = true LIMIT 100")
+        .query("SELECT id, keywords FROM memory WHERE is_latest = true LIMIT 100")
         .await?;
     let rows: Vec<MemRow> = resp.take(0)?;
 
@@ -104,37 +104,37 @@ async fn tier_reflect(db: &Surreal<Db>) -> Result<usize> {
         return Ok(0);
     }
 
-    // Filter stop-concepts: remove any concept appearing in >50% of memories
+    // Filter stop-keywords: remove any keyword appearing in >50% of memories
     let mut freq: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     for row in &rows {
-        if let Some(ref concepts) = row.concepts {
-            for c in concepts {
+        if let Some(ref keywords) = row.keywords {
+            for c in keywords {
                 *freq.entry(c.clone()).or_default() += 1;
             }
         }
     }
     let threshold = rows.len() / 2;
-    let stop_concepts: std::collections::HashSet<&str> = freq
+    let stop_keywords: std::collections::HashSet<&str> = freq
         .iter()
         .filter(|(_, count)| **count > threshold)
         .map(|(c, _)| c.as_str())
         .collect();
 
-    // Build filtered concept sets per memory
+    // Build filtered keyword sets per memory
     let filtered: Vec<(Option<&RecordId>, std::collections::HashSet<String>)> = rows
         .iter()
         .map(|r| {
-            let concepts: std::collections::HashSet<String> = r
-                .concepts
+            let keywords: std::collections::HashSet<String> = r
+                .keywords
                 .as_ref()
                 .map(|cs| {
                     cs.iter()
-                        .filter(|c| !stop_concepts.contains(c.as_str()))
+                        .filter(|c| !stop_keywords.contains(c.as_str()))
                         .cloned()
                         .collect()
                 })
                 .unwrap_or_default();
-            (r.id.as_ref(), concepts)
+            (r.id.as_ref(), keywords)
         })
         .collect();
 
@@ -165,7 +165,7 @@ async fn tier_reflect(db: &Surreal<Db>) -> Result<usize> {
         }
     }
 
-    // Create mem_link edges for each cluster
+    // Create memory_link edges for each cluster
     let mut count = 0;
     for cluster in &clusters {
         for i in 0..cluster.len() {
@@ -186,8 +186,8 @@ async fn tier_reflect(db: &Surreal<Db>) -> Result<usize> {
 async fn tier_procedural(db: &Surreal<Db>, ollama: &OllamaClient) -> Result<usize> {
     let mut resp = db
         .query(
-            "SELECT title, content, strength FROM hifz \
-             WHERE is_latest = true AND mem_type = 'pattern' \
+            "SELECT title, content, strength FROM memory \
+             WHERE is_latest = true AND category = 'pattern' \
              ORDER BY strength DESC LIMIT 20",
         )
         .await?;
@@ -224,9 +224,9 @@ async fn tier_procedural(db: &Surreal<Db>, ollama: &OllamaClient) -> Result<usiz
         }
 
         db.query(
-            "CREATE procedural_hifz SET \
+            "CREATE procedural_memory SET \
              name = $name, steps = $steps, trigger_condition = $trigger, \
-             frequency = 1, strength = 1.0, source_sessions = [], \
+             frequency = 1, strength = 1.0, \
              created_at = $now, updated_at = $now",
         )
         .bind(("name", name))
@@ -244,7 +244,7 @@ async fn tier_decay(db: &Surreal<Db>, decay_days: i64) -> Result<usize> {
     // Apply exponential decay: strength *= 0.9 for each decay period elapsed
     let mut resp = db
         .query(
-            "SELECT id, strength, last_accessed_at FROM semantic_hifz \
+            "SELECT id, strength, last_accessed_at FROM semantic_memory \
              WHERE strength > 0.1",
         )
         .await?;
@@ -278,17 +278,17 @@ async fn tier_decay(db: &Surreal<Db>, decay_days: i64) -> Result<usize> {
         }
     }
 
-    // Also decay hifz table memories (longer period: 60 days)
-    let hifz_decay_days: i64 = 60;
+    // Also decay memory table memories (longer period: 60 days)
+    let memory_decay_days: i64 = 60;
     let mut resp = db
         .query(
-            "SELECT id, strength, last_accessed_at FROM hifz \
+            "SELECT id, strength, last_accessed_at FROM memory \
              WHERE strength > 0.1 AND is_latest = true",
         )
         .await?;
-    let hifz_memories: Vec<serde_json::Value> = resp.take(0)?;
+    let memory_memories: Vec<serde_json::Value> = resp.take(0)?;
 
-    for mem in &hifz_memories {
+    for mem in &memory_memories {
         let last_accessed = mem
             .get("last_accessed_at")
             .and_then(|v| v.as_str())
@@ -297,8 +297,8 @@ async fn tier_decay(db: &Surreal<Db>, decay_days: i64) -> Result<usize> {
 
         if let Some(last) = last_accessed {
             let days_since = (now - last).num_days();
-            if days_since > hifz_decay_days {
-                let periods = days_since / hifz_decay_days;
+            if days_since > memory_decay_days {
+                let periods = days_since / memory_decay_days;
                 let current_strength = mem.get("strength").and_then(|v| v.as_f64()).unwrap_or(1.0);
                 let new_strength = (current_strength * 0.9_f64.powi(periods as i32)).max(0.1);
 

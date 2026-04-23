@@ -31,7 +31,7 @@ pub struct PlanRow {
     pub content: Option<String>,
     pub status: Option<String>,
     pub project: Option<String>,
-    pub concepts: Option<Vec<String>>,
+    pub keywords: Option<Vec<String>>,
     pub files: Option<Vec<String>>,
     pub session_id: Option<surrealdb::types::RecordId>,
     pub commit_id: Option<surrealdb::types::RecordId>,
@@ -46,7 +46,7 @@ pub struct PlanUpsertRequest {
     pub content: String,
     pub project: String,
     #[serde(default)]
-    pub concepts: Vec<String>,
+    pub keywords: Vec<String>,
     #[serde(default)]
     pub files: Vec<String>,
     pub session_id: Option<String>,
@@ -72,13 +72,13 @@ pub async fn upsert(db: &Surreal<Db>, req: &PlanUpsertRequest) -> Result<PlanRow
             "UPDATE type::record($rid) SET 
                 title = $title,
                 content = $content,
-                concepts = $concepts,
+                keywords = $keywords,
                 files = $files",
         )
         .bind(("rid", rid))
         .bind(("title", req.title.clone()))
         .bind(("content", req.content.clone()))
-        .bind(("concepts", req.concepts.clone()))
+        .bind(("keywords", req.keywords.clone()))
         .bind(("files", req.files.clone()))
         .await?;
 
@@ -92,7 +92,7 @@ pub async fn upsert(db: &Surreal<Db>, req: &PlanUpsertRequest) -> Result<PlanRow
                     content = $content,
                     status = 'active',
                     project = $project,
-                    concepts = $concepts,
+                    keywords = $keywords,
                     files = $files,
                     session_id = $session_id,
                     created_at = $now",
@@ -101,7 +101,7 @@ pub async fn upsert(db: &Surreal<Db>, req: &PlanUpsertRequest) -> Result<PlanRow
             .bind(("title", req.title.clone()))
             .bind(("content", req.content.clone()))
             .bind(("project", req.project.clone()))
-            .bind(("concepts", req.concepts.clone()))
+            .bind(("keywords", req.keywords.clone()))
             .bind(("files", req.files.clone()))
             .bind((
                 "session_id",

@@ -1,8 +1,8 @@
 //! Deterministic write-time link generation between memories.
 //!
-//! On each new `hifz` row, we look for related existing rows via three
-//! channels — embedding KNN, concept Jaccard, file Jaccard — and `RELATE`
-//! them through the typed `mem_link` edge. Entity-based links (Phase 4)
+//! On each new `memory` row, we look for related existing rows via three
+//! channels — embedding KNN, keyword Jaccard, file Jaccard — and `RELATE`
+//! them through the typed `memory_link` edge. Entity-based links (Phase 4)
 //! plug into this pipeline via `via='entity'`.
 //!
 //! All set math (Jaccard) runs in Rust because SurrealQL has no native
@@ -19,7 +19,7 @@ use crate::db::Db;
 
 /// Cosine-distance upper bound (= 1 − similarity lower bound) for `via='embedding'`.
 const EMBEDDING_DISTANCE_MAX: f64 = 0.25;
-/// Jaccard lower bound for `via='concept' | 'file'`.
+/// Jaccard lower bound for `via='keyword' | 'file'`.
 const JACCARD_MIN: f64 = 0.30;
 /// HNSW KNN fanout used at write time.
 const KNN_K: usize = 10;
@@ -29,33 +29,33 @@ const KNN_EF: usize = 100;
 struct CandidateRow {
     id: Option<RecordId>,
     distance: Option<f64>,
-    concepts: Option<Vec<String>>,
+    keywords: Option<Vec<String>>,
     files: Option<Vec<String>>,
 }
 
 #[derive(Debug, Default)]
 pub struct LinkReport {
     pub embedding_links: usize,
-    pub concept_links: usize,
+    pub keyword_links: usize,
     pub file_links: usize,
 }
 
 /// Generate links for a freshly-written memory. `self_id` must be the record
-/// id of the new row (e.g. `hifz:xyz`); `concepts` and `files` are its own.
+/// id of the new row (e.g. `memory:xyz`); `keywords` and `files` are its own.
 pub async fn generate_links(
     db: &Surreal<Db>,
     self_id: &RecordId,
     project: &str,
     embedding: &[f32],
-    concepts: &[String],
+    keywords: &[String],
     files: &[String],
 ) -> Result<LinkReport> {
     let mut report = LinkReport::default();
 
     // KNN sweep over existing memories in the same project (or global), excluding self.
     let sql = format!(
-        "SELECT id, vector::distance::knn() AS distance, concepts, files \
-         FROM hifz \
+        "SELECT id, vector::distance::knn() AS distance, keywords, files \
+         FROM memory \
          WHERE is_latest = true \
            AND id != $self \
            AND (project = $project OR project = 'global') \
@@ -69,7 +69,7 @@ pub async fn generate_links(
         .await?;
     let candidates: Vec<CandidateRow> = resp.take(0).unwrap_or_default();
 
-    let self_concepts: HashSet<&str> = concepts.iter().map(String::as_str).collect();
+    let self_keywords: HashSet<&str> = keywords.iter().map(String::as_str).collect();
     let self_files: HashSet<&str> = files.iter().map(String::as_str).collect();
 
     for c in &candidates {
@@ -86,17 +86,17 @@ pub async fn generate_links(
             }
         }
 
-        // Concept link
-        if !self_concepts.is_empty() {
+        // Keyword link
+        if !self_keywords.is_empty() {
             let other: HashSet<&str> = c
-                .concepts
+                .keywords
                 .as_ref()
                 .map(|v| v.iter().map(String::as_str).collect())
                 .unwrap_or_default();
-            let j = jaccard(&self_concepts, &other);
+            let j = jaccard(&self_keywords, &other);
             if j >= JACCARD_MIN {
-                upsert_link(db, self_id, &other_id, "concept", j).await?;
-                report.concept_links += 1;
+                upsert_link(db, self_id, &other_id, "keyword", j).await?;
+                report.keyword_links += 1;
             }
         }
 
@@ -138,7 +138,7 @@ pub async fn upsert_link(
 
     let mut resp = db
         .query(
-            "SELECT id, score FROM mem_link \
+            "SELECT id, score FROM memory_link \
              WHERE in = $from AND out = $to AND via = $via \
              LIMIT 1",
         )
@@ -163,7 +163,7 @@ pub async fn upsert_link(
     }
 
     let now = chrono::Utc::now().to_rfc3339();
-    db.query("RELATE $from->mem_link->$to SET score = $score, via = $via, created_at = $now")
+    db.query("RELATE $from->memory_link->$to SET score = $score, via = $via, created_at = $now")
         .bind(("from", from.clone()))
         .bind(("to", to.clone()))
         .bind(("score", score))
@@ -200,7 +200,7 @@ pub struct EdgeHit {
     pub via: String,
 }
 
-/// Fetch outgoing `mem_link` edges for the given seed memory ids.
+/// Fetch outgoing `memory_link` edges for the given seed memory ids.
 ///
 /// IMPORTANT: the `SELECT ->edge->node.*` form does **not** return edge fields
 /// (verified from hadith/src/analysis/isnad_graph.rs:206-207), so we query the
@@ -220,7 +220,7 @@ pub async fn expand_neighbours(db: &Surreal<Db>, seed_ids: &[RecordId]) -> Resul
     }
 
     let mut resp = db
-        .query("SELECT in, out, score, via FROM mem_link WHERE in IN $ids")
+        .query("SELECT in, out, score, via FROM memory_link WHERE in IN $ids")
         .bind(("ids", seed_ids.to_vec()))
         .await?;
     let rows: Vec<Row> = resp.take(0).unwrap_or_default();

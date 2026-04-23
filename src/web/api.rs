@@ -31,7 +31,7 @@ pub async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {
 
     let memories: i64 = state
         .db
-        .query("SELECT count() AS c FROM hifz GROUP ALL")
+        .query("SELECT count() AS c FROM memory GROUP ALL")
         .await
         .ok()
         .and_then(|mut r| r.take::<Vec<serde_json::Value>>(0).ok())
@@ -310,10 +310,37 @@ pub async fn smart_search(
             crate::search::search_semantic(&state.db, &state.embedder, &body.query, limit).await
         }
         _ => {
-            crate::search::search_hybrid(&state.db, &state.embedder, &body.query, limit, project)
-                .await
+            let cfg = crate::search::SearchConfig {
+                skip_graph: true,
+                ..Default::default()
+            };
+            crate::search::search_hybrid_with_config(
+                &state.db,
+                &state.embedder,
+                &body.query,
+                limit,
+                project,
+                cfg,
+            )
+            .await
         }
     };
+
+    match results {
+        Ok(r) => Json(serde_json::json!({"results": r, "count": r.len()})),
+        Err(e) => Json(serde_json::json!({"error": e.to_string()})),
+    }
+}
+
+pub async fn search_agentic(
+    State(state): State<AppState>,
+    Json(body): Json<SearchReq>,
+) -> Json<serde_json::Value> {
+    let limit = body.limit.unwrap_or(10);
+    let project = body.project.as_deref();
+
+    let results =
+        crate::search::search_hybrid(&state.db, &state.embedder, &body.query, limit, project).await;
 
     match results {
         Ok(r) => Json(serde_json::json!({"results": r, "count": r.len()})),
@@ -327,41 +354,30 @@ pub async fn smart_search(
 pub struct RememberReq {
     pub title: String,
     pub content: String,
-    #[serde(rename = "type")]
-    pub mem_type: Option<String>,
-    pub concepts: Option<Vec<String>>,
+    pub category: Option<String>,
+    pub keywords: Option<Vec<String>>,
     pub files: Option<Vec<String>>,
     pub project: Option<String>,
-    #[serde(rename = "sessionId")]
-    pub session_id: Option<String>,
 }
 
 pub async fn remember(
     State(state): State<AppState>,
     Json(body): Json<RememberReq>,
 ) -> Json<serde_json::Value> {
-    let mem_type = body.mem_type.as_deref().unwrap_or("fact");
-    let concepts = body.concepts.unwrap_or_default();
+    let category = body.category.as_deref().unwrap_or("fact");
+    let keywords = body.keywords.unwrap_or_default();
     let files = body.files.unwrap_or_default();
     let project = body.project.as_deref().unwrap_or("global");
-
-    // Resolve session: explicit > auto-detect active session for project
-    let session_rid = if let Some(ref sid) = body.session_id {
-        resolve_session_rid(&state, sid).await
-    } else {
-        auto_detect_active_session(&state.db, project).await
-    };
 
     let save_result = crate::remember::save(
         &state.db,
         &state.embedder,
         project,
-        mem_type,
+        category,
         &body.title,
         &body.content,
-        &concepts,
+        &keywords,
         &files,
-        session_rid,
     )
     .await;
 
@@ -377,7 +393,7 @@ pub async fn remember(
                         // Look up the freshly-created memory id by title+project+latest-created.
                         let mut resp = match db
                             .query(
-                                "SELECT id, created_at FROM hifz \
+                                "SELECT id, created_at FROM memory \
                                  WHERE title = $title AND project = $project \
                                  ORDER BY created_at DESC LIMIT 1",
                             )
@@ -483,7 +499,7 @@ pub async fn runs_search(
     }
 }
 
-/// GET /hifz/run/:id - get run with its observations
+/// GET /api/v1/agent/runs/{id} - get run with its observations
 pub async fn run_detail(
     State(state): State<AppState>,
     axum::extract::Path(id): axum::extract::Path<String>,
@@ -582,13 +598,13 @@ pub async fn observations_search(
     Json(serde_json::json!({"observations": observations, "count": observations.len()}))
 }
 
-// --- Memories search (hifz table only) ---
+// --- Memories search (memory table only) ---
 
 #[derive(Deserialize)]
 pub struct MemoriesReq {
     pub query: Option<String>,
     pub project: Option<String>,
-    pub mem_type: Option<String>,
+    pub category: Option<String>,
     pub limit: Option<usize>,
 }
 
@@ -606,17 +622,17 @@ pub async fn memories_search(
         conditions.push(format!("(project = '{}' OR project = 'global')", project));
     }
 
-    if let Some(ref mem_type) = params.mem_type {
-        conditions.push(format!("mem_type = '{}'", mem_type));
+    if let Some(ref category) = params.category {
+        conditions.push(format!("category = '{}'", category));
     }
 
     let where_clause = conditions.join(" AND ");
 
     let sql = if query.is_empty() || query == "*" {
-        format!("SELECT * FROM hifz WHERE {where_clause} ORDER BY created_at DESC LIMIT {limit}")
+        format!("SELECT * FROM memory WHERE {where_clause} ORDER BY created_at DESC LIMIT {limit}")
     } else {
         format!(
-            "SELECT *, search::score(1) + search::score(2) AS _score FROM hifz \
+            "SELECT *, search::score(1) + search::score(2) AS _score FROM memory \
              WHERE {where_clause} AND (title @1@ $q OR content @2@ $q) \
              ORDER BY _score DESC LIMIT {limit}"
         )
@@ -671,6 +687,95 @@ pub async fn core_edit(
         Ok(row) => Json(serde_json::to_value(row).unwrap_or_default()),
         Err(e) => Json(serde_json::json!({"error": e.to_string()})),
     }
+}
+
+pub async fn core_get_by_project(
+    State(state): State<AppState>,
+    axum::extract::Path(project): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    match crate::core_mem::get(&state.db, &project).await {
+        Ok(row) => Json(serde_json::to_value(row).unwrap_or_default()),
+        Err(e) => Json(serde_json::json!({"error": e.to_string()})),
+    }
+}
+
+pub async fn core_edit_by_project(
+    State(state): State<AppState>,
+    axum::extract::Path(project): axum::extract::Path<String>,
+    Json(body): Json<CoreEditReq>,
+) -> Json<serde_json::Value> {
+    match crate::core_mem::edit(&state.db, &project, &body.field, &body.op, &body.value).await {
+        Ok(row) => Json(serde_json::to_value(row).unwrap_or_default()),
+        Err(e) => Json(serde_json::json!({"error": e.to_string()})),
+    }
+}
+
+pub async fn evolve_by_id(
+    State(state): State<AppState>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    let Some(ollama) = state.ollama.as_ref() else {
+        return Json(serde_json::json!({
+            "error": "Memory evolution requires OLLAMA_URL to be configured"
+        }));
+    };
+
+    let memory_id = if id.starts_with("memory:") {
+        id.clone()
+    } else {
+        format!("memory:{id}")
+    };
+
+    let mut resp = match state
+        .db
+        .query("SELECT id FROM type::record($id)")
+        .bind(("id", memory_id))
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => return Json(serde_json::json!({"error": e.to_string()})),
+    };
+
+    #[derive(serde::Deserialize, serde::Serialize, surrealdb::types::SurrealValue, Debug)]
+    struct Row {
+        id: Option<surrealdb::types::RecordId>,
+    }
+    let rows: Vec<Row> = resp.take(0).unwrap_or_default();
+    let Some(rid) = rows.into_iter().next().and_then(|r| r.id) else {
+        return Json(serde_json::json!({"error": "memory not found"}));
+    };
+
+    match crate::evolve::evolve_one(&state.db, ollama, &rid).await {
+        Ok(report) => Json(serde_json::to_value(report).unwrap_or_default()),
+        Err(e) => Json(serde_json::json!({"error": e.to_string()})),
+    }
+}
+
+pub async fn memory_links(
+    State(state): State<AppState>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    let memory_id = if id.starts_with("memory:") {
+        id.clone()
+    } else {
+        format!("memory:{id}")
+    };
+
+    let mut resp = match state
+        .db
+        .query(
+            "SELECT out.id AS id, out.title AS title, out.category AS category, \
+             score, via FROM memory_link WHERE in = type::record($id)",
+        )
+        .bind(("id", memory_id))
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => return Json(serde_json::json!({"error": e.to_string()})),
+    };
+
+    let links: Vec<serde_json::Value> = resp.take(0).unwrap_or_default();
+    Json(serde_json::json!({"links": links, "count": links.len()}))
 }
 
 // --- Digest (project intelligence) ---
@@ -768,7 +873,7 @@ pub async fn export(State(state): State<AppState>) -> Json<serde_json::Value> {
 
     let memories: Vec<serde_json::Value> = state
         .db
-        .query("SELECT * FROM hifz")
+        .query("SELECT * FROM memory")
         .await
         .ok()
         .and_then(|mut r| r.take(0).ok())
@@ -776,7 +881,7 @@ pub async fn export(State(state): State<AppState>) -> Json<serde_json::Value> {
 
     let semantic: Vec<serde_json::Value> = state
         .db
-        .query("SELECT * FROM semantic_hifz")
+        .query("SELECT * FROM semantic_memory")
         .await
         .ok()
         .and_then(|mut r| r.take(0).ok())
@@ -784,7 +889,7 @@ pub async fn export(State(state): State<AppState>) -> Json<serde_json::Value> {
 
     let procedural: Vec<serde_json::Value> = state
         .db
-        .query("SELECT * FROM procedural_hifz")
+        .query("SELECT * FROM procedural_memory")
         .await
         .ok()
         .and_then(|mut r| r.take(0).ok())
@@ -1014,27 +1119,6 @@ async fn resolve_session_rid(
         .db
         .query("SELECT id FROM type::record($sid)")
         .bind(("sid", sid))
-        .await
-        .ok()?;
-    let rows: Vec<Row> = resp.take(0).ok()?;
-    rows.into_iter().next().and_then(|r| r.id)
-}
-
-async fn auto_detect_active_session(
-    db: &surrealdb::Surreal<crate::db::Db>,
-    project: &str,
-) -> Option<surrealdb::types::RecordId> {
-    #[derive(surrealdb::types::SurrealValue, Debug)]
-    struct Row {
-        id: Option<surrealdb::types::RecordId>,
-    }
-    let mut resp = db
-        .query(
-            "SELECT id, started_at FROM session \
-             WHERE project = $project AND status = 'active' \
-             ORDER BY started_at DESC LIMIT 1",
-        )
-        .bind(("project", project.to_string()))
         .await
         .ok()?;
     let rows: Vec<Row> = resp.take(0).ok()?;

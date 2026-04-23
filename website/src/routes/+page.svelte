@@ -20,7 +20,7 @@
         getCommits(undefined, 5).catch(() => ({ commits: [] as Commit[] })),
       ]);
       health = h && 'status' in h ? h : null;
-      digest = d && 'top_concepts' in d ? d : null;
+      digest = d && 'top_keywords' in d ? d : null;
       sessions = s?.sessions ?? [];
       commits = c?.commits ?? [];
     } catch (e) {
@@ -150,12 +150,12 @@
     {/if}
 
     <div class="right-col">
-      {#if digest && digest.top_concepts && digest.top_concepts.length > 0}
+      {#if digest && digest.top_keywords && digest.top_keywords.length > 0}
         <div class="card">
-          <div class="card-title">Top Concepts</div>
-          {#each digest.top_concepts.slice(0, 8) as c}
+          <div class="card-title">Top Keywords</div>
+          {#each digest.top_keywords.slice(0, 8) as c}
             <div class="list-row">
-              <span class="list-name">{c.concept}</span>
+              <span class="list-name">{c.keyword}</span>
               <span class="list-count">{c.frequency}</span>
             </div>
           {/each}

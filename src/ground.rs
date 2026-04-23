@@ -15,12 +15,7 @@ use crate::db::Db;
 /// Scoped by `project + files` overlap rather than session_id, because a memory
 /// about `src/pool.rs` should be strengthened when `src/pool.rs` is committed
 /// regardless of which session created the memory.
-pub async fn on_commit(
-    db: &Surreal<Db>,
-    commit_id: &RecordId,
-    project: &str,
-    files_changed: &[String],
-) -> Result<usize> {
+pub async fn on_commit(db: &Surreal<Db>, project: &str, files_changed: &[String]) -> Result<usize> {
     if files_changed.is_empty() {
         return Ok(0);
     }
@@ -33,7 +28,7 @@ pub async fn on_commit(
     // Find memories in the same project whose files overlap with the commit
     let mut resp = db
         .query(
-            "SELECT id FROM hifz \
+            "SELECT id FROM memory \
              WHERE is_latest = true \
                AND project = $project \
                AND array::intersect(files, $files) != [] \
@@ -49,11 +44,9 @@ pub async fn on_commit(
         let Some(id) = row.id else { continue };
         db.query(
             "UPDATE type::record($id) SET \
-             commit_ids = array::concat(commit_ids, [$cid]), \
              strength = math::min(strength * 1.15, 1.0)",
         )
         .bind(("id", id))
-        .bind(("cid", commit_id.clone()))
         .await?;
         strengthened += 1;
     }
@@ -127,7 +120,8 @@ pub async fn decay_uncommitted(db: &Surreal<Db>, session_id: &str) -> Result<usi
         return Ok(0);
     }
 
-    // Set forget_after on memories that reference these files and have no commit_ids
+    // Set forget_after on memories that reference these files and have no
+    // associated commit (i.e. no commit record shares both their project and files).
     let forget_at = (chrono::Utc::now() + chrono::Duration::days(60)).to_rfc3339();
 
     #[derive(Debug, SurrealValue)]
@@ -137,11 +131,14 @@ pub async fn decay_uncommitted(db: &Surreal<Db>, session_id: &str) -> Result<usi
 
     let mut resp = db
         .query(
-            "SELECT id FROM hifz \
+            "SELECT id FROM memory \
              WHERE is_latest = true \
-               AND commit_ids = [] \
                AND forget_after IS NONE \
                AND array::intersect(files, $files) != [] \
+               AND (SELECT count() FROM commit \
+                    WHERE project = $parent.project \
+                      AND array::intersect(files, $parent.files) != [] \
+                    GROUP ALL)[0].count = 0 \
              LIMIT 50",
         )
         .bind(("files", written_files))

@@ -31,10 +31,10 @@
       const data = await getExport() as Record<string, unknown[]>;
 
       const memories = (data.memories ?? []) as Array<{
-        id: string; title: string; mem_type: string; concepts?: string[];
+        id: string; title: string; category: string; keywords?: string[];
       }>;
       const observations = (data.observations ?? []) as Array<{
-        id: string; title: string; obs_type: string; concepts?: string[];
+        id: string; title: string; obs_type: string; keywords?: string[];
       }>;
 
       const conceptMap = new Map<string, number[]>();
@@ -43,10 +43,10 @@
       for (const m of memories) {
         const i = idx++;
         nodes.push({
-          id: m.id, label: m.title, type: m.mem_type, kind: 'memory',
+          id: m.id, label: m.title, type: m.category, kind: 'memory',
           x: 0, y: 0, vx: 0, vy: 0, r: 14,
         });
-        for (const c of m.concepts ?? []) {
+        for (const c of m.keywords ?? []) {
           if (!conceptMap.has(c)) conceptMap.set(c, []);
           conceptMap.get(c)!.push(i);
         }
@@ -59,7 +59,7 @@
           id: o.id, label: o.title, type: o.obs_type, kind: 'observation',
           x: 0, y: 0, vx: 0, vy: 0, r: 7,
         });
-        for (const c of o.concepts ?? []) {
+        for (const c of o.keywords ?? []) {
           if (!conceptMap.has(c)) conceptMap.set(c, []);
           conceptMap.get(c)!.push(i);
         }

@@ -9,7 +9,7 @@ pub struct CompressResult {
     pub subtitle: Option<String>,
     pub facts: Vec<String>,
     pub narrative: String,
-    pub concepts: Vec<String>,
+    pub keywords: Vec<String>,
     pub files: Vec<String>,
     pub importance: i64,
     pub confidence: Option<f64>,
@@ -40,7 +40,7 @@ pub fn compress_synthetic(payload: &HookPayload) -> CompressResult {
     };
     let facts = extract_facts(data);
     let files = extract_files(data);
-    let concepts = extract_concepts(&files, tool_name);
+    let keywords = extract_keywords(&files, tool_name);
     let narrative = build_narrative(tool_name, &payload.hook_type, data);
     let importance = infer_importance(&payload.hook_type, tool_name);
 
@@ -50,7 +50,7 @@ pub fn compress_synthetic(payload: &HookPayload) -> CompressResult {
         subtitle: None,
         facts,
         narrative,
-        concepts,
+        keywords,
         files,
         importance,
         confidence: Some(0.5), // synthetic = moderate confidence
@@ -117,7 +117,7 @@ fn parse_compression_xml(xml: &str) -> anyhow::Result<CompressResult> {
         },
         facts: extract_list("facts", "fact"),
         narrative: extract("narrative"),
-        concepts: extract_list("concepts", "concept"),
+        keywords: extract_list("keywords", "keyword"),
         files: extract_list("files", "file"),
         importance: extract("importance").parse().unwrap_or(5),
         confidence: Some(0.8),
@@ -270,8 +270,8 @@ const NOISE_DIRS: &[&str] = &[
     "Downloads",
 ];
 
-fn extract_concepts(files: &[String], tool_name: &str) -> Vec<String> {
-    let mut concepts = Vec::new();
+fn extract_keywords(files: &[String], tool_name: &str) -> Vec<String> {
+    let mut kws = Vec::new();
     for f in files {
         if let Some(parent) = std::path::Path::new(f).parent() {
             for comp in parent.components() {
@@ -280,23 +280,23 @@ fn extract_concepts(files: &[String], tool_name: &str) -> Vec<String> {
                     && s != "src"
                     && s != "."
                     && !NOISE_DIRS.contains(&s.as_str())
-                    && !concepts.contains(&s)
+                    && !kws.contains(&s)
                 {
-                    concepts.push(s);
+                    kws.push(s);
                 }
             }
         }
         if let Some(ext) = std::path::Path::new(f).extension() {
             let ext_str = ext.to_string_lossy().to_string();
-            if !concepts.contains(&ext_str) {
-                concepts.push(ext_str);
+            if !kws.contains(&ext_str) {
+                kws.push(ext_str);
             }
         }
     }
-    if !concepts.contains(&tool_name.to_lowercase()) {
-        concepts.push(tool_name.to_lowercase());
+    if !kws.contains(&tool_name.to_lowercase()) {
+        kws.push(tool_name.to_lowercase());
     }
-    concepts
+    kws
 }
 
 fn build_narrative(tool_name: &str, hook_type: &str, data: &serde_json::Value) -> String {

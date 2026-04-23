@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-//#region src/hooks/session-end.ts
+//#region src/hooks/pre-compact.ts
 const REST_URL = process.env["HIFZ_URL"] || "http://localhost:3111";
 const HEADERS = { "Content-Type": "application/json" };
 async function main() {
@@ -11,25 +11,22 @@ async function main() {
 	} catch {
 		return;
 	}
-	const sessionId = data.session_id || "unknown";
+	const project = data.cwd || process.cwd();
 	try {
-		await fetch(`${REST_URL}/hifz/session/end`, {
+		const res = await fetch(`${REST_URL}/api/v1/context`, {
 			method: "POST",
 			headers: HEADERS,
-			body: JSON.stringify({ sessionId }),
+			body: JSON.stringify({
+				project,
+				token_budget: 1500
+			}),
 			signal: AbortSignal.timeout(5e3)
 		});
+		if (res.ok) {
+			const result = await res.json();
+			if (result.context) process.stdout.write(result.context);
+		}
 	} catch {}
-	if (process.env["CONSOLIDATION_ENABLED"] === "true") {
-		try {
-			await fetch(`${REST_URL}/hifz/consolidate`, {
-				method: "POST",
-				headers: HEADERS,
-				body: JSON.stringify({}),
-				signal: AbortSignal.timeout(3e4)
-			});
-		} catch {}
-	}
 }
 main();
 

@@ -28,7 +28,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
             }
             state
                 .client
-                .post(format!("{}/hifz/smart-search", state.base_url))
+                .post(format!("{}/api/v1/search/agentic", state.base_url))
                 .json(&body)
                 .send()
                 .await?
@@ -39,7 +39,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
         "hifz_save" => {
             state
                 .client
-                .post(format!("{}/hifz/remember", state.base_url))
+                .post(format!("{}/api/v1/memories", state.base_url))
                 .json(&args)
                 .send()
                 .await?
@@ -51,7 +51,10 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
             let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(20);
             state
                 .client
-                .get(format!("{}/hifz/sessions?limit={limit}", state.base_url))
+                .get(format!(
+                    "{}/api/v1/agent/sessions?limit={limit}",
+                    state.base_url
+                ))
                 .send()
                 .await?
                 .json()
@@ -62,7 +65,10 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
             let project = args.get("project").and_then(|v| v.as_str()).unwrap_or("");
             state
                 .client
-                .get(format!("{}/hifz/digest?project={project}", state.base_url))
+                .get(format!(
+                    "{}/api/v1/agent/digest?project={project}",
+                    state.base_url
+                ))
                 .send()
                 .await?
                 .json()
@@ -78,7 +84,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
             state
                 .client
                 .get(format!(
-                    "{}/hifz/timeline?session_id={session_id}&limit={limit}",
+                    "{}/api/v1/agent/timeline?session_id={session_id}&limit={limit}",
                     state.base_url
                 ))
                 .send()
@@ -90,7 +96,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
         "hifz_export" => {
             state
                 .client
-                .get(format!("{}/hifz/export", state.base_url))
+                .get(format!("{}/api/v1/export", state.base_url))
                 .send()
                 .await?
                 .json()
@@ -104,7 +110,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                 .unwrap_or("global");
             state
                 .client
-                .get(format!("{}/hifz/core?project={project}", state.base_url))
+                .get(format!("{}/api/v1/core/{project}", state.base_url))
                 .send()
                 .await?
                 .json()
@@ -112,9 +118,13 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
         }
 
         "hifz_core_edit" => {
+            let project = args
+                .get("project")
+                .and_then(|v| v.as_str())
+                .unwrap_or("global");
             state
                 .client
-                .post(format!("{}/hifz/core/edit", state.base_url))
+                .patch(format!("{}/api/v1/core/{project}", state.base_url))
                 .json(&args)
                 .send()
                 .await?
@@ -125,7 +135,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
         "hifz_runs" => {
             state
                 .client
-                .post(format!("{}/hifz/runs", state.base_url))
+                .post(format!("{}/api/v1/agent/runs", state.base_url))
                 .json(&args)
                 .send()
                 .await?
@@ -140,7 +150,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
             let sha = args.get("sha").and_then(|v| v.as_str());
 
             let mut url = format!(
-                "{}/hifz/commits?project={project}&limit={limit}",
+                "{}/api/v1/agent/commits?project={project}&limit={limit}",
                 state.base_url
             );
             if let Some(b) = branch {
@@ -154,10 +164,11 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
         }
 
         "hifz_evolve" => {
+            let memory_id = args.get("memory_id").and_then(|v| v.as_str()).unwrap_or("");
+            let id = memory_id.strip_prefix("memory:").unwrap_or(memory_id);
             state
                 .client
-                .post(format!("{}/hifz/evolve", state.base_url))
-                .json(&args)
+                .post(format!("{}/api/v1/memories/{id}/evolve", state.base_url))
                 .send()
                 .await?
                 .json()
@@ -165,10 +176,11 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
         }
 
         "hifz_delete" => {
+            let id = args.get("id").and_then(|v| v.as_str()).unwrap_or("");
             state
                 .client
-                .post(format!("{}/hifz/forget", state.base_url))
-                .json(&args)
+                .delete(format!("{}/api/v1/memories", state.base_url))
+                .json(&serde_json::json!({"id": id}))
                 .send()
                 .await?
                 .json()
@@ -180,7 +192,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
             state
                 .client
                 .get(format!(
-                    "{}/hifz/plan/current?project={project}",
+                    "{}/api/v1/agent/plans/current?project={project}",
                     state.base_url
                 ))
                 .send()
@@ -196,7 +208,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
             state
                 .client
                 .get(format!(
-                    "{}/hifz/plans?project={project}&status={status}&limit={limit}",
+                    "{}/api/v1/agent/plans?project={project}&status={status}&limit={limit}",
                     state.base_url
                 ))
                 .send()
@@ -207,11 +219,10 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
 
         "hifz_complete_plan" => {
             let project = args.get("project").and_then(|v| v.as_str()).unwrap_or("");
-            // Get current plan id, then complete it
             let plan: serde_json::Value = state
                 .client
                 .get(format!(
-                    "{}/hifz/plan/current?project={project}",
+                    "{}/api/v1/agent/plans/current?project={project}",
                     state.base_url
                 ))
                 .send()
@@ -220,11 +231,13 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                 .await?;
 
             if let Some(plan_id) = plan.get("id").and_then(|v| v.as_str()) {
-                // Extract just the key part from "plan:xxx"
                 let id = plan_id.strip_prefix("plan:").unwrap_or(plan_id);
                 state
                     .client
-                    .post(format!("{}/hifz/plan/{id}/complete", state.base_url))
+                    .post(format!(
+                        "{}/api/v1/agent/plans/{id}/complete",
+                        state.base_url
+                    ))
                     .json(&serde_json::json!({}))
                     .send()
                     .await?
@@ -238,7 +251,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
         "hifz_activate_plan" => {
             state
                 .client
-                .post(format!("{}/hifz/plan/activate", state.base_url))
+                .post(format!("{}/api/v1/agent/plans/activate", state.base_url))
                 .json(&args)
                 .send()
                 .await?
@@ -258,11 +271,11 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
 
 fn tool_defs() -> Vec<serde_json::Value> {
     vec![
-        serde_json::json!({"name": "hifz_recall", "description": "Search past observations and memories (optionally project-scoped)", "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}, "limit": {"type": "integer", "default": 10}, "project": {"type": "string"}}, "required": ["query"]}}),
-        serde_json::json!({"name": "hifz_save", "description": "Save an insight, decision, or pattern to long-term memory (project-scoped)", "inputSchema": {"type": "object", "properties": {"title": {"type": "string"}, "content": {"type": "string"}, "project": {"type": "string", "description": "Project name (defaults to 'global' if omitted)"}, "type": {"type": "string", "enum": ["pattern", "preference", "architecture", "bug", "workflow", "fact"]}, "concepts": {"type": "array", "items": {"type": "string"}}, "files": {"type": "array", "items": {"type": "string"}}}, "required": ["title", "content"]}}),
-        serde_json::json!({"name": "hifz_search", "description": "Hybrid semantic + keyword search with RRF fusion (optionally project-scoped)", "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}, "limit": {"type": "integer", "default": 10}, "project": {"type": "string"}}, "required": ["query"]}}),
+        serde_json::json!({"name": "hifz_recall", "description": "Search past observations and memories with graph expansion (optionally project-scoped)", "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}, "limit": {"type": "integer", "default": 10}, "project": {"type": "string"}}, "required": ["query"]}}),
+        serde_json::json!({"name": "hifz_save", "description": "Save an insight, decision, or pattern to long-term memory (project-scoped)", "inputSchema": {"type": "object", "properties": {"title": {"type": "string"}, "content": {"type": "string"}, "project": {"type": "string", "description": "Project name (defaults to 'global' if omitted)"}, "category": {"type": "string", "enum": ["pattern", "preference", "architecture", "bug", "workflow", "fact"]}, "keywords": {"type": "array", "items": {"type": "string"}}, "files": {"type": "array", "items": {"type": "string"}}}, "required": ["title", "content"]}}),
+        serde_json::json!({"name": "hifz_search", "description": "Hybrid semantic + keyword search with RRF fusion and graph expansion (optionally project-scoped)", "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}, "limit": {"type": "integer", "default": 10}, "project": {"type": "string"}}, "required": ["query"]}}),
         serde_json::json!({"name": "hifz_sessions", "description": "List recent sessions", "inputSchema": {"type": "object", "properties": {"limit": {"type": "integer", "default": 20}}}}),
-        serde_json::json!({"name": "hifz_digest", "description": "Get project intelligence — top concepts, files, and stats", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}}}}),
+        serde_json::json!({"name": "hifz_digest", "description": "Get project intelligence — top keywords, files, and stats", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}}}}),
         serde_json::json!({"name": "hifz_timeline", "description": "Chronological observations", "inputSchema": {"type": "object", "properties": {"session_id": {"type": "string"}, "limit": {"type": "integer", "default": 50}}}}),
         serde_json::json!({"name": "hifz_export", "description": "Export all memory data", "inputSchema": {"type": "object", "properties": {}}}),
         serde_json::json!({"name": "hifz_delete", "description": "Delete a memory by ID", "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]}}),
@@ -270,7 +283,7 @@ fn tool_defs() -> Vec<serde_json::Value> {
         serde_json::json!({"name": "hifz_core_edit", "description": "Edit the always-on core memory block. field=identity|goals|invariants|watchlist, op=set|add|remove", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "field": {"type": "string", "enum": ["identity", "goals", "invariants", "watchlist"]}, "op": {"type": "string", "enum": ["set", "add", "remove"]}, "value": {"type": "string"}}, "required": ["project", "field", "op", "value"]}}),
         serde_json::json!({"name": "hifz_runs", "description": "Search past task-scoped runs (prompt + derived lesson) via hybrid BM25 fusion", "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}, "project": {"type": "string"}, "limit": {"type": "integer", "default": 10}}, "required": ["query"]}}),
         serde_json::json!({"name": "hifz_commits", "description": "List recent git commits for a project. Use this to see repo history and continue from a specific point.", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "branch": {"type": "string"}, "limit": {"type": "integer", "default": 10}, "sha": {"type": "string", "description": "Get a specific commit by SHA"}}}}),
-        serde_json::json!({"name": "hifz_evolve", "description": "Run A-MEM Memory Evolution on a memory id — LLM refines neighbour tags/context/links (requires HIFZ_LLM_EVOLVE=true and Ollama)", "inputSchema": {"type": "object", "properties": {"memory_id": {"type": "string", "description": "RecordId like 'hifz:xyz'"}}, "required": ["memory_id"]}}),
+        serde_json::json!({"name": "hifz_evolve", "description": "Run A-MEM Memory Evolution on a memory — LLM refines neighbour tags/context/links (requires HIFZ_LLM_EVOLVE=true and Ollama)", "inputSchema": {"type": "object", "properties": {"memory_id": {"type": "string", "description": "RecordId like 'memory:xyz'"}}, "required": ["memory_id"]}}),
         serde_json::json!({"name": "hifz_current_plan", "description": "Get the currently active plan for this project. Returns null if no active plan.", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}}}}),
         serde_json::json!({"name": "hifz_plans", "description": "List plans for a project. Filter by status (active, completed, abandoned, all).", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "status": {"type": "string", "enum": ["active", "completed", "abandoned", "all"], "default": "all"}, "limit": {"type": "integer", "default": 10}}}}),
         serde_json::json!({"name": "hifz_complete_plan", "description": "Mark the current active plan as completed.", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}}}}),

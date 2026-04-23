@@ -1,7 +1,7 @@
 //! Deterministic entity extraction from observations and memories.
 //!
 //! All four extractors are regex/string-based — no LLM. Entities are upserted
-//! into the `entity` table and flow into `mem_link` edges with `via='entity'`
+//! into the `entity` table and flow into `memory_link` edges with `via='entity'`
 //! via `link.rs`.
 
 use std::collections::HashSet;
@@ -42,9 +42,9 @@ pub struct Extracted {
 }
 
 /// Pull entities from the various raw fields associated with an observation
-/// or memory: the existing `files` and `concepts` arrays, plus regex-extracted
+/// or memory: the existing `files` and `keywords` arrays, plus regex-extracted
 /// symbols and error codes from a free-text body.
-pub fn extract(files: &[String], concepts: &[String], body: &str) -> Vec<Extracted> {
+pub fn extract(files: &[String], keywords: &[String], body: &str) -> Vec<Extracted> {
     let mut out: HashSet<Extracted> = HashSet::new();
 
     for f in files {
@@ -56,7 +56,7 @@ pub fn extract(files: &[String], concepts: &[String], body: &str) -> Vec<Extract
             });
         }
     }
-    for c in concepts {
+    for c in keywords {
         let name = c.trim();
         if !name.is_empty() {
             out.insert(Extracted {
@@ -166,10 +166,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn extracts_files_and_concepts() {
+    fn extracts_files_and_keywords() {
         let files = vec!["src/search.rs".to_string()];
-        let concepts = vec!["ranking".to_string()];
-        let out = extract(&files, &concepts, "");
+        let keywords = vec!["ranking".to_string()];
+        let out = extract(&files, &keywords, "");
         assert!(
             out.iter()
                 .any(|e| e.kind == Kind::File && e.name == "src/search.rs")

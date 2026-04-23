@@ -82,9 +82,9 @@
               </ul>
             </details>
           {/if}
-          {#if obs.concepts.length > 0 || obs.files.length > 0}
+          {#if (obs.keywords?.length ?? 0) > 0 || obs.files.length > 0}
             <div class="obs-tags">
-              {#each obs.concepts as c}
+              {#each obs.keywords ?? [] as c}
                 <span class="badge badge-yellow">{c}</span>
               {/each}
               {#each obs.files as f}

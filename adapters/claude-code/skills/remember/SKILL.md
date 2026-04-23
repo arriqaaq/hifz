@@ -11,13 +11,13 @@ Use the `memory_save` MCP tool (provided by the hifz server that this plugin wir
 
 Steps:
 1. Analyze what the user wants to remember — pull out the core insight, decision, or fact.
-2. Extract 2-5 searchable `concepts` (lowercased keyword phrases) that capture what the memory is about. Prefer specific terms over generic ones (`"jwt-refresh-rotation"` beats `"auth"`).
+2. Extract 2-5 searchable `keywords` (lowercased keyword phrases) that capture what the memory is about. Prefer specific terms over generic ones (`"jwt-refresh-rotation"` beats `"auth"`).
 3. Extract any relevant `files` — absolute or repo-relative paths the memory references.
 4. Call `memory_save` with the fields:
    - `content` — the full text to remember (preserve the user's phrasing as much as possible)
-   - `concepts` — the extracted concept list
+   - `keywords` — the extracted concept list
    - `files` — the extracted file list (empty array if none apply)
-5. Confirm to the user that the memory was saved and show the concepts you tagged so they know what terms will retrieve it later.
+5. Confirm to the user that the memory was saved and show the keywords you tagged so they know what terms will retrieve it later.
 
 If `memory_save` isn't available, the stdio MCP shim didn't start — tell the user to:
 1. Run `/plugin list` in Claude Code and confirm `hifz` shows as enabled.

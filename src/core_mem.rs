@@ -23,7 +23,7 @@ pub struct CoreRow {
 /// Fetch the core block for a project. Returns an empty row if none exists.
 pub async fn get(db: &Surreal<Db>, project: &str) -> Result<CoreRow> {
     let mut resp = db
-        .query("SELECT * FROM hifz_core WHERE project = $project LIMIT 1")
+        .query("SELECT * FROM core_memory WHERE project = $project LIMIT 1")
         .bind(("project", project.to_string()))
         .await?;
     let rows: Vec<CoreRow> = resp.take(0).unwrap_or_default();
@@ -52,8 +52,8 @@ pub async fn edit(
 
     // Upsert-or-create the singleton row.
     db.query(
-        "IF (SELECT count() FROM hifz_core WHERE project = $project GROUP ALL)[0].count == 0 \
-         THEN CREATE hifz_core SET project = $project, updated_at = $now END",
+        "IF (SELECT count() FROM core_memory WHERE project = $project GROUP ALL)[0].count == 0 \
+         THEN CREATE core_memory SET project = $project, updated_at = $now END",
     )
     .bind(("project", project.to_string()))
     .bind(("now", now.clone()))
@@ -61,25 +61,25 @@ pub async fn edit(
 
     let sql = match (field, op) {
         ("identity", _) => {
-            "UPDATE hifz_core SET identity = $value, updated_at = $now WHERE project = $project"
+            "UPDATE core_memory SET identity = $value, updated_at = $now WHERE project = $project"
         }
         ("goals", "add") => {
-            "UPDATE hifz_core SET goals = array::distinct(array::concat(goals, [$value])), updated_at = $now WHERE project = $project"
+            "UPDATE core_memory SET goals = array::distinct(array::concat(goals, [$value])), updated_at = $now WHERE project = $project"
         }
         ("goals", "remove") => {
-            "UPDATE hifz_core SET goals = array::difference(goals, [$value]), updated_at = $now WHERE project = $project"
+            "UPDATE core_memory SET goals = array::difference(goals, [$value]), updated_at = $now WHERE project = $project"
         }
         ("invariants", "add") => {
-            "UPDATE hifz_core SET invariants = array::distinct(array::concat(invariants, [$value])), updated_at = $now WHERE project = $project"
+            "UPDATE core_memory SET invariants = array::distinct(array::concat(invariants, [$value])), updated_at = $now WHERE project = $project"
         }
         ("invariants", "remove") => {
-            "UPDATE hifz_core SET invariants = array::difference(invariants, [$value]), updated_at = $now WHERE project = $project"
+            "UPDATE core_memory SET invariants = array::difference(invariants, [$value]), updated_at = $now WHERE project = $project"
         }
         ("watchlist", "add") => {
-            "UPDATE hifz_core SET watchlist = array::distinct(array::concat(watchlist, [$value])), updated_at = $now WHERE project = $project"
+            "UPDATE core_memory SET watchlist = array::distinct(array::concat(watchlist, [$value])), updated_at = $now WHERE project = $project"
         }
         ("watchlist", "remove") => {
-            "UPDATE hifz_core SET watchlist = array::difference(watchlist, [$value]), updated_at = $now WHERE project = $project"
+            "UPDATE core_memory SET watchlist = array::difference(watchlist, [$value]), updated_at = $now WHERE project = $project"
         }
         _ => {
             return Err(anyhow::anyhow!(

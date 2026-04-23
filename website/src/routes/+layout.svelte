@@ -10,12 +10,12 @@
   let health = $state<HealthResponse | null>(null);
 
   const tabs = [
-    { label: 'Dashboard', href: '/', desc: 'Overview of sessions, commits, and top concepts' },
+    { label: 'Dashboard', href: '/', desc: 'Overview of sessions, commits, and top keywords' },
     { label: 'Sessions', href: '/sessions', desc: 'Claude Code sessions — each conversation from start to end' },
     { label: 'Runs', href: '/runs', desc: 'Task-scoped trajectories within a session (prompt to completion)' },
     { label: 'Observations', href: '/observations', desc: 'Raw events: tool calls, prompts, and outputs' },
     { label: 'Memories', href: '/memories', desc: 'Curated knowledge: patterns, preferences, and facts' },
-    { label: 'Graph', href: '/graph', desc: 'Visual map of concepts and their connections' },
+    { label: 'Graph', href: '/graph', desc: 'Visual map of keywords and their connections' },
   ];
 
   function isActive(href: string): boolean {

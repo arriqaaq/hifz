@@ -29,25 +29,24 @@ export interface Observation {
   subtitle: string | null;
   facts: string[];
   narrative: string;
-  concepts: string[];
+  keywords: string[];
   files: string[];
   importance: number;
   confidence: number | null;
 }
 
-export interface Hifz {
+export interface Memory {
   id: string;
   project: string;
-  mem_type: string;
+  category: string;
   title: string;
   content: string;
-  concepts: string[];
-  files: string[];
   keywords: string[];
+  files: string[];
   tags: string[];
   context: string | null;
   strength: number;
-  access_count: number;
+  retrieval_count: number;
   last_accessed_at: string;
   version: number;
   parent_id: string | null;
@@ -106,8 +105,8 @@ export interface Commit {
   timestamp: string;
 }
 
-export interface ConceptFreq {
-  concept: string;
+export interface KeywordFreq {
+  keyword: string;
   frequency: number;
 }
 
@@ -119,7 +118,7 @@ export interface FileFreq {
 export interface ProjectDigest {
   project: string;
   updated_at: string;
-  top_concepts: ConceptFreq[];
+  top_keywords: KeywordFreq[];
   top_files: FileFreq[];
   session_count: number;
   total_observations: number;
@@ -134,13 +133,14 @@ export interface SearchResult {
   timestamp: string;
   importance: number;
   score: number | null;
+  is_neighbor: boolean;
 }
 
 export interface RememberRequest {
   title: string;
   content: string;
-  type?: string;
-  concepts?: string[];
+  category?: string;
+  keywords?: string[];
   files?: string[];
   project?: string;
 }

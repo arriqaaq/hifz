@@ -15,7 +15,7 @@ use crate::models::HookPayload;
 use crate::ollama::OllamaClient;
 use crate::run;
 
-/// Capture a raw observation from a Claude Code hook.
+/// Capture a raw observation from an agent hook.
 /// Deduplicates, compresses, embeds, and stores.
 pub async fn observe(
     db: &Surreal<Db>,
@@ -29,8 +29,9 @@ pub async fn observe(
     // Run lifecycle — fire before dedup so lifecycle events aren't dropped.
     // Runs are task-scoped: UserPromptSubmit appends to open run or starts new.
     // TaskCompleted/Stop close the run.
-    match payload.hook_type.as_str() {
-        "UserPromptSubmit" | "prompt_submit" => {
+    let event: crate::models::HifzEvent = payload.hook_type.as_str().into();
+    match event {
+        crate::models::HifzEvent::PromptSubmit => {
             let prompt = payload
                 .data
                 .get("prompt")
@@ -65,7 +66,7 @@ pub async fn observe(
                 }
             }
         }
-        "Stop" | "stop" | "TaskCompleted" | "task_completed" => {
+        crate::models::HifzEvent::SessionStop | crate::models::HifzEvent::TaskCompleted => {
             if let Some(open) = latest_open_run(db, &payload.session_id)
                 .await
                 .ok()
@@ -125,15 +126,15 @@ pub async fn observe(
         Some(compressed.facts.join(" "))
     };
 
-    // Generate embedding — include facts, concepts, files for richer vectors
+    // Generate embedding — include facts, keywords, files for richer vectors
     let mut embed_text = format!("{}\n{}", compressed.title, compressed.narrative);
     if let Some(ref ft) = facts_text {
         embed_text.push_str("\nfacts: ");
         embed_text.push_str(ft);
     }
-    if !compressed.concepts.is_empty() {
-        embed_text.push_str("\nconcepts: ");
-        embed_text.push_str(&compressed.concepts.join(", "));
+    if !compressed.keywords.is_empty() {
+        embed_text.push_str("\nkeywords: ");
+        embed_text.push_str(&compressed.keywords.join(", "));
     }
     if !compressed.files.is_empty() {
         embed_text.push_str("\nfiles: ");
@@ -158,7 +159,7 @@ pub async fn observe(
         facts = $facts, \
         facts_text = $facts_text, \
         narrative = $narrative, \
-        concepts = $concepts, \
+        keywords = $keywords, \
         files = $files, \
         importance = $importance, \
         confidence = $confidence, \
@@ -180,7 +181,7 @@ pub async fn observe(
         .bind(("facts", compressed.facts.clone()))
         .bind(("facts_text", facts_text.clone()))
         .bind(("narrative", compressed.narrative.clone()))
-        .bind(("concepts", compressed.concepts.clone()))
+        .bind(("keywords", compressed.keywords.clone()))
         .bind(("files", compressed.files.clone()))
         .bind(("importance", compressed.importance))
         .bind(("confidence", compressed.confidence))

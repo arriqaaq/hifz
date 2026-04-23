@@ -35,7 +35,7 @@ async function main() {
 	const query = [...files, ...terms].join(" ");
 
 	try {
-		const res = await fetch(`${REST_URL}/hifz/smart-search`, {
+		const res = await fetch(`${REST_URL}/api/v1/search/agentic`, {
 			method: "POST",
 			headers: HEADERS,
 			body: JSON.stringify({ query, limit: 5 }),

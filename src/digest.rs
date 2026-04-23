@@ -5,7 +5,7 @@ use surrealdb::Surreal;
 use crate::db::Db;
 use crate::models::ProjectDigest;
 
-/// Generate a project digest with top concepts, files, and stats.
+/// Generate a project digest with top keywords, files, and stats.
 pub async fn generate_digest(db: &Surreal<Db>, project: &str) -> Result<ProjectDigest> {
     let now = chrono::Utc::now().to_rfc3339();
 
@@ -36,10 +36,10 @@ pub async fn generate_digest(db: &Surreal<Db>, project: &str) -> Result<ProjectD
         .and_then(|v| v.as_i64())
         .unwrap_or(0);
 
-    // Get concept frequencies
+    // Get keyword frequencies
     let mut resp = db
         .query(
-            "SELECT concepts, timestamp FROM observation \
+            "SELECT keywords, timestamp FROM observation \
              WHERE session_id.project = $project \
              ORDER BY timestamp DESC LIMIT 200",
         )
@@ -47,14 +47,14 @@ pub async fn generate_digest(db: &Surreal<Db>, project: &str) -> Result<ProjectD
         .await?;
     let rows: Vec<serde_json::Value> = resp.take(0)?;
 
-    let mut concept_freq: HashMap<String, i64> = HashMap::new();
+    let mut keyword_freq: HashMap<String, i64> = HashMap::new();
     let mut file_freq: HashMap<String, i64> = HashMap::new();
 
     for row in &rows {
-        if let Some(concepts) = row.get("concepts").and_then(|v| v.as_array()) {
-            for c in concepts {
+        if let Some(keywords) = row.get("keywords").and_then(|v| v.as_array()) {
+            for c in keywords {
                 if let Some(s) = c.as_str() {
-                    *concept_freq.entry(s.to_string()).or_insert(0) += 1;
+                    *keyword_freq.entry(s.to_string()).or_insert(0) += 1;
                 }
             }
         }
@@ -80,12 +80,12 @@ pub async fn generate_digest(db: &Surreal<Db>, project: &str) -> Result<ProjectD
         }
     }
 
-    let mut top_concepts: Vec<_> = concept_freq
+    let mut top_keywords: Vec<_> = keyword_freq
         .into_iter()
-        .map(|(concept, frequency)| crate::models::ConceptFreq { concept, frequency })
+        .map(|(keyword, frequency)| crate::models::KeywordFreq { keyword, frequency })
         .collect();
-    top_concepts.sort_by(|a, b| b.frequency.cmp(&a.frequency));
-    top_concepts.truncate(20);
+    top_keywords.sort_by(|a, b| b.frequency.cmp(&a.frequency));
+    top_keywords.truncate(20);
 
     let mut top_files: Vec<_> = file_freq
         .into_iter()
@@ -97,7 +97,7 @@ pub async fn generate_digest(db: &Surreal<Db>, project: &str) -> Result<ProjectD
     Ok(ProjectDigest {
         project: project.to_string(),
         updated_at: now,
-        top_concepts,
+        top_keywords,
         top_files,
         session_count,
         total_observations,

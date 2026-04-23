@@ -15,7 +15,7 @@ async function main() {
 	const sessionId = data.session_id || `ses_${Date.now().toString(36)}`;
 	const project = data.cwd || process.cwd();
 	try {
-		const res = await fetch(`${REST_URL}/hifz/session/start`, {
+		const res = await fetch(`${REST_URL}/api/v1/agent/sessions`, {
 			method: "POST",
 			headers: HEADERS,
 			body: JSON.stringify({

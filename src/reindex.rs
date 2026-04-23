@@ -1,7 +1,7 @@
 //! One-shot backfill for schema upgrades.
 //!
 //! Phase 1a: memories did not have `embedding`, `project`, `keywords`, `tags`,
-//! `context`, `access_count`, or `last_accessed_at`. Schema defaults fill
+//! `context`, `retrieval_count`, or `last_accessed_at`. Schema defaults fill
 //! scalars; this pass embeds existing rows and derives `project` from their
 //! originating session where possible.
 
@@ -19,9 +19,8 @@ struct Row {
     project: Option<String>,
     title: Option<String>,
     content: Option<String>,
-    concepts: Option<Vec<String>>,
+    keywords: Option<Vec<String>>,
     files: Option<Vec<String>>,
-    session_ids: Option<Vec<surrealdb::types::RecordId>>,
     embedding: Option<Vec<f32>>,
 }
 
@@ -31,12 +30,12 @@ pub struct ReindexReport {
     pub skipped: usize,
 }
 
-/// Backfill missing `embedding` and `project` fields on the `hifz` table.
+/// Backfill missing `embedding` and `project` fields on the `memory` table.
 pub async fn reindex_memories(db: &Surreal<Db>, embedder: &Embedder) -> Result<ReindexReport> {
     let mut resp = db
         .query(
-            "SELECT id, project, title, content, concepts, files, session_ids, embedding \
-             FROM hifz",
+            "SELECT id, project, title, content, keywords, files, embedding \
+             FROM memory",
         )
         .await?;
     let rows: Vec<Row> = resp.take(0)?;
@@ -55,33 +54,15 @@ pub async fn reindex_memories(db: &Surreal<Db>, embedder: &Embedder) -> Result<R
 
         let mut updates: Vec<String> = Vec::new();
 
-        // Project backfill: pull from first session if unset/empty/global default.
+        // Project backfill: mark as needing attention if unset/empty/global default.
         let needs_project = row
             .project
             .as_deref()
             .map(|p| p.is_empty() || p == "global")
             .unwrap_or(true);
         if needs_project {
-            if let Some(sids) = row.session_ids.as_ref() {
-                if let Some(first) = sids.first() {
-                    let mut sresp = db
-                        .query("SELECT VALUE project FROM type::record($sid)")
-                        .bind(("sid", first.clone()))
-                        .await?;
-                    let proj: Option<String> = sresp
-                        .take(0)
-                        .ok()
-                        .and_then(|v: Vec<String>| v.into_iter().next());
-                    if let Some(p) = proj {
-                        db.query("UPDATE type::record($id) SET project = $p")
-                            .bind(("id", id.clone()))
-                            .bind(("p", p))
-                            .await?;
-                        updates.push("project".into());
-                        report.project_backfilled += 1;
-                    }
-                }
-            }
+            updates.push("project".into());
+            report.project_backfilled += 1;
         }
 
         // Embedding backfill: only if missing/empty.
@@ -89,9 +70,9 @@ pub async fn reindex_memories(db: &Surreal<Db>, embedder: &Embedder) -> Result<R
         if needs_embedding {
             let title = row.title.clone().unwrap_or_default();
             let content = row.content.clone().unwrap_or_default();
-            let concepts = row.concepts.clone().unwrap_or_default();
+            let keywords = row.keywords.clone().unwrap_or_default();
             let files = row.files.clone().unwrap_or_default();
-            let text = build_embed_text(&title, &content, &concepts, &files);
+            let text = build_embed_text(&title, &content, &keywords, &files);
             let vec = embedder.embed_single(&text)?;
             db.query("UPDATE type::record($id) SET embedding = $v")
                 .bind(("id", id.clone()))

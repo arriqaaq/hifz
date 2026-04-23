@@ -14,7 +14,7 @@ async function main() {
 	if (data.notification_type !== "permission_prompt") return;
 	const sessionId = data.session_id || "unknown";
 	try {
-		await fetch(`${REST_URL}/hifz/observe`, {
+		await fetch(`${REST_URL}/api/v1/agent/observe`, {
 			method: "POST",
 			headers: HEADERS,
 			body: JSON.stringify({

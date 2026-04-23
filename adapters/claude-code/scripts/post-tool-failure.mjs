@@ -21,7 +21,7 @@ async function main() {
 
 	// 1. Write: capture the failure
 	try {
-		await fetch(`${REST_URL}/hifz/observe`, {
+		await fetch(`${REST_URL}/api/v1/agent/observe`, {
 			method: "POST",
 			headers: HEADERS,
 			body: JSON.stringify({
@@ -47,7 +47,7 @@ async function main() {
 	const query = `${data.tool_name || ""} ${errorStr.slice(0, 200)}`.trim();
 
 	try {
-		const res = await fetch(`${REST_URL}/hifz/smart-search`, {
+		const res = await fetch(`${REST_URL}/api/v1/search/agentic`, {
 			method: "POST",
 			headers: HEADERS,
 			body: JSON.stringify({ query, limit: 3 }),

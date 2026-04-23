@@ -67,7 +67,7 @@ async fn find_expired_memories(db: &Surreal<Db>) -> Result<Vec<String>> {
     let now = chrono::Utc::now().to_rfc3339();
     let mut resp = db
         .query(
-            "SELECT id FROM hifz \
+            "SELECT id FROM memory \
              WHERE forget_after IS NOT NONE AND forget_after < $now",
         )
         .bind(("now", now.clone()))
@@ -82,28 +82,28 @@ async fn find_expired_memories(db: &Surreal<Db>) -> Result<Vec<String>> {
 async fn find_contradictions(db: &Surreal<Db>) -> Result<Vec<String>> {
     // Load recent memories and check Jaccard similarity
     let mut resp = db
-        .query("SELECT id, title, content, concepts, updated_at FROM hifz WHERE is_latest = true ORDER BY updated_at DESC LIMIT 100")
+        .query("SELECT id, title, content, keywords, updated_at FROM memory WHERE is_latest = true ORDER BY updated_at DESC LIMIT 100")
         .await?;
     let memories: Vec<serde_json::Value> = resp.take(0)?;
 
     let mut to_mark: Vec<String> = Vec::new();
     let threshold = 0.9;
 
-    // Build concept index for efficient comparison
-    let mut concept_index: HashMap<String, Vec<usize>> = HashMap::new();
+    // Build keyword index for efficient comparison
+    let mut keyword_index: HashMap<String, Vec<usize>> = HashMap::new();
     for (i, mem) in memories.iter().enumerate() {
-        if let Some(concepts) = mem.get("concepts").and_then(|v| v.as_array()) {
-            for c in concepts {
-                if let Some(s) = c.as_str() {
-                    concept_index.entry(s.to_lowercase()).or_default().push(i);
+        if let Some(keywords) = mem.get("keywords").and_then(|v| v.as_array()) {
+            for k in keywords {
+                if let Some(s) = k.as_str() {
+                    keyword_index.entry(s.to_lowercase()).or_default().push(i);
                 }
             }
         }
     }
 
-    // Compare only memories sharing concepts
+    // Compare only memories sharing keywords
     let mut compared: HashSet<(usize, usize)> = HashSet::new();
-    for indices in concept_index.values() {
+    for indices in keyword_index.values() {
         for i in 0..indices.len() {
             for j in (i + 1)..indices.len() {
                 let (a, b) = (indices[i], indices[j]);
@@ -151,7 +151,7 @@ fn jaccard_similarity(a: &str, b: &str) -> f64 {
 async fn find_weak_memories(db: &Surreal<Db>) -> Result<Vec<String>> {
     // Memories with strength decayed below 0.1
     let mut resp = db
-        .query("SELECT id FROM hifz WHERE strength < 0.1 LIMIT 100")
+        .query("SELECT id FROM memory WHERE strength < 0.1 LIMIT 100")
         .await?;
     let rows: Vec<serde_json::Value> = resp.take(0)?;
     Ok(rows

@@ -20,7 +20,7 @@ pub struct SearchConfig {
     pub skip_vector: bool,
     /// Skip the `strength · recency · access` Rust-side re-ranking (RRF scores passed through).
     pub skip_recency_access: bool,
-    /// Skip 1-hop `mem_link` expansion.
+    /// Skip 1-hop `memory_link` expansion.
     pub skip_graph: bool,
     /// Skip the session/identity-based diversification pass entirely.
     pub skip_diversify: bool,
@@ -75,7 +75,7 @@ pub async fn search_text(
     let fused: Vec<RrfResult> = response.take(0)?;
     let mut results = fetch_observation_results(db, &fused).await?;
 
-    // Also search memories (hifz table)
+    // Also search memories (memory table)
     let mem_results = search_memories(db, None, query, limit, project).await?;
     results.extend(mem_results);
 
@@ -196,7 +196,7 @@ pub async fn search_hybrid_with_config(
 }
 
 /// 1-hop graph expansion in-place. Seeds are existing memory results; their
-/// outgoing mem_link edges pull in neighbours that may not have hit the vector
+/// outgoing memory_link edges pull in neighbours that may not have hit the vector
 /// or BM25 branches directly but are graph-close to something that did.
 async fn expand_from_graph(db: &Surreal<Db>, results: &mut Vec<SearchResult>, limit: usize) {
     let seed_by_id: HashMap<surrealdb::types::RecordId, f64> = results
@@ -239,15 +239,15 @@ async fn expand_from_graph(db: &Surreal<Db>, results: &mut Vec<SearchResult>, li
         id: Option<surrealdb::types::RecordId>,
         title: Option<String>,
         content: Option<String>,
-        mem_type: Option<String>,
+        category: Option<String>,
         created_at: Option<String>,
         strength: Option<f64>,
-        access_count: Option<i64>,
+        retrieval_count: Option<i64>,
     }
     let mut resp = match db
         .query(
-            "SELECT id, title, content, mem_type, created_at, strength, access_count \
-             FROM hifz \
+            "SELECT id, title, content, category, created_at, strength, retrieval_count \
+             FROM memory \
              WHERE id IN $ids AND is_latest = true",
         )
         .bind(("ids", neighbour_ids))
@@ -293,7 +293,7 @@ async fn expand_from_graph(db: &Surreal<Db>, results: &mut Vec<SearchResult>, li
         };
         let strength = row.strength.unwrap_or(1.0);
         let created = row.created_at.clone().unwrap_or_default();
-        let access = row.access_count.unwrap_or(0);
+        let access = row.retrieval_count.unwrap_or(0);
         let final_score = rank::final_score(score * strength, &created, access);
         results.push(SearchResult {
             id: row.id.clone(),
@@ -301,12 +301,13 @@ async fn expand_from_graph(db: &Surreal<Db>, results: &mut Vec<SearchResult>, li
             title: row.title.clone().unwrap_or_default(),
             obs_type: format!(
                 "memory:{}@via:{via}",
-                row.mem_type.clone().unwrap_or_default()
+                row.category.clone().unwrap_or_default()
             ),
             narrative: row.content.clone().unwrap_or_default(),
             timestamp: created,
             importance: (strength * 10.0) as i64,
             score: Some(final_score),
+            is_neighbor: false,
         });
     }
 
@@ -319,7 +320,7 @@ async fn expand_from_graph(db: &Surreal<Db>, results: &mut Vec<SearchResult>, li
     results.truncate(limit);
 }
 
-/// Hybrid search across the `hifz` (long-term memory) table (default config).
+/// Hybrid search across the `memory` (long-term memory) table (default config).
 async fn search_memories(
     db: &Surreal<Db>,
     query_vec: Option<&Vec<f32>>,
@@ -338,7 +339,7 @@ async fn search_memories(
     .await
 }
 
-/// Hybrid search across `hifz` with ablation support.
+/// Hybrid search across `memory` with ablation support.
 ///
 /// - If `query_vec` is provided, RRF-fuses vector + BM25(title) + BM25(content).
 /// - Otherwise falls back to BM25(title) + BM25(content) fusion.
@@ -358,10 +359,10 @@ async fn search_memories_with_config(
         id: Option<surrealdb::types::RecordId>,
         title: Option<String>,
         content: Option<String>,
-        mem_type: Option<String>,
+        category: Option<String>,
         created_at: Option<String>,
         strength: Option<f64>,
-        access_count: Option<i64>,
+        retrieval_count: Option<i64>,
     }
 
     let project_filter = if project.is_some() {
@@ -374,7 +375,7 @@ async fn search_memories_with_config(
     let vector_branch = if query_vec.is_some() {
         format!(
             "(SELECT id, vector::distance::knn() AS distance \
-              FROM hifz WHERE is_latest = true{project_filter} \
+              FROM memory WHERE is_latest = true{project_filter} \
               AND embedding <|{limit},80|> $query_vec),"
         )
     } else {
@@ -386,10 +387,10 @@ async fn search_memories_with_config(
         "search::rrf([\
              {vector_branch}\
              (SELECT id, search::score(1) AS ft_score \
-              FROM hifz WHERE is_latest = true{project_filter} AND title @1,OR@ $q \
+              FROM memory WHERE is_latest = true{project_filter} AND title @1,OR@ $q \
               ORDER BY ft_score DESC LIMIT {limit}),\
              (SELECT id, search::score(2) AS ft_score \
-              FROM hifz WHERE is_latest = true{project_filter} AND content @2,OR@ $q \
+              FROM memory WHERE is_latest = true{project_filter} AND content @2,OR@ $q \
               ORDER BY ft_score DESC LIMIT {limit})\
          ], {limit}, {rrf_k})"
     );
@@ -410,8 +411,8 @@ async fn search_memories_with_config(
     let ids: Vec<surrealdb::types::RecordId> = fused.iter().filter_map(|r| r.id.clone()).collect();
     let mut fetch = db
         .query(
-            "SELECT id, title, content, mem_type, created_at, strength, access_count \
-             FROM hifz WHERE id IN $ids",
+            "SELECT id, title, content, category, created_at, strength, retrieval_count \
+             FROM memory WHERE id IN $ids",
         )
         .bind(("ids", ids))
         .await?;
@@ -434,7 +435,7 @@ async fn search_memories_with_config(
                 .unwrap_or(0.0);
             let strength = row.strength.unwrap_or(1.0);
             let created_at = row.created_at.clone().unwrap_or_default();
-            let access = row.access_count.unwrap_or(0);
+            let access = row.retrieval_count.unwrap_or(0);
             let score = if cfg.skip_recency_access {
                 rrf * strength
             } else {
@@ -445,11 +446,12 @@ async fn search_memories_with_config(
                 id,
                 session_id: None,
                 title: row.title.unwrap_or_default(),
-                obs_type: format!("memory:{}", row.mem_type.unwrap_or_default()),
+                obs_type: format!("memory:{}", row.category.unwrap_or_default()),
                 narrative: row.content.unwrap_or_default(),
                 timestamp: created_at,
                 importance: (strength * 10.0) as i64,
                 score: Some(score),
+                is_neighbor: false,
             }
         })
         .collect();
@@ -525,7 +527,7 @@ pub fn apply_rerank(
     results
 }
 
-/// Increment `access_count` and bump `last_accessed_at` for any memory hits.
+/// Increment `retrieval_count` and bump `last_accessed_at` for any memory hits.
 /// Fire-and-forget; errors are logged but not returned.
 async fn bump_memory_access(db: &Surreal<Db>, results: &[SearchResult]) {
     let mem_ids: Vec<surrealdb::types::RecordId> = results
@@ -536,7 +538,8 @@ async fn bump_memory_access(db: &Surreal<Db>, results: &[SearchResult]) {
     if mem_ids.is_empty() {
         return;
     }
-    let q = "UPDATE hifz SET access_count += 1, last_accessed_at = time::now() WHERE id IN $ids";
+    let q =
+        "UPDATE memory SET retrieval_count += 1, last_accessed_at = time::now() WHERE id IN $ids";
     if let Err(e) = db.query(q).bind(("ids", mem_ids)).await {
         tracing::warn!("access bump failed: {e}");
     }
@@ -635,6 +638,7 @@ pub async fn search_runs_for_context(
                 timestamp: row.ended_at.unwrap_or_default(),
                 importance: 5,
                 score: Some(score),
+                is_neighbor: false,
             }
         })
         .collect();
@@ -722,7 +726,7 @@ mod tests {
 
     fn mk_memory(title: &str, idx: u64) -> SearchResult {
         SearchResult {
-            id: Some(surrealdb::types::RecordId::new("hifz", format!("m{idx}"))),
+            id: Some(surrealdb::types::RecordId::new("memory", format!("m{idx}"))),
             session_id: None,
             title: title.to_string(),
             obs_type: "memory:fact".to_string(),
@@ -730,6 +734,7 @@ mod tests {
             timestamp: String::new(),
             importance: 5,
             score: Some(1.0 - idx as f64 * 0.01),
+            is_neighbor: false,
         }
     }
 

@@ -8,7 +8,7 @@ Given a raw observation (JSON), output ONLY an XML block:
   <subtitle>Optional one-liner</subtitle>
   <facts><fact>Atomic fact 1</fact><fact>Atomic fact 2</fact></facts>
   <narrative>2-3 sentence summary of what happened and why it matters.</narrative>
-  <concepts><concept>concept1</concept><concept>concept2</concept></concepts>
+  <keywords><keyword>keyword1</keyword><keyword>keyword2</keyword></keywords>
   <files><file>exact/file/path.rs</file></files>
   <importance>1-10 scale (1-3: routine reads, 4-6: edits/commands, 7-9: architectural decisions, 10: breaking changes)</importance>
 </observation>"#;

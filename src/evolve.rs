@@ -107,7 +107,7 @@ pub async fn evolve_one(
         return Ok(EvolveReport::default());
     };
 
-    // Gather neighbours via the mem_link edge (already populated by link.rs).
+    // Gather neighbours via the memory_link edge (already populated by link.rs).
     let edges = link::expand_neighbours(db, &[memory_id.clone()]).await?;
     let mut neighbour_ids: Vec<RecordId> = edges.iter().map(|e| e.to.clone()).collect();
     neighbour_ids.sort_by_key(|r| format!("{r:?}"));
@@ -124,7 +124,7 @@ pub async fn evolve_one(
     let mut fetch = db
         .query(
             "SELECT id, title, content, keywords, tags, context \
-             FROM hifz WHERE id IN $ids",
+             FROM memory WHERE id IN $ids",
         )
         .bind(("ids", neighbour_ids.clone()))
         .await?;
@@ -172,7 +172,7 @@ async fn apply_updates(
         }
     }
 
-    // Precompute a lookup of allowed id strings (e.g. "hifz:abc"), so a runaway
+    // Precompute a lookup of allowed id strings (e.g. "memory:abc"), so a runaway
     // LLM can't mutate arbitrary memories.
     let allowed_strs: HashSet<String> = candidate_ids.iter().map(|r| format!("{r:?}")).collect();
 
@@ -250,7 +250,7 @@ async fn fetch_id_strings(db: &Surreal<Db>, ids: &[RecordId]) -> Result<HashSet<
         id_str: Option<String>,
     }
     let mut resp = db
-        .query("SELECT string::concat(meta::tb(id), ':', meta::id(id)) AS id_str FROM hifz WHERE id IN $ids")
+        .query("SELECT string::concat(meta::tb(id), ':', meta::id(id)) AS id_str FROM memory WHERE id IN $ids")
         .bind(("ids", ids.to_vec()))
         .await?;
     let rows: Vec<Row> = resp.take(0).unwrap_or_default();

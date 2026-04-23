@@ -65,7 +65,7 @@ DEFINE FIELD IF NOT EXISTS subtitle     ON observation TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS facts        ON observation TYPE array<string>;
 DEFINE FIELD IF NOT EXISTS facts_text   ON observation TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS narrative    ON observation TYPE string;
-DEFINE FIELD IF NOT EXISTS concepts     ON observation TYPE array<string>;
+DEFINE FIELD IF NOT EXISTS keywords     ON observation TYPE array<string>;
 DEFINE FIELD IF NOT EXISTS files        ON observation TYPE array<string>;
 DEFINE FIELD IF NOT EXISTS importance   ON observation TYPE int;
 DEFINE FIELD IF NOT EXISTS confidence   ON observation TYPE option<float>;
@@ -83,37 +83,34 @@ DEFINE INDEX IF NOT EXISTS obs_vec          ON TABLE observation
   FIELDS embedding HNSW DIMENSION 384 DIST COSINE;
 DEFINE INDEX IF NOT EXISTS obs_session      ON TABLE observation FIELDS session_id;
 
-DEFINE TABLE IF NOT EXISTS hifz SCHEMAFULL;
-DEFINE FIELD IF NOT EXISTS project       ON hifz TYPE string DEFAULT 'global';
-DEFINE FIELD IF NOT EXISTS mem_type      ON hifz TYPE string;
-DEFINE FIELD IF NOT EXISTS title         ON hifz TYPE string;
-DEFINE FIELD IF NOT EXISTS content       ON hifz TYPE string;
-DEFINE FIELD IF NOT EXISTS concepts      ON hifz TYPE array<string>;
-DEFINE FIELD IF NOT EXISTS files         ON hifz TYPE array<string>;
-DEFINE FIELD IF NOT EXISTS keywords      ON hifz TYPE array<string> DEFAULT [];
-DEFINE FIELD IF NOT EXISTS tags          ON hifz TYPE array<string> DEFAULT [];
-DEFINE FIELD IF NOT EXISTS context       ON hifz TYPE option<string>;
-DEFINE FIELD IF NOT EXISTS session_ids   ON hifz TYPE array<record<session>>;
-DEFINE FIELD IF NOT EXISTS strength      ON hifz TYPE float;
-DEFINE FIELD IF NOT EXISTS access_count  ON hifz TYPE int DEFAULT 0;
-DEFINE FIELD IF NOT EXISTS last_accessed_at ON hifz TYPE string DEFAULT time::now();
-DEFINE FIELD IF NOT EXISTS embedding     ON hifz TYPE option<array<float>>;
-DEFINE FIELD IF NOT EXISTS version       ON hifz TYPE int DEFAULT 1;
-DEFINE FIELD IF NOT EXISTS parent_id     ON hifz TYPE option<record<hifz>>;
-DEFINE FIELD IF NOT EXISTS supersedes    ON hifz TYPE option<array<record<hifz>>>;
-DEFINE FIELD IF NOT EXISTS is_latest     ON hifz TYPE bool DEFAULT true;
-DEFINE FIELD IF NOT EXISTS forget_after  ON hifz TYPE option<string>;
-DEFINE FIELD IF NOT EXISTS commit_ids    ON hifz TYPE array<record<commit>> DEFAULT [];
-DEFINE FIELD IF NOT EXISTS created_at    ON hifz TYPE string;
-DEFINE FIELD IF NOT EXISTS updated_at    ON hifz TYPE string;
-DEFINE INDEX IF NOT EXISTS mem_title_ft  ON TABLE hifz
+DEFINE TABLE IF NOT EXISTS memory SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS project          ON memory TYPE string DEFAULT 'global';
+DEFINE FIELD IF NOT EXISTS category         ON memory TYPE string;
+DEFINE FIELD IF NOT EXISTS title            ON memory TYPE string;
+DEFINE FIELD IF NOT EXISTS content          ON memory TYPE string;
+DEFINE FIELD IF NOT EXISTS keywords         ON memory TYPE array<string>;
+DEFINE FIELD IF NOT EXISTS files            ON memory TYPE array<string>;
+DEFINE FIELD IF NOT EXISTS tags             ON memory TYPE array<string> DEFAULT [];
+DEFINE FIELD IF NOT EXISTS context          ON memory TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS strength         ON memory TYPE float;
+DEFINE FIELD IF NOT EXISTS retrieval_count  ON memory TYPE int DEFAULT 0;
+DEFINE FIELD IF NOT EXISTS last_accessed_at ON memory TYPE string DEFAULT time::now();
+DEFINE FIELD IF NOT EXISTS embedding        ON memory TYPE option<array<float>>;
+DEFINE FIELD IF NOT EXISTS version          ON memory TYPE int DEFAULT 1;
+DEFINE FIELD IF NOT EXISTS parent_id        ON memory TYPE option<record<memory>>;
+DEFINE FIELD IF NOT EXISTS supersedes       ON memory TYPE option<array<record<memory>>>;
+DEFINE FIELD IF NOT EXISTS is_latest        ON memory TYPE bool DEFAULT true;
+DEFINE FIELD IF NOT EXISTS forget_after     ON memory TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS created_at       ON memory TYPE string;
+DEFINE FIELD IF NOT EXISTS updated_at       ON memory TYPE string;
+DEFINE INDEX IF NOT EXISTS mem_title_ft     ON TABLE memory
   FIELDS title FULLTEXT ANALYZER obs_analyzer BM25 CONCURRENTLY;
-DEFINE INDEX IF NOT EXISTS mem_content_ft ON TABLE hifz
+DEFINE INDEX IF NOT EXISTS mem_content_ft   ON TABLE memory
   FIELDS content FULLTEXT ANALYZER obs_analyzer BM25 CONCURRENTLY;
-DEFINE INDEX IF NOT EXISTS mem_vec       ON TABLE hifz
+DEFINE INDEX IF NOT EXISTS mem_vec          ON TABLE memory
   FIELDS embedding HNSW DIMENSION 384 DIST COSINE;
-DEFINE INDEX IF NOT EXISTS mem_project   ON TABLE hifz FIELDS project;
-DEFINE INDEX IF NOT EXISTS mem_latest    ON TABLE hifz FIELDS is_latest;
+DEFINE INDEX IF NOT EXISTS mem_project      ON TABLE memory FIELDS project;
+DEFINE INDEX IF NOT EXISTS mem_latest       ON TABLE memory FIELDS is_latest;
 
 DEFINE TABLE IF NOT EXISTS summary SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS session_id        ON summary TYPE record<session>;
@@ -123,37 +120,35 @@ DEFINE FIELD IF NOT EXISTS title             ON summary TYPE string;
 DEFINE FIELD IF NOT EXISTS narrative         ON summary TYPE string;
 DEFINE FIELD IF NOT EXISTS key_decisions     ON summary TYPE array<string>;
 DEFINE FIELD IF NOT EXISTS files_modified    ON summary TYPE array<string>;
-DEFINE FIELD IF NOT EXISTS concepts          ON summary TYPE array<string>;
+DEFINE FIELD IF NOT EXISTS keywords          ON summary TYPE array<string>;
 DEFINE FIELD IF NOT EXISTS observation_count ON summary TYPE int;
 
 -- === CONSOLIDATION TIERS ===
 
-DEFINE TABLE IF NOT EXISTS semantic_hifz SCHEMAFULL;
-DEFINE FIELD IF NOT EXISTS fact              ON semantic_hifz TYPE string;
-DEFINE FIELD IF NOT EXISTS confidence        ON semantic_hifz TYPE float;
-DEFINE FIELD IF NOT EXISTS source_sessions   ON semantic_hifz TYPE array<record<session>>;
-DEFINE FIELD IF NOT EXISTS access_count      ON semantic_hifz TYPE int DEFAULT 0;
-DEFINE FIELD IF NOT EXISTS strength          ON semantic_hifz TYPE float DEFAULT 1.0;
-DEFINE FIELD IF NOT EXISTS last_accessed_at  ON semantic_hifz TYPE string;
-DEFINE FIELD IF NOT EXISTS created_at        ON semantic_hifz TYPE string;
-DEFINE FIELD IF NOT EXISTS updated_at        ON semantic_hifz TYPE string;
+DEFINE TABLE IF NOT EXISTS semantic_memory SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS fact              ON semantic_memory TYPE string;
+DEFINE FIELD IF NOT EXISTS confidence        ON semantic_memory TYPE float;
+DEFINE FIELD IF NOT EXISTS source_sessions   ON semantic_memory TYPE array<record<session>>;
+DEFINE FIELD IF NOT EXISTS retrieval_count   ON semantic_memory TYPE int DEFAULT 0;
+DEFINE FIELD IF NOT EXISTS strength          ON semantic_memory TYPE float DEFAULT 1.0;
+DEFINE FIELD IF NOT EXISTS last_accessed_at  ON semantic_memory TYPE string;
+DEFINE FIELD IF NOT EXISTS created_at        ON semantic_memory TYPE string;
+DEFINE FIELD IF NOT EXISTS updated_at        ON semantic_memory TYPE string;
 
 -- === CORE MEMORY (MemGPT-style always-on block) ===
--- Per-project singleton. `id` is deterministic: hifz_core:<project-slug>.
-DEFINE TABLE IF NOT EXISTS hifz_core SCHEMAFULL;
-DEFINE FIELD IF NOT EXISTS project     ON hifz_core TYPE string;
-DEFINE FIELD IF NOT EXISTS identity    ON hifz_core TYPE option<string>;
-DEFINE FIELD IF NOT EXISTS goals       ON hifz_core TYPE array<string> DEFAULT [];
-DEFINE FIELD IF NOT EXISTS invariants  ON hifz_core TYPE array<string> DEFAULT [];
-DEFINE FIELD IF NOT EXISTS watchlist   ON hifz_core TYPE array<string> DEFAULT [];
-DEFINE FIELD IF NOT EXISTS updated_at  ON hifz_core TYPE string;
-DEFINE INDEX IF NOT EXISTS core_project ON TABLE hifz_core FIELDS project UNIQUE;
+-- Per-project singleton.
+DEFINE TABLE IF NOT EXISTS core_memory SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS project     ON core_memory TYPE string;
+DEFINE FIELD IF NOT EXISTS identity    ON core_memory TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS goals       ON core_memory TYPE array<string> DEFAULT [];
+DEFINE FIELD IF NOT EXISTS invariants  ON core_memory TYPE array<string> DEFAULT [];
+DEFINE FIELD IF NOT EXISTS watchlist   ON core_memory TYPE array<string> DEFAULT [];
+DEFINE FIELD IF NOT EXISTS updated_at  ON core_memory TYPE string;
+DEFINE INDEX IF NOT EXISTS core_project ON TABLE core_memory FIELDS project UNIQUE;
 
--- === ENTITIES (Phase 4) ===
--- Typed named things (files, symbols, concepts, errors) mentioned across
--- observations and memories. Used to bridge memories sharing a topic.
+-- === ENTITIES ===
 DEFINE TABLE IF NOT EXISTS entity SCHEMAFULL;
-DEFINE FIELD IF NOT EXISTS kind       ON entity TYPE string;  -- file|symbol|concept|error
+DEFINE FIELD IF NOT EXISTS kind       ON entity TYPE string;
 DEFINE FIELD IF NOT EXISTS name       ON entity TYPE string;
 DEFINE FIELD IF NOT EXISTS project    ON entity TYPE string;
 DEFINE FIELD IF NOT EXISTS first_seen ON entity TYPE string;
@@ -161,8 +156,7 @@ DEFINE FIELD IF NOT EXISTS last_seen  ON entity TYPE string;
 DEFINE FIELD IF NOT EXISTS count      ON entity TYPE int DEFAULT 1;
 DEFINE INDEX IF NOT EXISTS entity_unique ON TABLE entity FIELDS kind, name, project UNIQUE;
 
--- === RUNS (Phase 4) ===
--- A task-scoped trajectory inside a session: UserPromptSubmit → … → Stop/TaskCompleted.
+-- === RUNS ===
 DEFINE TABLE IF NOT EXISTS run SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS session_id      ON run TYPE record<session>;
 DEFINE FIELD IF NOT EXISTS project         ON run TYPE string;
@@ -184,20 +178,12 @@ DEFINE INDEX IF NOT EXISTS run_prompt_ft ON TABLE run
 DEFINE INDEX IF NOT EXISTS run_lesson_ft ON TABLE run
   FIELDS lesson FULLTEXT ANALYZER run_analyzer BM25 CONCURRENTLY;
 
--- === GRAPH LINKS BETWEEN MEMORIES (Phase 3) ===
--- Typed relation edge. `via` distinguishes the reason two memories are linked:
---   embedding  — KNN cosine similarity
---   concept    — Jaccard overlap on concepts
---   file       — Jaccard overlap on files
---   entity     — shared entity mention (Phase 4)
---   semantic   — proposed by evolution (Phase 5, LLM)
--- NOTE: RELATE ... UNIQUE enforces (in, out) uniqueness only. Per-via dedup is
--- handled Rust-side in src/link.rs before any RELATE call.
-DEFINE TABLE IF NOT EXISTS mem_link SCHEMAFULL TYPE RELATION IN hifz OUT hifz;
-DEFINE FIELD IF NOT EXISTS score      ON mem_link TYPE float;
-DEFINE FIELD IF NOT EXISTS via        ON mem_link TYPE string;
-DEFINE FIELD IF NOT EXISTS created_at ON mem_link TYPE string;
-DEFINE INDEX IF NOT EXISTS mem_link_via ON TABLE mem_link FIELDS via;
+-- === GRAPH LINKS BETWEEN MEMORIES ===
+DEFINE TABLE IF NOT EXISTS memory_link SCHEMAFULL TYPE RELATION IN memory OUT memory;
+DEFINE FIELD IF NOT EXISTS score      ON memory_link TYPE float;
+DEFINE FIELD IF NOT EXISTS via        ON memory_link TYPE string;
+DEFINE FIELD IF NOT EXISTS created_at ON memory_link TYPE string;
+DEFINE INDEX IF NOT EXISTS memory_link_via ON TABLE memory_link FIELDS via;
 
 -- === COMMIT TRACKING ===
 DEFINE TABLE IF NOT EXISTS commit SCHEMAFULL;
@@ -225,7 +211,7 @@ DEFINE FIELD IF NOT EXISTS title          ON plan TYPE string;
 DEFINE FIELD IF NOT EXISTS content        ON plan TYPE string;
 DEFINE FIELD IF NOT EXISTS status         ON plan TYPE string DEFAULT 'active';
 DEFINE FIELD IF NOT EXISTS project        ON plan TYPE string;
-DEFINE FIELD IF NOT EXISTS concepts       ON plan TYPE array<string> DEFAULT [];
+DEFINE FIELD IF NOT EXISTS keywords       ON plan TYPE array<string> DEFAULT [];
 DEFINE FIELD IF NOT EXISTS files          ON plan TYPE array<string> DEFAULT [];
 DEFINE FIELD IF NOT EXISTS session_id     ON plan TYPE option<record<session>>;
 DEFINE FIELD IF NOT EXISTS commit_id      ON plan TYPE option<record<commit>>;
@@ -235,14 +221,14 @@ DEFINE INDEX IF NOT EXISTS plan_project   ON TABLE plan FIELDS project;
 DEFINE INDEX IF NOT EXISTS plan_status    ON TABLE plan FIELDS status;
 DEFINE INDEX IF NOT EXISTS plan_file_path ON TABLE plan FIELDS file_path UNIQUE;
 
-DEFINE TABLE IF NOT EXISTS procedural_hifz SCHEMAFULL;
-DEFINE FIELD IF NOT EXISTS name              ON procedural_hifz TYPE string;
-DEFINE FIELD IF NOT EXISTS steps             ON procedural_hifz TYPE array<string>;
-DEFINE FIELD IF NOT EXISTS trigger_condition ON procedural_hifz TYPE string;
-DEFINE FIELD IF NOT EXISTS frequency         ON procedural_hifz TYPE int DEFAULT 1;
-DEFINE FIELD IF NOT EXISTS strength          ON procedural_hifz TYPE float DEFAULT 1.0;
-DEFINE FIELD IF NOT EXISTS source_sessions   ON procedural_hifz TYPE array<record<session>>;
-DEFINE FIELD IF NOT EXISTS created_at        ON procedural_hifz TYPE string;
-DEFINE FIELD IF NOT EXISTS updated_at        ON procedural_hifz TYPE string;
+DEFINE TABLE IF NOT EXISTS procedural_memory SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS name              ON procedural_memory TYPE string;
+DEFINE FIELD IF NOT EXISTS steps             ON procedural_memory TYPE array<string>;
+DEFINE FIELD IF NOT EXISTS trigger_condition ON procedural_memory TYPE string;
+DEFINE FIELD IF NOT EXISTS frequency         ON procedural_memory TYPE int DEFAULT 1;
+DEFINE FIELD IF NOT EXISTS strength          ON procedural_memory TYPE float DEFAULT 1.0;
+DEFINE FIELD IF NOT EXISTS source_sessions   ON procedural_memory TYPE array<record<session>>;
+DEFINE FIELD IF NOT EXISTS created_at        ON procedural_memory TYPE string;
+DEFINE FIELD IF NOT EXISTS updated_at        ON procedural_memory TYPE string;
 
 "#;

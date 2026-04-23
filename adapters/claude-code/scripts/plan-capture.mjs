@@ -50,7 +50,7 @@ async function main() {
 	const truncated = content.length > MAX ? content.slice(0, MAX) + "\n\n[...truncated]" : content;
 
 	try {
-		await fetch(`${REST_URL}/hifz/plan`, {
+		await fetch(`${REST_URL}/api/v1/agent/plans`, {
 			method: "POST",
 			headers: HEADERS,
 			body: JSON.stringify({

@@ -17,7 +17,7 @@ async function main() {
 	const debugLine = `${new Date().toISOString()} keys=${Object.keys(data).join(",")} tool_name=${data.tool_name} has_tool_output=${data.tool_output != null} has_output=${data.output != null} has_result=${data.result != null} tool_output_type=${typeof data.tool_output} output_type=${typeof data.output}\n`;
 	fs.appendFileSync("/tmp/hifz-hook-debug.log", debugLine);
 	try {
-		await fetch(`${REST_URL}/hifz/observe`, {
+		await fetch(`${REST_URL}/api/v1/agent/observe`, {
 			method: "POST",
 			headers: HEADERS,
 			body: JSON.stringify({

@@ -14,7 +14,7 @@ use crate::search;
 /// When `query` is provided (e.g. the user's prompt), retrieval is query-aware:
 /// hybrid search finds relevant memories, then Rust-side scoring re-ranks by
 /// `strength · exp(-age/30) · access_boost`, and a simple MMR-lite dedup drops
-/// redundant entries (same mem_type + leading concept).
+/// redundant entries (same category + leading keyword).
 ///
 /// When no `query` is supplied, the function synthesises one from the project
 /// name plus titles of the recent high-importance observations, so SessionStart
@@ -79,7 +79,7 @@ pub async fn generate_context_with_query(
         for m in &diversified {
             let entry = format!(
                 "- [{mtype}] **{title}**: {content}\n",
-                mtype = m.mem_type,
+                mtype = m.category,
                 title = m.title,
                 content = m.content
             );
@@ -96,7 +96,7 @@ pub async fn generate_context_with_query(
     // 2. Consolidated semantic facts (from tier_semantic).
     let mut sem_resp = db
         .query(
-            "SELECT fact, confidence FROM semantic_hifz \
+            "SELECT fact, confidence FROM semantic_memory \
              WHERE strength > 0.3 \
              ORDER BY confidence DESC LIMIT 10",
         )
@@ -128,7 +128,7 @@ pub async fn generate_context_with_query(
     // 3. Consolidated procedural knowledge (from tier_procedural).
     let mut proc_resp = db
         .query(
-            "SELECT name, steps, trigger_condition, frequency FROM procedural_hifz \
+            "SELECT name, steps, trigger_condition, frequency FROM procedural_memory \
              WHERE strength > 0.3 \
              ORDER BY frequency DESC LIMIT 5",
         )
@@ -233,8 +233,8 @@ pub async fn generate_context_with_query(
 struct MemoryEntry {
     title: String,
     content: String,
-    mem_type: String,
-    first_concept: Option<String>,
+    category: String,
+    first_keyword: Option<String>,
     score: f64,
 }
 
@@ -242,11 +242,11 @@ struct MemoryEntry {
 struct MemRow {
     title: Option<String>,
     content: Option<String>,
-    mem_type: Option<String>,
-    concepts: Option<Vec<String>>,
+    category: Option<String>,
+    keywords: Option<Vec<String>>,
     strength: Option<f64>,
     created_at: Option<String>,
-    access_count: Option<i64>,
+    retrieval_count: Option<i64>,
 }
 
 async fn top_memories_by_rank(
@@ -256,8 +256,8 @@ async fn top_memories_by_rank(
 ) -> Result<Vec<MemoryEntry>> {
     let mut resp = db
         .query(
-            "SELECT title, content, mem_type, concepts, strength, created_at, access_count \
-             FROM hifz \
+            "SELECT title, content, category, keywords, strength, created_at, retrieval_count \
+             FROM memory \
              WHERE is_latest = true AND (project = $project OR project = 'global') \
              LIMIT 100",
         )
@@ -270,12 +270,12 @@ async fn top_memories_by_rank(
         .map(|m| {
             let base = m.strength.unwrap_or(1.0);
             let created = m.created_at.clone().unwrap_or_default();
-            let access = m.access_count.unwrap_or(0);
+            let access = m.retrieval_count.unwrap_or(0);
             MemoryEntry {
                 title: m.title.unwrap_or_default(),
                 content: m.content.unwrap_or_default(),
-                mem_type: m.mem_type.unwrap_or_default(),
-                first_concept: m.concepts.and_then(|c| c.into_iter().next()),
+                category: m.category.unwrap_or_default(),
+                first_keyword: m.keywords.and_then(|c| c.into_iter().next()),
                 score: rank::final_score(base, &created, access),
             }
         })
@@ -309,8 +309,8 @@ async fn query_aware_memories(
 
     let mut resp = db
         .query(
-            "SELECT id, title, content, mem_type, concepts, strength, created_at, access_count \
-             FROM hifz WHERE id IN $ids",
+            "SELECT id, title, content, category, keywords, strength, created_at, retrieval_count \
+             FROM memory WHERE id IN $ids",
         )
         .bind(("ids", mem_ids.clone()))
         .await?;
@@ -319,11 +319,11 @@ async fn query_aware_memories(
         id: Option<surrealdb::types::RecordId>,
         title: Option<String>,
         content: Option<String>,
-        mem_type: Option<String>,
-        concepts: Option<Vec<String>>,
+        category: Option<String>,
+        keywords: Option<Vec<String>>,
         strength: Option<f64>,
         created_at: Option<String>,
-        access_count: Option<i64>,
+        retrieval_count: Option<i64>,
     }
     let rows: Vec<RowWithId> = resp.take(0)?;
 
@@ -339,12 +339,12 @@ async fn query_aware_memories(
         if let Some(r) = by_id.remove(&key) {
             let base = r.strength.unwrap_or(1.0);
             let created = r.created_at.clone().unwrap_or_default();
-            let access = r.access_count.unwrap_or(0);
+            let access = r.retrieval_count.unwrap_or(0);
             entries.push(MemoryEntry {
                 title: r.title.unwrap_or_default(),
                 content: r.content.unwrap_or_default(),
-                mem_type: r.mem_type.unwrap_or_default(),
-                first_concept: r.concepts.and_then(|c| c.into_iter().next()),
+                category: r.category.unwrap_or_default(),
+                first_keyword: r.keywords.and_then(|c| c.into_iter().next()),
                 score: rank::final_score(base, &created, access),
             });
         }
@@ -372,7 +372,7 @@ async fn synthesise_query(db: &Surreal<Db>, project: &str) -> Result<String> {
     Ok(q)
 }
 
-/// MMR-lite: dedup by (mem_type, first concept) so we don't return 10 variants
+/// MMR-lite: dedup by (category, first keyword) so we don't return 10 variants
 /// of the same pattern. Cheap, deterministic, no embedding round-trip required.
 /// Phase-3 graph expansion and Phase-1c proper cosine-based MMR will build on this.
 fn mmr_lite(entries: Vec<MemoryEntry>, limit: usize) -> Vec<MemoryEntry> {
@@ -380,8 +380,8 @@ fn mmr_lite(entries: Vec<MemoryEntry>, limit: usize) -> Vec<MemoryEntry> {
     let mut out = Vec::new();
     for e in entries {
         let key = (
-            e.mem_type.clone(),
-            e.first_concept.clone().unwrap_or_default(),
+            e.category.clone(),
+            e.first_keyword.clone().unwrap_or_default(),
         );
         if seen.insert(key) {
             out.push(e);

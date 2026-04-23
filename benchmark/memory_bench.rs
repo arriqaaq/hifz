@@ -425,7 +425,7 @@ async fn seed_memories(db: &surrealdb::Surreal<hifz::db::Db>, embedder: &Embedde
         let concepts: Vec<String> = f.concepts.iter().map(|s| s.to_string()).collect();
         let files: Vec<String> = f.files.iter().map(|s| s.to_string()).collect();
         remember::save(
-            db, embedder, PROJECT, "fact", f.title, f.content, &concepts, &files, None,
+            db, embedder, PROJECT, "fact", f.title, f.content, &concepts, &files,
         )
         .await?;
     }

@@ -84,76 +84,75 @@ pub async fn serve(
         .allow_methods(Any)
         .allow_headers(Any);
 
-    let api = Router::new()
-        // Health
-        .route("/hifz/health", axum::routing::get(api::health))
-        .route("/hifz/livez", axum::routing::get(api::livez))
-        // Session management
+    // --- Core Memory API (no session/hook/git dependency, scoped by project) ---
+    let core_api = Router::new()
+        .route("/health", axum::routing::get(api::health))
+        .route("/livez", axum::routing::get(api::livez))
         .route(
-            "/hifz/session/start",
-            axum::routing::post(api::session_start),
+            "/memories",
+            axum::routing::post(api::remember)
+                .get(api::memories_search)
+                .delete(api::forget),
         )
-        .route("/hifz/session/end", axum::routing::post(api::session_end))
-        .route("/hifz/sessions", axum::routing::get(api::sessions_list))
-        .route("/hifz/session/{id}", axum::routing::get(api::session_get))
-        // Observation capture
-        .route("/hifz/observe", axum::routing::post(api::observe))
-        // Search
-        .route("/hifz/smart-search", axum::routing::post(api::smart_search))
-        .route("/hifz/search", axum::routing::post(api::smart_search))
-        // Memory management
-        .route("/hifz/remember", axum::routing::post(api::remember))
-        .route("/hifz/forget", axum::routing::post(api::forget))
-        // Context
-        .route("/hifz/context", axum::routing::post(api::context))
-        // Core memory (always-on per-project block)
-        .route("/hifz/core", axum::routing::get(api::core_get))
-        .route("/hifz/core/edit", axum::routing::post(api::core_edit))
-        // Runs (task-scoped trajectories)
-        .route("/hifz/runs", axum::routing::post(api::runs_search))
-        .route("/hifz/run/{id}", axum::routing::get(api::run_detail))
-        // Observations (raw events)
+        .route("/search", axum::routing::post(api::smart_search))
+        .route("/search/agentic", axum::routing::post(api::search_agentic))
+        .route("/context", axum::routing::post(api::context))
         .route(
-            "/hifz/observations",
+            "/core/{project}",
+            axum::routing::get(api::core_get_by_project).patch(api::core_edit_by_project),
+        )
+        .route(
+            "/memories/{id}/evolve",
+            axum::routing::post(api::evolve_by_id),
+        )
+        .route(
+            "/memories/{id}/links",
+            axum::routing::get(api::memory_links),
+        )
+        .route("/consolidate", axum::routing::post(api::consolidate))
+        .route("/forget-gc", axum::routing::post(api::forget_gc))
+        .route("/export", axum::routing::get(api::export));
+
+    // --- Agent Pipeline API (sessions, observations, runs, git, plans) ---
+    let agent_api = Router::new()
+        .route(
+            "/sessions",
+            axum::routing::post(api::session_start).get(api::sessions_list),
+        )
+        .route("/sessions/end", axum::routing::post(api::session_end))
+        .route("/sessions/{id}", axum::routing::get(api::session_get))
+        .route("/observe", axum::routing::post(api::observe))
+        .route(
+            "/observations",
             axum::routing::get(api::observations_search),
         )
-        // Memories (hifz table only)
-        .route("/hifz/memories", axum::routing::get(api::memories_search))
-        // Digest (project intelligence)
-        .route("/hifz/digest", axum::routing::get(api::digest))
-        // Forget GC (garbage collection)
-        .route("/hifz/forget-gc", axum::routing::post(api::forget_gc))
-        // Consolidation
-        .route("/hifz/consolidate", axum::routing::post(api::consolidate))
-        // Memory Evolution (opt-in LLM)
-        .route("/hifz/evolve", axum::routing::post(api::evolve))
-        // Timeline
-        .route("/hifz/timeline", axum::routing::get(api::timeline))
-        // Commits (git tracking)
-        .route("/hifz/commit", axum::routing::post(api::commit))
-        .route("/hifz/commits", axum::routing::get(api::commits_list))
+        .route("/timeline", axum::routing::get(api::timeline))
+        .route("/runs", axum::routing::post(api::runs_search))
+        .route("/runs/{id}", axum::routing::get(api::run_detail))
         .route(
-            "/hifz/commits/{sha}/diff",
-            axum::routing::get(api::commit_diff),
+            "/commits",
+            axum::routing::post(api::commit).get(api::commits_list),
         )
-        // Plans (first-class plan tracking)
-        .route("/hifz/plan", axum::routing::post(api::plan_upsert))
-        .route("/hifz/plans", axum::routing::get(api::plans_list))
-        .route("/hifz/plan/current", axum::routing::get(api::plan_current))
+        .route("/commits/{sha}/diff", axum::routing::get(api::commit_diff))
         .route(
-            "/hifz/plan/activate",
-            axum::routing::post(api::plan_activate),
+            "/plans",
+            axum::routing::post(api::plan_upsert).get(api::plans_list),
         )
+        .route("/plans/current", axum::routing::get(api::plan_current))
+        .route("/plans/activate", axum::routing::post(api::plan_activate))
         .route(
-            "/hifz/plan/{id}/complete",
+            "/plans/{id}/complete",
             axum::routing::post(api::plan_complete),
         )
         .route(
-            "/hifz/plan/{id}/abandon",
+            "/plans/{id}/abandon",
             axum::routing::post(api::plan_abandon),
         )
-        // Export
-        .route("/hifz/export", axum::routing::get(api::export))
+        .route("/digest", axum::routing::get(api::digest));
+
+    let api = Router::new()
+        .nest("/api/v1", core_api)
+        .nest("/api/v1/agent", agent_api)
         .with_state(state);
 
     // Serve frontend static files with SPA fallback
@@ -163,7 +162,7 @@ pub async fn serve(
     let app = api.fallback_service(static_files).layer(cors);
 
     let addr = format!("127.0.0.1:{port}");
-    tracing::info!("REST API listening on http://{addr}/hifz/*");
+    tracing::info!("REST API listening on http://{addr}/api/v1/*");
 
     let listener = TcpListener::bind(&addr).await?;
     axum::serve(listener, app).await?;

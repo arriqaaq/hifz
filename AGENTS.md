@@ -31,7 +31,7 @@ A thin stdio-to-HTTP proxy. Claude Code spawns it via `.mcp.json` and talks to i
 **Purpose**: Gives the agent 8 on-demand tools (`hifz_save`, `hifz_recall`, `hifz_search`, etc.). The agent must explicitly call these.
 
 ### 3. Plugin (hooks + skills)
-The `.mjs` scripts in `plugin/scripts/` are shell hooks that Claude Code executes at lifecycle events. They are Node.js (not Rust) because Claude Code hooks must be executable shell commands.
+The `.mjs` scripts in `adapters/claude-code/scripts/` are shell hooks that Claude Code executes at lifecycle events. They are Node.js (not Rust) because Claude Code hooks must be executable shell commands.
 
 Each hook reads JSON from stdin, POSTs to the REST server, and exits:
 - `PostToolUse` fires → `post-tool-use.mjs` POSTs `{tool_name, tool_input, tool_output}` to `/hifz/observe`
@@ -114,15 +114,15 @@ MCP tools (called by the agent, or ask the agent to use them):
 
 | Path | Purpose |
 |---|---|
-| `plugin/.claude-plugin/plugin.json` | Plugin manifest |
-| `plugin/.claude-plugin/marketplace.json` | Marketplace manifest (for `claude plugin install`) |
-| `plugin/.mcp.json` | MCP server config (auto-loaded by Claude Code) |
-| `plugin/hooks/hooks.json` | 14 hook entries (SessionStart, PostToolUse, PostCompact, plan-capture, etc.) |
-| `plugin/scripts/*.mjs` | Hook scripts — read JSON from stdin, POST to REST server |
-| `plugin/skills/recall/SKILL.md` | `/recall` slash command |
-| `plugin/skills/remember/SKILL.md` | `/remember` slash command |
-| `plugin/skills/forget/SKILL.md` | `/forget` slash command |
-| `plugin/skills/session-history/SKILL.md` | `/session-history` slash command |
+| `adapters/claude-code/.claude-plugin/plugin.json` | Plugin manifest |
+| `adapters/claude-code/.claude-plugin/marketplace.json` | Marketplace manifest (for `claude plugin install`) |
+| `adapters/claude-code/.mcp.json` | MCP server config (auto-loaded by Claude Code) |
+| `adapters/claude-code/hooks/hooks.json` | 14 hook entries (SessionStart, PostToolUse, PostCompact, plan-capture, etc.) |
+| `adapters/claude-code/scripts/*.mjs` | Hook scripts — read JSON from stdin, POST to REST server |
+| `adapters/claude-code/skills/recall/SKILL.md` | `/recall` slash command |
+| `adapters/claude-code/skills/remember/SKILL.md` | `/remember` slash command |
+| `adapters/claude-code/skills/forget/SKILL.md` | `/forget` slash command |
+| `adapters/claude-code/skills/session-history/SKILL.md` | `/session-history` slash command |
 
 ## Setup for Other Projects
 
@@ -148,16 +148,16 @@ To use hifz in a project:
 2. `src/models.rs` — corresponding Rust struct
 
 **When adding hooks:**
-1. `plugin/hooks/hooks.json` — hook definition
-2. `plugin/scripts/<name>.mjs` — hook script
+1. `adapters/claude-code/hooks/hooks.json` — hook definition
+2. `adapters/claude-code/scripts/<name>.mjs` — hook script
 
 **When adding skills:**
-1. `plugin/skills/<name>/SKILL.md` — skill definition
-2. `plugin/.claude-plugin/plugin.json` — ensure `skills` path includes it
+1. `adapters/claude-code/skills/<name>/SKILL.md` — skill definition
+2. `adapters/claude-code/.claude-plugin/plugin.json` — ensure `skills` path includes it
 
 **When bumping version:**
 1. `Cargo.toml` — version field
-2. `plugin/.claude-plugin/plugin.json` — version field
+2. `adapters/claude-code/.claude-plugin/plugin.json` — version field
 
 ## Code Patterns
 
@@ -182,7 +182,7 @@ pub async fn my_endpoint(
 ```
 
 ### Hook scripts
-Hook scripts in `plugin/scripts/` are standalone Node.js `.mjs` files. They read JSON from stdin, POST to the REST API, and exit. Always use `try/catch` with `AbortSignal.timeout()`.
+Hook scripts in `adapters/claude-code/scripts/` are standalone Node.js `.mjs` files. They read JSON from stdin, POST to the REST API, and exit. Always use `try/catch` with `AbortSignal.timeout()`.
 
 ## Config
 

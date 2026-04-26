@@ -1,8 +1,8 @@
 //! Deterministic entity extraction from observations and memories.
 //!
 //! All four extractors are regex/string-based — no LLM. Entities are upserted
-//! into the `entity` table and flow into `memory_link` edges with `via='entity'`
-//! via `link.rs`.
+//! into the `entity` table and flow into `edge` table with
+//! `relation='mentions', via='entity'` via `link.rs`.
 
 use std::collections::HashSet;
 use std::sync::LazyLock;

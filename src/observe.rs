@@ -41,16 +41,12 @@ pub async fn observe(
             ensure_session(db, &payload).await?;
 
             // Check if run already open for this session
-            if let Some(open_run) = latest_open_run(db, &payload.session_id)
-                .await
-                .ok()
-                .flatten()
-            {
+            if let Some(open_run) = run::find_open(db, &payload.session_id).await.ok().flatten() {
                 // Append prompt to existing run (don't close)
                 let _ = run::append_prompt(db, &open_run, &prompt).await;
             } else {
                 // No open run — start new one
-                if let Some(session_rid) = session_record_id(db, &payload.session_id).await {
+                if let Some(session_rid) = run::resolve_session(db, &payload.session_id).await {
                     if let Ok(Some(run_id)) =
                         run::start(db, &session_rid, &payload.project, &prompt).await
                     {
@@ -67,11 +63,7 @@ pub async fn observe(
             }
         }
         crate::models::HifzEvent::SessionStop | crate::models::HifzEvent::TaskCompleted => {
-            if let Some(open) = latest_open_run(db, &payload.session_id)
-                .await
-                .ok()
-                .flatten()
-            {
+            if let Some(open) = run::find_open(db, &payload.session_id).await.ok().flatten() {
                 let outcome = run::detect_uncommitted_outcome(db, &open).await;
                 let _ = run::close(db, &open, &outcome, None).await;
             }
@@ -193,7 +185,7 @@ pub async fn observe(
 
     // Append to the open run (if any) for this session.
     if let Some(obs_id) = new_obs_id.as_ref() {
-        match latest_open_run(db, &payload.session_id).await {
+        match run::find_open(db, &payload.session_id).await {
             Ok(Some(r)) => {
                 if let Err(e) = run::append(db, &r, obs_id).await {
                     tracing::warn!("run::append failed: {e}");
@@ -203,7 +195,7 @@ pub async fn observe(
                 tracing::debug!("no open run for session {}", payload.session_id);
             }
             Err(e) => {
-                tracing::warn!("latest_open_run lookup failed: {e}");
+                tracing::warn!("run::find_open lookup failed: {e}");
             }
         }
     }
@@ -244,11 +236,8 @@ pub async fn observe(
         let detected = git_detect::detect_commit(&payload.data);
         tracing::info!(detected = detected.is_some(), "git_detect: result");
         if let Some(detected) = detected {
-            let session_rid = session_record_id(db, &payload.session_id).await;
-            let run_rid = latest_open_run(db, &payload.session_id)
-                .await
-                .ok()
-                .flatten();
+            let session_rid = run::resolve_session(db, &payload.session_id).await;
+            let run_rid = run::find_open(db, &payload.session_id).await.ok().flatten();
             let data = commit::CommitData {
                 sha: detected.sha,
                 message: detected.message,
@@ -268,55 +257,6 @@ pub async fn observe(
     }
 
     Ok(Some(compressed.title))
-}
-
-/// Resolve "session:<id>" into a `RecordId` by round-tripping through SurrealQL,
-/// matching the existing `type::record($sid)` binding pattern used elsewhere.
-async fn session_record_id(db: &Surreal<Db>, session_id: &str) -> Option<RecordId> {
-    #[derive(Debug, SurrealValue)]
-    struct Row {
-        id: Option<RecordId>,
-    }
-    let sid = format!("session:{}", session_id);
-    let resp = db
-        .query("SELECT id FROM type::record($sid)")
-        .bind(("sid", sid.clone()))
-        .await;
-    let mut resp = match resp {
-        Ok(r) => r,
-        Err(e) => {
-            tracing::warn!("session_record_id query failed for {sid}: {e}");
-            return None;
-        }
-    };
-    let rows: Vec<Row> = resp.take(0).ok()?;
-    let result = rows.into_iter().next().and_then(|r| r.id);
-    if result.is_none() {
-        tracing::debug!("session_record_id: no record found for {sid}");
-    }
-    result
-}
-
-/// Look up the most recent open run for a session (ended_at IS NONE).
-async fn latest_open_run(db: &Surreal<Db>, session_id: &str) -> Result<Option<RecordId>> {
-    let Some(sid) = session_record_id(db, session_id).await else {
-        return Ok(None);
-    };
-    #[derive(Debug, SurrealValue)]
-    struct Row {
-        id: Option<RecordId>,
-        started_at: Option<String>,
-    }
-    let mut resp = db
-        .query(
-            "SELECT id, started_at FROM run \
-             WHERE session_id = $sid AND ended_at IS NONE \
-             ORDER BY started_at DESC LIMIT 1",
-        )
-        .bind(("sid", sid))
-        .await?;
-    let rows: Vec<Row> = resp.take(0).unwrap_or_default();
-    Ok(rows.into_iter().next().and_then(|r| r.id))
 }
 
 /// Ensure the session record exists, create if not.

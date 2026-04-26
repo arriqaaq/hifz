@@ -76,6 +76,7 @@ export interface Run {
   prompts?: string[];
   outcome: string;
   observation_ids: string[];
+  recalled_ids?: string[];
   lesson: string | null;
   commit_id?: string | RecordId | null;
   plan_id?: string | RecordId | null;
@@ -143,6 +144,7 @@ export interface RememberRequest {
   keywords?: string[];
   files?: string[];
   project?: string;
+  session_id?: string;
 }
 
 export interface CoreEditRequest {

@@ -38,7 +38,7 @@ async function main() {
 		const res = await fetch(`${REST_URL}/api/v1/search/agentic`, {
 			method: "POST",
 			headers: HEADERS,
-			body: JSON.stringify({ query: prompt, limit: 5 }),
+			body: JSON.stringify({ query: prompt, limit: 5, sessionId }),
 			signal: AbortSignal.timeout(3000)
 		});
 		if (!res.ok) return;

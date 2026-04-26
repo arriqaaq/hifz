@@ -167,6 +167,7 @@ DEFINE FIELD IF NOT EXISTS prompts         ON run TYPE option<array<string>>;
 DEFINE FIELD IF NOT EXISTS outcome         ON run TYPE string DEFAULT 'unknown';
 DEFINE FIELD IF NOT EXISTS observation_ids ON run TYPE array<record<observation>> DEFAULT [];
 DEFINE FIELD IF NOT EXISTS lesson          ON run TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS recalled_ids    ON run TYPE array<record<memory>> DEFAULT [];
 DEFINE FIELD IF NOT EXISTS commit_id       ON run TYPE option<record<commit>>;
 DEFINE FIELD IF NOT EXISTS plan_id         ON run TYPE option<record<plan>>;
 DEFINE INDEX IF NOT EXISTS run_project ON TABLE run FIELDS project;
@@ -178,12 +179,20 @@ DEFINE INDEX IF NOT EXISTS run_prompt_ft ON TABLE run
 DEFINE INDEX IF NOT EXISTS run_lesson_ft ON TABLE run
   FIELDS lesson FULLTEXT ANALYZER run_analyzer BM25 CONCURRENTLY;
 
--- === GRAPH LINKS BETWEEN MEMORIES ===
-DEFINE TABLE IF NOT EXISTS memory_link SCHEMAFULL TYPE RELATION IN memory OUT memory;
-DEFINE FIELD IF NOT EXISTS score      ON memory_link TYPE float;
-DEFINE FIELD IF NOT EXISTS via        ON memory_link TYPE string;
-DEFINE FIELD IF NOT EXISTS created_at ON memory_link TYPE string;
-DEFINE INDEX IF NOT EXISTS memory_link_via ON TABLE memory_link FIELDS via;
+-- === KNOWLEDGE GRAPH EDGES ===
+-- Generic relation table: any record type can be an endpoint.
+-- Relation types (derived_from, informed, similar_to, etc.) are prescribed
+-- by application-level enums; unknown strings accepted for extensibility.
+DEFINE TABLE IF NOT EXISTS edge SCHEMAFULL TYPE RELATION;
+DEFINE FIELD IF NOT EXISTS relation   ON edge TYPE string;
+DEFINE FIELD IF NOT EXISTS via        ON edge TYPE string;
+DEFINE FIELD IF NOT EXISTS score      ON edge TYPE float DEFAULT 1.0;
+DEFINE FIELD IF NOT EXISTS metadata   ON edge TYPE option<object>;
+DEFINE FIELD IF NOT EXISTS created_at ON edge TYPE string;
+DEFINE INDEX IF NOT EXISTS edge_relation ON TABLE edge FIELDS relation;
+DEFINE INDEX IF NOT EXISTS edge_via      ON TABLE edge FIELDS via;
+DEFINE INDEX IF NOT EXISTS edge_in       ON TABLE edge FIELDS in;
+DEFINE INDEX IF NOT EXISTS edge_out      ON TABLE edge FIELDS out;
 
 -- === COMMIT TRACKING ===
 DEFINE TABLE IF NOT EXISTS commit SCHEMAFULL;

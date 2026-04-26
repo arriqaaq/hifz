@@ -1,13 +1,12 @@
-//! Deterministic write-time link generation between memories.
+//! Write-time and query-time edge generation for the knowledge graph.
 //!
 //! On each new `memory` row, we look for related existing rows via three
 //! channels — embedding KNN, keyword Jaccard, file Jaccard — and `RELATE`
-//! them through the typed `memory_link` edge. Entity-based links (Phase 4)
-//! plug into this pipeline via `via='entity'`.
+//! them through the generic `edge` table with `relation='similar_to'`.
 //!
-//! All set math (Jaccard) runs in Rust because SurrealQL has no native
-//! intersection/union operators (verified against the hadith codebase and
-//! SurrealDB test fixtures).
+//! Entity-based links plug in via `relation='mentions', via='entity'`.
+//! Causal/provenance edges (`derived_from`, `informed`, `generated_by`, etc.)
+//! are created by callers at the appropriate lifecycle points.
 
 use std::collections::HashSet;
 
@@ -17,11 +16,8 @@ use surrealdb::types::{RecordId, SurrealValue};
 
 use crate::db::Db;
 
-/// Cosine-distance upper bound (= 1 − similarity lower bound) for `via='embedding'`.
 const EMBEDDING_DISTANCE_MAX: f64 = 0.25;
-/// Jaccard lower bound for `via='keyword' | 'file'`.
 const JACCARD_MIN: f64 = 0.30;
-/// HNSW KNN fanout used at write time.
 const KNN_K: usize = 10;
 const KNN_EF: usize = 100;
 
@@ -35,13 +31,11 @@ struct CandidateRow {
 
 #[derive(Debug, Default)]
 pub struct LinkReport {
-    pub embedding_links: usize,
-    pub keyword_links: usize,
-    pub file_links: usize,
+    pub similarity_links: usize,
+    pub entity_links: usize,
 }
 
-/// Generate links for a freshly-written memory. `self_id` must be the record
-/// id of the new row (e.g. `memory:xyz`); `keywords` and `files` are its own.
+/// Generate similarity links for a freshly-written memory.
 pub async fn generate_links(
     db: &Surreal<Db>,
     self_id: &RecordId,
@@ -52,7 +46,6 @@ pub async fn generate_links(
 ) -> Result<LinkReport> {
     let mut report = LinkReport::default();
 
-    // KNN sweep over existing memories in the same project (or global), excluding self.
     let sql = format!(
         "SELECT id, vector::distance::knn() AS distance, keywords, files \
          FROM memory \
@@ -77,16 +70,14 @@ pub async fn generate_links(
             continue;
         };
 
-        // Embedding link
         if let Some(d) = c.distance {
             if d < EMBEDDING_DISTANCE_MAX {
                 let score = (1.0 - d).clamp(0.0, 1.0);
-                upsert_link(db, self_id, &other_id, "embedding", score).await?;
-                report.embedding_links += 1;
+                upsert_edge(db, self_id, &other_id, "similar_to", "embedding", score).await?;
+                report.similarity_links += 1;
             }
         }
 
-        // Keyword link
         if !self_keywords.is_empty() {
             let other: HashSet<&str> = c
                 .keywords
@@ -95,12 +86,11 @@ pub async fn generate_links(
                 .unwrap_or_default();
             let j = jaccard(&self_keywords, &other);
             if j >= JACCARD_MIN {
-                upsert_link(db, self_id, &other_id, "keyword", j).await?;
-                report.keyword_links += 1;
+                upsert_edge(db, self_id, &other_id, "similar_to", "keyword", j).await?;
+                report.similarity_links += 1;
             }
         }
 
-        // File link
         if !self_files.is_empty() {
             let other: HashSet<&str> = c
                 .files
@@ -109,8 +99,8 @@ pub async fn generate_links(
                 .unwrap_or_default();
             let j = jaccard(&self_files, &other);
             if j >= JACCARD_MIN {
-                upsert_link(db, self_id, &other_id, "file", j).await?;
-                report.file_links += 1;
+                upsert_edge(db, self_id, &other_id, "similar_to", "file", j).await?;
+                report.similarity_links += 1;
             }
         }
     }
@@ -118,15 +108,12 @@ pub async fn generate_links(
     Ok(report)
 }
 
-/// Upsert a single link with per-`via` dedup and `math::max`-style score merge.
-///
-/// SurrealDB's `RELATE UNIQUE` enforces `(in, out)` uniqueness only (verified
-/// in surrealdb/core/src/syn/parser/test/stmt.rs:121), so per-via dedup must
-/// happen here. Check → update-or-create → done.
-pub async fn upsert_link(
+/// Upsert a single edge with per-(relation, via) dedup and max-score merge.
+pub async fn upsert_edge(
     db: &Surreal<Db>,
     from: &RecordId,
     to: &RecordId,
+    relation: &str,
     via: &str,
     score: f64,
 ) -> Result<()> {
@@ -138,12 +125,13 @@ pub async fn upsert_link(
 
     let mut resp = db
         .query(
-            "SELECT id, score FROM memory_link \
-             WHERE in = $from AND out = $to AND via = $via \
+            "SELECT id, score FROM edge \
+             WHERE in = $from AND out = $to AND relation = $rel AND via = $via \
              LIMIT 1",
         )
         .bind(("from", from.clone()))
         .bind(("to", to.clone()))
+        .bind(("rel", relation.to_string()))
         .bind(("via", via.to_string()))
         .await?;
     let existing: Vec<Existing> = resp.take(0).unwrap_or_default();
@@ -163,14 +151,18 @@ pub async fn upsert_link(
     }
 
     let now = chrono::Utc::now().to_rfc3339();
-    db.query("RELATE $from->memory_link->$to SET score = $score, via = $via, created_at = $now")
-        .bind(("from", from.clone()))
-        .bind(("to", to.clone()))
-        .bind(("score", score))
-        .bind(("via", via.to_string()))
-        .bind(("now", now))
-        .await?
-        .check()?;
+    db.query(
+        "RELATE $from->edge->$to SET \
+         relation = $rel, via = $via, score = $score, created_at = $now",
+    )
+    .bind(("from", from.clone()))
+    .bind(("to", to.clone()))
+    .bind(("rel", relation.to_string()))
+    .bind(("via", via.to_string()))
+    .bind(("score", score))
+    .bind(("now", now))
+    .await?
+    .check()?;
     Ok(())
 }
 
@@ -188,41 +180,151 @@ fn jaccard(a: &HashSet<&str>, b: &HashSet<&str>) -> f64 {
 }
 
 // ---------------------------------------------------------------------------
-// 1-hop graph expansion at retrieval time
+// Graph expansion at retrieval time
 // ---------------------------------------------------------------------------
 
-/// A single edge row returned by `expand_neighbours`.
 #[derive(Debug, Clone)]
 pub struct EdgeHit {
     pub from: RecordId,
     pub to: RecordId,
     pub score: f64,
+    pub relation: String,
     pub via: String,
 }
 
-/// Fetch outgoing `memory_link` edges for the given seed memory ids.
-///
-/// IMPORTANT: the `SELECT ->edge->node.*` form does **not** return edge fields
-/// (verified from hadith/src/analysis/isnad_graph.rs:206-207), so we query the
-/// edge table directly and the caller joins neighbour rows in Rust.
-pub async fn expand_neighbours(db: &Surreal<Db>, seed_ids: &[RecordId]) -> Result<Vec<EdgeHit>> {
-    if seed_ids.is_empty() {
+#[derive(Debug, Clone)]
+pub enum Direction {
+    Outgoing,
+    Incoming,
+    Both,
+}
+
+#[derive(Debug, Clone)]
+pub struct GraphExpandConfig {
+    pub max_hops: usize,
+    pub relations: Option<Vec<String>>,
+    pub min_score: f64,
+    pub dampening: f64,
+    pub max_results: usize,
+    pub direction: Direction,
+}
+
+impl Default for GraphExpandConfig {
+    fn default() -> Self {
+        Self {
+            max_hops: 2,
+            relations: None,
+            min_score: 0.0,
+            dampening: 0.5,
+            max_results: 20,
+            direction: Direction::Outgoing,
+        }
+    }
+}
+
+/// Fetch edges from the given seed ids, with optional relation filtering.
+/// Supports multi-hop traversal with dampened scoring.
+pub async fn expand_graph(
+    db: &Surreal<Db>,
+    seed_ids: &[RecordId],
+    config: &GraphExpandConfig,
+) -> Result<Vec<EdgeHit>> {
+    if seed_ids.is_empty() || config.max_hops == 0 {
         return Ok(vec![]);
     }
 
+    let mut all_edges: Vec<EdgeHit> = Vec::new();
+    let mut current_seeds: Vec<RecordId> = seed_ids.to_vec();
+    let mut visited: HashSet<String> = seed_ids.iter().map(|id| format!("{id:?}")).collect();
+
+    for _hop in 0..config.max_hops {
+        if current_seeds.is_empty() {
+            break;
+        }
+
+        let hop_edges = fetch_edges(
+            db,
+            &current_seeds,
+            &config.relations,
+            config.min_score,
+            &config.direction,
+        )
+        .await?;
+        if hop_edges.is_empty() {
+            break;
+        }
+
+        let mut next_seeds = Vec::new();
+        for e in hop_edges {
+            let (neighbor_key, neighbor_rid) = match config.direction {
+                Direction::Incoming => (format!("{:?}", e.from), e.from.clone()),
+                _ => (format!("{:?}", e.to), e.to.clone()),
+            };
+            if visited.insert(neighbor_key) {
+                next_seeds.push(neighbor_rid);
+                all_edges.push(e);
+            }
+        }
+
+        if all_edges.len() >= config.max_results {
+            all_edges.truncate(config.max_results);
+            break;
+        }
+
+        current_seeds = next_seeds;
+    }
+
+    Ok(all_edges)
+}
+
+async fn fetch_edges(
+    db: &Surreal<Db>,
+    ids: &[RecordId],
+    relations: &Option<Vec<String>>,
+    min_score: f64,
+    direction: &Direction,
+) -> Result<Vec<EdgeHit>> {
     #[derive(Debug, SurrealValue)]
     struct Row {
         #[surreal(rename = "in")]
         in_: Option<RecordId>,
         out: Option<RecordId>,
         score: Option<f64>,
+        relation: Option<String>,
         via: Option<String>,
     }
 
-    let mut resp = db
-        .query("SELECT in, out, score, via FROM memory_link WHERE in IN $ids")
-        .bind(("ids", seed_ids.to_vec()))
-        .await?;
+    let (direction_clause, bind_field) = match direction {
+        Direction::Outgoing => ("in IN $ids", "ids"),
+        Direction::Incoming => ("out IN $ids", "ids"),
+        Direction::Both => ("(in IN $ids OR out IN $ids)", "ids"),
+    };
+
+    let rel_clause = if let Some(rels) = relations {
+        if rels.is_empty() {
+            String::new()
+        } else {
+            format!(" AND relation IN $rels")
+        }
+    } else {
+        String::new()
+    };
+
+    let sql = format!(
+        "SELECT in, out, score, relation, via FROM edge WHERE {direction_clause}{rel_clause} AND score >= $min"
+    );
+
+    let mut query = db
+        .query(&sql)
+        .bind((bind_field, ids.to_vec()))
+        .bind(("min", min_score));
+    if let Some(rels) = relations {
+        if !rels.is_empty() {
+            query = query.bind(("rels", rels.clone()));
+        }
+    }
+
+    let mut resp = query.await?;
     let rows: Vec<Row> = resp.take(0).unwrap_or_default();
 
     Ok(rows
@@ -232,10 +334,46 @@ pub async fn expand_neighbours(db: &Surreal<Db>, seed_ids: &[RecordId]) -> Resul
                 from: r.in_?,
                 to: r.out?,
                 score: r.score.unwrap_or(0.0),
+                relation: r.relation.unwrap_or_default(),
                 via: r.via.unwrap_or_default(),
             })
         })
         .collect())
+}
+
+// ---------------------------------------------------------------------------
+// Lifecycle edge helpers
+// ---------------------------------------------------------------------------
+
+/// Create structural edges when a run closes:
+/// - run --part_of--> session
+/// - run --follows--> previous completed run in same session
+pub async fn create_run_structure_edges(
+    db: &Surreal<Db>,
+    run_id: &RecordId,
+    session_id: &RecordId,
+) -> Result<()> {
+    upsert_edge(db, run_id, session_id, "part_of", "system", 1.0).await?;
+
+    #[derive(Debug, SurrealValue)]
+    struct Row {
+        id: Option<RecordId>,
+    }
+    let mut resp = db
+        .query(
+            "SELECT id FROM run \
+             WHERE session_id = $sid AND id != $rid AND ended_at IS NOT NONE \
+             ORDER BY ended_at DESC LIMIT 1",
+        )
+        .bind(("sid", session_id.clone()))
+        .bind(("rid", run_id.clone()))
+        .await?;
+    let rows: Vec<Row> = resp.take(0).unwrap_or_default();
+    if let Some(prev_id) = rows.into_iter().next().and_then(|r| r.id) {
+        upsert_edge(db, run_id, &prev_id, "follows", "system", 1.0).await?;
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -246,7 +384,6 @@ mod tests {
     fn jaccard_basic() {
         let a: HashSet<&str> = ["x", "y", "z"].into_iter().collect();
         let b: HashSet<&str> = ["y", "z", "w"].into_iter().collect();
-        // intersection = {y, z} = 2; union = {x, y, z, w} = 4; 2/4 = 0.5
         assert!((jaccard(&a, &b) - 0.5).abs() < 1e-9);
     }
 

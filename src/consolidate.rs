@@ -165,7 +165,6 @@ async fn tier_reflect(db: &Surreal<Db>) -> Result<usize> {
         }
     }
 
-    // Create memory_link edges for each cluster
     let mut count = 0;
     for cluster in &clusters {
         for i in 0..cluster.len() {
@@ -173,7 +172,9 @@ async fn tier_reflect(db: &Surreal<Db>) -> Result<usize> {
                 let from = filtered[cluster[i]].0;
                 let to = filtered[cluster[j]].0;
                 if let (Some(from_id), Some(to_id)) = (from, to) {
-                    let _ = crate::link::upsert_link(db, from_id, to_id, "cluster", 0.5).await;
+                    let _ =
+                        crate::link::upsert_edge(db, from_id, to_id, "similar_to", "cluster", 0.5)
+                            .await;
                 }
             }
         }

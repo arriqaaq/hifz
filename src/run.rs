@@ -100,6 +100,25 @@ pub async fn close(
         .bind(("lesson", lesson_opt))
         .await?
         .check()?;
+
+    // Structural edges: run --part_of--> session, run --follows--> prev_run
+    #[derive(Debug, SurrealValue)]
+    struct SessionRow {
+        session_id: Option<RecordId>,
+    }
+    if let Ok(mut s_resp) = db
+        .query("SELECT session_id FROM type::record($rid)")
+        .bind(("rid", run_id.clone()))
+        .await
+    {
+        let s_rows: Vec<SessionRow> = s_resp.take(0).unwrap_or_default();
+        if let Some(sid) = s_rows.into_iter().next().and_then(|r| r.session_id) {
+            if let Err(e) = crate::link::create_run_structure_edges(db, run_id, &sid).await {
+                tracing::warn!("run structure edges failed for {run_id:?}: {e}");
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -290,6 +309,88 @@ pub async fn search(
         .await?;
     let rows: Vec<serde_json::Value> = fetch.take(0).unwrap_or_default();
     Ok(rows)
+}
+
+// ---------------------------------------------------------------------------
+// Public helpers for session/run resolution (used by remember, web/api, etc.)
+// ---------------------------------------------------------------------------
+
+/// Resolve a session ID string to a RecordId.
+pub async fn resolve_session(db: &Surreal<Db>, session_id: &str) -> Option<RecordId> {
+    #[derive(Debug, SurrealValue)]
+    struct Row {
+        id: Option<RecordId>,
+    }
+    let sid = if session_id.starts_with("session:") {
+        session_id.to_string()
+    } else {
+        format!("session:{session_id}")
+    };
+    let mut resp = db
+        .query("SELECT id FROM type::record($sid)")
+        .bind(("sid", sid))
+        .await
+        .ok()?;
+    let rows: Vec<Row> = resp.take(0).ok()?;
+    rows.into_iter().next().and_then(|r| r.id)
+}
+
+/// Find the most recent open run for a session.
+pub async fn find_open(db: &Surreal<Db>, session_id: &str) -> Result<Option<RecordId>> {
+    #[derive(Debug, SurrealValue)]
+    struct Row {
+        id: Option<RecordId>,
+    }
+    let sid = if session_id.starts_with("session:") {
+        session_id.to_string()
+    } else {
+        format!("session:{session_id}")
+    };
+    let mut resp = db
+        .query(
+            "SELECT id FROM run \
+             WHERE session_id = type::record($sid) AND ended_at IS NONE \
+             ORDER BY started_at DESC LIMIT 1",
+        )
+        .bind(("sid", sid))
+        .await?;
+    let rows: Vec<Row> = resp.take(0).unwrap_or_default();
+    Ok(rows.into_iter().next().and_then(|r| r.id))
+}
+
+/// Get the recalled memory IDs from a run.
+pub async fn get_recalled_ids(db: &Surreal<Db>, run_id: &RecordId) -> Result<Vec<RecordId>> {
+    #[derive(Debug, SurrealValue)]
+    struct Row {
+        recalled_ids: Option<Vec<RecordId>>,
+    }
+    let mut resp = db
+        .query("SELECT recalled_ids FROM type::record($rid)")
+        .bind(("rid", run_id.clone()))
+        .await?;
+    let rows: Vec<Row> = resp.take(0).unwrap_or_default();
+    Ok(rows
+        .into_iter()
+        .next()
+        .and_then(|r| r.recalled_ids)
+        .unwrap_or_default())
+}
+
+/// Append recalled memory IDs to the run's context trail.
+pub async fn append_recalled(
+    db: &Surreal<Db>,
+    run_id: &RecordId,
+    memory_ids: &[RecordId],
+) -> Result<()> {
+    db.query(
+        "UPDATE type::record($rid) SET \
+         recalled_ids = array::distinct(array::concat(recalled_ids, $mids))",
+    )
+    .bind(("rid", run_id.clone()))
+    .bind(("mids", memory_ids.to_vec()))
+    .await?
+    .check()?;
+    Ok(())
 }
 
 /// Run data for context injection.

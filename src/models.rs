@@ -123,6 +123,7 @@ pub struct Run {
     pub outcome: String,
     pub observation_ids: Vec<surrealdb::types::RecordId>,
     pub lesson: Option<String>,
+    pub recalled_ids: Vec<surrealdb::types::RecordId>,
     pub commit_id: Option<surrealdb::types::RecordId>,
     pub plan_id: Option<surrealdb::types::RecordId>,
 }
@@ -340,3 +341,88 @@ pub const OBS_TYPES: &[&str] = &[
     "compaction_summary",
     "other",
 ];
+
+// --- Knowledge Graph Edge Types ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum EdgeRelation {
+    // Provenance (causal, directional)
+    DerivedFrom,
+    Informed,
+    GeneratedBy,
+    Triggered,
+    PartOf,
+    Follows,
+    // Knowledge (semantic)
+    SimilarTo,
+    Contradicts,
+    Supersedes,
+    Elaborates,
+    Supports,
+    Mentions,
+    // Workflow (domain-extensible)
+    ImplementedBy,
+    Motivated,
+    ResolvedBy,
+    DependsOn,
+    AlternativeTo,
+    DeprecatedBy,
+    #[serde(other)]
+    Other,
+}
+
+impl EdgeRelation {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::DerivedFrom => "derived_from",
+            Self::Informed => "informed",
+            Self::GeneratedBy => "generated_by",
+            Self::Triggered => "triggered",
+            Self::PartOf => "part_of",
+            Self::Follows => "follows",
+            Self::SimilarTo => "similar_to",
+            Self::Contradicts => "contradicts",
+            Self::Supersedes => "supersedes",
+            Self::Elaborates => "elaborates",
+            Self::Supports => "supports",
+            Self::Mentions => "mentions",
+            Self::ImplementedBy => "implemented_by",
+            Self::Motivated => "motivated",
+            Self::ResolvedBy => "resolved_by",
+            Self::DependsOn => "depends_on",
+            Self::AlternativeTo => "alternative_to",
+            Self::DeprecatedBy => "deprecated_by",
+            Self::Other => "other",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum EdgeVia {
+    System,
+    Embedding,
+    Keyword,
+    File,
+    Entity,
+    Llm,
+    Cluster,
+    #[serde(other)]
+    Other,
+}
+
+impl EdgeVia {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::System => "system",
+            Self::Embedding => "embedding",
+            Self::Keyword => "keyword",
+            Self::File => "file",
+            Self::Entity => "entity",
+            Self::Llm => "llm",
+            Self::Cluster => "cluster",
+            Self::Other => "other",
+        }
+    }
+}

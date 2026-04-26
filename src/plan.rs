@@ -245,6 +245,7 @@ pub async fn activate(
     db: &Surreal<Db>,
     project: &str,
     plan_id: Option<&str>,
+    session_id: Option<&str>,
 ) -> Result<Option<PlanRow>> {
     let plan = match plan_id {
         Some(id) => get(db, id).await?,
@@ -261,6 +262,27 @@ pub async fn activate(
         // Add files to watchlist
         for file in p.files.as_ref().unwrap_or(&vec![]) {
             let _ = core_mem::edit(db, proj, "watchlist", "add", file).await;
+        }
+
+        // Motivated edges: recalled memories --motivated--> plan
+        if let Some(sid) = session_id {
+            if let Some(ref plan_rid) = p.id {
+                if let Ok(Some(run_id)) = crate::run::find_open(db, sid).await {
+                    if let Ok(recalled) = crate::run::get_recalled_ids(db, &run_id).await {
+                        for mid in &recalled {
+                            let _ = crate::link::upsert_edge(
+                                db,
+                                mid,
+                                plan_rid,
+                                "motivated",
+                                "system",
+                                0.7,
+                            )
+                            .await;
+                        }
+                    }
+                }
+            }
         }
     }
 

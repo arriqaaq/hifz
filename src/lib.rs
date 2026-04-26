@@ -27,4 +27,5 @@ pub mod remember;
 pub mod rerank;
 pub mod run;
 pub mod search;
+pub mod trace;
 pub mod web;

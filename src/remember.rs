@@ -10,9 +10,9 @@ use crate::link;
 /// Save an insight, decision, or pattern as a long-term memory.
 ///
 /// Embeds richer text (title + content + keywords + files) so semantic search
-/// works against saved memories, not just raw observations. Then runs Phase-3
+/// works against saved memories, not just raw observations. Then runs
 /// deterministic link generation (KNN + keyword + file Jaccard) to populate
-/// `memory_link` edges between the new memory and existing neighbours.
+/// `edge` table with `relation='similar_to'` edges.
 pub async fn save(
     db: &Surreal<Db>,
     embedder: &Embedder,
@@ -22,6 +22,7 @@ pub async fn save(
     content: &str,
     keywords: &[String],
     files: &[String],
+    session_id: Option<&str>,
 ) -> Result<String> {
     let now = chrono::Utc::now().to_rfc3339();
 
@@ -80,6 +81,26 @@ pub async fn save(
         }
         if let Err(e) = link_by_shared_entities(db, &new_id, project, keywords, files).await {
             tracing::warn!("entity-link pass failed for {new_id:?}: {e}");
+        }
+
+        // Provenance edges: connect memory to its originating run
+        if let Some(sid) = session_id {
+            if let Ok(Some(run_id)) = crate::run::find_open(db, sid).await {
+                if let Err(e) =
+                    link::upsert_edge(db, &new_id, &run_id, "generated_by", "system", 1.0).await
+                {
+                    tracing::warn!("generated_by edge failed for {new_id:?}: {e}");
+                }
+                if let Ok(recalled) = crate::run::get_recalled_ids(db, &run_id).await {
+                    for rid in &recalled {
+                        if let Err(e) =
+                            link::upsert_edge(db, &new_id, rid, "derived_from", "system", 0.8).await
+                        {
+                            tracing::warn!("derived_from edge failed: {e}");
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -142,7 +163,7 @@ async fn link_by_shared_entities(
         }
         let total = self_set.union(&other_set).count().max(1);
         let score = shared as f64 / total as f64; // Jaccard over keywords ∪ files
-        link::upsert_link(db, self_id, &other_id, "entity", score).await?;
+        link::upsert_edge(db, self_id, &other_id, "mentions", "entity", score).await?;
     }
     Ok(())
 }

@@ -22,9 +22,13 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
             let query = args.get("query").and_then(|v| v.as_str()).unwrap_or("");
             let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(10);
             let project = args.get("project").and_then(|v| v.as_str());
+            let session_id = args.get("session_id").and_then(|v| v.as_str());
             let mut body = serde_json::json!({"query": query, "limit": limit});
             if let Some(p) = project {
                 body["project"] = serde_json::Value::String(p.to_string());
+            }
+            if let Some(sid) = session_id {
+                body["session_id"] = serde_json::Value::String(sid.to_string());
             }
             state
                 .client
@@ -259,6 +263,17 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                 .await?
         }
 
+        "hifz_trace" => {
+            state
+                .client
+                .post(format!("{}/api/v1/trace", state.base_url))
+                .json(&args)
+                .send()
+                .await?
+                .json()
+                .await?
+        }
+
         _ => {
             return Err(anyhow::anyhow!("Unknown tool: {name}"));
         }
@@ -271,9 +286,9 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
 
 fn tool_defs() -> Vec<serde_json::Value> {
     vec![
-        serde_json::json!({"name": "hifz_recall", "description": "Search past observations and memories with graph expansion (optionally project-scoped)", "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}, "limit": {"type": "integer", "default": 10}, "project": {"type": "string"}}, "required": ["query"]}}),
-        serde_json::json!({"name": "hifz_save", "description": "Save an insight, decision, or pattern to long-term memory (project-scoped)", "inputSchema": {"type": "object", "properties": {"title": {"type": "string"}, "content": {"type": "string"}, "project": {"type": "string", "description": "Project name (defaults to 'global' if omitted)"}, "category": {"type": "string", "enum": ["pattern", "preference", "architecture", "bug", "workflow", "fact"]}, "keywords": {"type": "array", "items": {"type": "string"}}, "files": {"type": "array", "items": {"type": "string"}}}, "required": ["title", "content"]}}),
-        serde_json::json!({"name": "hifz_search", "description": "Hybrid semantic + keyword search with RRF fusion and graph expansion (optionally project-scoped)", "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}, "limit": {"type": "integer", "default": 10}, "project": {"type": "string"}}, "required": ["query"]}}),
+        serde_json::json!({"name": "hifz_recall", "description": "Search past observations and memories with graph expansion (optionally project-scoped)", "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}, "limit": {"type": "integer", "default": 10}, "project": {"type": "string"}, "session_id": {"type": "string", "description": "Session ID for provenance tracking"}}, "required": ["query"]}}),
+        serde_json::json!({"name": "hifz_save", "description": "Save an insight, decision, or pattern to long-term memory (project-scoped)", "inputSchema": {"type": "object", "properties": {"title": {"type": "string"}, "content": {"type": "string"}, "project": {"type": "string", "description": "Project name (defaults to 'global' if omitted)"}, "category": {"type": "string", "enum": ["pattern", "preference", "architecture", "bug", "workflow", "fact"]}, "keywords": {"type": "array", "items": {"type": "string"}}, "files": {"type": "array", "items": {"type": "string"}}, "session_id": {"type": "string", "description": "Session ID for provenance tracking"}}, "required": ["title", "content"]}}),
+        serde_json::json!({"name": "hifz_search", "description": "Hybrid semantic + keyword search with RRF fusion and graph expansion (optionally project-scoped)", "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}, "limit": {"type": "integer", "default": 10}, "project": {"type": "string"}, "session_id": {"type": "string", "description": "Session ID for provenance tracking"}}, "required": ["query"]}}),
         serde_json::json!({"name": "hifz_sessions", "description": "List recent sessions", "inputSchema": {"type": "object", "properties": {"limit": {"type": "integer", "default": 20}}}}),
         serde_json::json!({"name": "hifz_digest", "description": "Get project intelligence — top keywords, files, and stats", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}}}}),
         serde_json::json!({"name": "hifz_timeline", "description": "Chronological observations", "inputSchema": {"type": "object", "properties": {"session_id": {"type": "string"}, "limit": {"type": "integer", "default": 50}}}}),
@@ -287,6 +302,7 @@ fn tool_defs() -> Vec<serde_json::Value> {
         serde_json::json!({"name": "hifz_current_plan", "description": "Get the currently active plan for this project. Returns null if no active plan.", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}}}}),
         serde_json::json!({"name": "hifz_plans", "description": "List plans for a project. Filter by status (active, completed, abandoned, all).", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "status": {"type": "string", "enum": ["active", "completed", "abandoned", "all"], "default": "all"}, "limit": {"type": "integer", "default": 10}}}}),
         serde_json::json!({"name": "hifz_complete_plan", "description": "Mark the current active plan as completed.", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}}}}),
-        serde_json::json!({"name": "hifz_activate_plan", "description": "Activate a plan for this session. Adds plan title to core memory goals and files to watchlist. The plan will then be injected into context.", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "plan_id": {"type": "string", "description": "Optional. If omitted, activates the most recent active plan."}}}}),
+        serde_json::json!({"name": "hifz_activate_plan", "description": "Activate a plan for this session. Adds plan title to core memory goals and files to watchlist. The plan will then be injected into context.", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "plan_id": {"type": "string", "description": "Optional. If omitted, activates the most recent active plan."}, "session_id": {"type": "string", "description": "Session ID for provenance tracking"}}}}),
+        serde_json::json!({"name": "hifz_trace", "description": "Trace the knowledge graph from a starting node. Returns nodes and edges showing provenance, similarity, and causal relationships.", "inputSchema": {"type": "object", "properties": {"id": {"type": "string", "description": "Starting node ID (e.g. 'memory:abc', 'run:xyz')"}, "direction": {"type": "string", "enum": ["forward", "backward", "both"], "default": "both"}, "relations": {"type": "array", "items": {"type": "string"}, "description": "Filter to specific relation types"}, "max_hops": {"type": "integer", "default": 2}}, "required": ["id"]}}),
     ]
 }

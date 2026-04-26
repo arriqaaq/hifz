@@ -15,6 +15,7 @@ async function main() {
 		return;
 	}
 	const toolName = data.tool_name;
+	const sessionId = data.session_id || "";
 	if (!toolName) return;
 	if (!["Edit", "Write", "Read", "Glob", "Grep"].includes(toolName)) return;
 
@@ -38,7 +39,7 @@ async function main() {
 		const res = await fetch(`${REST_URL}/api/v1/search/agentic`, {
 			method: "POST",
 			headers: HEADERS,
-			body: JSON.stringify({ query, limit: 5 }),
+			body: JSON.stringify({ query, limit: 5, sessionId }),
 			signal: AbortSignal.timeout(2000)
 		});
 		if (!res.ok) return;

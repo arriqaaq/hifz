@@ -20,7 +20,7 @@ pub struct SearchConfig {
     pub skip_vector: bool,
     /// Skip the `strength · recency · access` Rust-side re-ranking (RRF scores passed through).
     pub skip_recency_access: bool,
-    /// Skip 1-hop `memory_link` expansion.
+    /// Skip graph edge expansion.
     pub skip_graph: bool,
     /// Skip the session/identity-based diversification pass entirely.
     pub skip_diversify: bool,
@@ -195,9 +195,8 @@ pub async fn search_hybrid_with_config(
     Ok(results)
 }
 
-/// 1-hop graph expansion in-place. Seeds are existing memory results; their
-/// outgoing memory_link edges pull in neighbours that may not have hit the vector
-/// or BM25 branches directly but are graph-close to something that did.
+/// Graph expansion in-place. Seeds are existing memory results; edges pull in
+/// neighbours that may not have hit the vector or BM25 branches directly.
 async fn expand_from_graph(db: &Surreal<Db>, results: &mut Vec<SearchResult>, limit: usize) {
     let seed_by_id: HashMap<surrealdb::types::RecordId, f64> = results
         .iter()
@@ -209,7 +208,14 @@ async fn expand_from_graph(db: &Surreal<Db>, results: &mut Vec<SearchResult>, li
     }
 
     let seed_ids: Vec<_> = seed_by_id.keys().cloned().collect();
-    let edges = match link::expand_neighbours(db, &seed_ids).await {
+    let config = link::GraphExpandConfig {
+        max_hops: 2,
+        relations: Some(vec!["similar_to".into(), "elaborates".into()]),
+        dampening: 0.5,
+        direction: link::Direction::Outgoing,
+        ..Default::default()
+    };
+    let edges = match link::expand_graph(db, &seed_ids, &config).await {
         Ok(e) => e,
         Err(err) => {
             tracing::warn!("graph expansion failed: {err}");
@@ -220,7 +226,6 @@ async fn expand_from_graph(db: &Surreal<Db>, results: &mut Vec<SearchResult>, li
         return;
     }
 
-    // Collect neighbour ids we haven't already surfaced.
     #[allow(clippy::mutable_key_type)]
     let already: std::collections::HashSet<_> =
         results.iter().filter_map(|r| r.id.clone()).collect();
@@ -233,7 +238,6 @@ async fn expand_from_graph(db: &Surreal<Db>, results: &mut Vec<SearchResult>, li
         return;
     }
 
-    // Fetch neighbour rows in one query, join with edges in Rust.
     #[derive(Debug, SurrealValue)]
     struct NRow {
         id: Option<surrealdb::types::RecordId>,
@@ -267,10 +271,9 @@ async fn expand_from_graph(db: &Surreal<Db>, results: &mut Vec<SearchResult>, li
         .filter_map(|r| r.id.clone().map(|id| (id, r)))
         .collect();
 
-    // Combine: neighbour_score = seed_score * 0.5 * edge.score (dampened hop).
-    // Keep the best combined score if multiple edges reach the same neighbour.
     #[allow(clippy::mutable_key_type)]
-    let mut best_for_neighbour: HashMap<surrealdb::types::RecordId, (f64, String)> = HashMap::new();
+    let mut best_for_neighbour: HashMap<surrealdb::types::RecordId, (f64, String, String)> =
+        HashMap::new();
     for e in &edges {
         if already.contains(&e.to) {
             continue;
@@ -279,15 +282,17 @@ async fn expand_from_graph(db: &Surreal<Db>, results: &mut Vec<SearchResult>, li
             continue;
         };
         let combined = seed_score * 0.5 * e.score;
-        let entry = best_for_neighbour
-            .entry(e.to.clone())
-            .or_insert((combined, e.via.clone()));
+        let entry = best_for_neighbour.entry(e.to.clone()).or_insert((
+            combined,
+            e.relation.clone(),
+            e.via.clone(),
+        ));
         if combined > entry.0 {
-            *entry = (combined, e.via.clone());
+            *entry = (combined, e.relation.clone(), e.via.clone());
         }
     }
 
-    for (nid, (score, via)) in best_for_neighbour {
+    for (nid, (score, relation, via)) in best_for_neighbour {
         let Some(row) = row_by_id.get(&nid) else {
             continue;
         };
@@ -300,14 +305,14 @@ async fn expand_from_graph(db: &Surreal<Db>, results: &mut Vec<SearchResult>, li
             session_id: None,
             title: row.title.clone().unwrap_or_default(),
             obs_type: format!(
-                "memory:{}@via:{via}",
+                "memory:{}@{relation}:{via}",
                 row.category.clone().unwrap_or_default()
             ),
             narrative: row.content.clone().unwrap_or_default(),
             timestamp: created,
             importance: (strength * 10.0) as i64,
             score: Some(final_score),
-            is_neighbor: false,
+            is_neighbor: true,
         });
     }
 

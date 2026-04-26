@@ -109,6 +109,7 @@ pub async fn serve(
             "/memories/{id}/links",
             axum::routing::get(api::memory_links),
         )
+        .route("/trace", axum::routing::post(api::trace_graph))
         .route("/consolidate", axum::routing::post(api::consolidate))
         .route("/forget-gc", axum::routing::post(api::forget_gc))
         .route("/export", axum::routing::get(api::export));

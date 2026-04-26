@@ -60,14 +60,14 @@ struct NeighbourUpdate {
 #[derive(Debug, Deserialize)]
 struct LinkToNew {
     create: bool,
-    #[serde(default = "default_via")]
-    via: String,
+    #[serde(default = "default_relation")]
+    relation: String,
     #[serde(default = "default_score")]
     score: f64,
 }
 
-fn default_via() -> String {
-    "semantic".to_string()
+fn default_relation() -> String {
+    "similar_to".to_string()
 }
 fn default_score() -> f64 {
     0.5
@@ -107,8 +107,16 @@ pub async fn evolve_one(
         return Ok(EvolveReport::default());
     };
 
-    // Gather neighbours via the memory_link edge (already populated by link.rs).
-    let edges = link::expand_neighbours(db, &[memory_id.clone()]).await?;
+    let edges = link::expand_graph(
+        db,
+        &[memory_id.clone()],
+        &link::GraphExpandConfig {
+            max_hops: 1,
+            direction: link::Direction::Outgoing,
+            ..Default::default()
+        },
+    )
+    .await?;
     let mut neighbour_ids: Vec<RecordId> = edges.iter().map(|e| e.to.clone()).collect();
     neighbour_ids.sort_by_key(|r| format!("{r:?}"));
     neighbour_ids.dedup_by_key(|r| format!("{r:?}"));
@@ -225,7 +233,12 @@ async fn apply_updates(
         if let Some(ltn) = &upd.link_to_new {
             if ltn.create {
                 let score = ltn.score.clamp(0.0, 1.0);
-                link::upsert_link(db, &rid, new_id, &ltn.via, score).await?;
+                let relation = if ltn.relation.is_empty() {
+                    "similar_to"
+                } else {
+                    &ltn.relation
+                };
+                link::upsert_edge(db, &rid, new_id, relation, "llm", score).await?;
                 report.links_added += 1;
             }
         }
@@ -340,12 +353,15 @@ Output STRICT JSON (no prose, no code fences). Schema:
       "keywords_add": [str], "keywords_remove": [str],
       "tags_add": [str],     "tags_remove": [str],
       "context_rewrite": str | null,
-      "link_to_new": { "create": true, "via": "semantic", "score": 0.0..1.0 } | null,
+      "link_to_new": { "create": true, "relation": "similar_to|elaborates|contradicts|supports|depends_on|alternative_to", "score": 0.0..1.0 } | null,
       "supersedes_new": false,
       "superseded_by_new": false
     }
   ]
 }
+
+For link_to_new, choose the relation: similar_to (default), elaborates, contradicts,
+supports, depends_on, alternative_to.
 
 Only reference ids that appeared in NEIGHBOURS. Keep keyword/tag additions short
 (3-6 items) and lower-case. A context_rewrite should be a one-line justification

@@ -103,6 +103,36 @@ pub async fn record_commit(
         return Ok(None);
     };
 
+    // Causal edge: commit --generated_by--> run
+    if let Some(ref rid) = run_id {
+        if let Err(e) = crate::link::upsert_edge(db, cid, rid, "generated_by", "system", 1.0).await
+        {
+            tracing::warn!("commit->run generated_by edge failed: {e}");
+        }
+    }
+
+    // Causal edge: plan --implemented_by--> commit (if run has an active plan)
+    if let Some(ref rid) = run_id {
+        #[derive(Debug, SurrealValue)]
+        struct PlanRow {
+            plan_id: Option<RecordId>,
+        }
+        if let Ok(mut resp) = db
+            .query("SELECT plan_id FROM type::record($rid)")
+            .bind(("rid", rid.clone()))
+            .await
+        {
+            let rows: Vec<PlanRow> = resp.take(0).unwrap_or_default();
+            if let Some(pid) = rows.into_iter().next().and_then(|r| r.plan_id) {
+                if let Err(e) =
+                    crate::link::upsert_edge(db, &pid, cid, "implemented_by", "system", 1.0).await
+                {
+                    tracing::warn!("plan->commit implemented_by edge failed: {e}");
+                }
+            }
+        }
+    }
+
     // Mark the open run as committed (but don't close - work may continue)
     if let Some(ref rid) = run_id {
         let short_sha = &data.sha[..data.sha.len().min(7)];

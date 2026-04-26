@@ -294,6 +294,8 @@ pub struct SearchReq {
     pub limit: Option<usize>,
     pub mode: Option<String>,
     pub project: Option<String>,
+    #[serde(rename = "sessionId", alias = "session_id")]
+    pub session_id: Option<String>,
 }
 
 pub async fn smart_search(
@@ -343,7 +345,29 @@ pub async fn search_agentic(
         crate::search::search_hybrid(&state.db, &state.embedder, &body.query, limit, project).await;
 
     match results {
-        Ok(r) => Json(serde_json::json!({"results": r, "count": r.len()})),
+        Ok(r) => {
+            // Track recalled memories in the run's context trail
+            if let Some(ref sid) = body.session_id {
+                if let Ok(Some(run_id)) = crate::run::find_open(&state.db, sid).await {
+                    let mem_hits: Vec<(surrealdb::types::RecordId, f64)> = r
+                        .iter()
+                        .filter(|sr| sr.obs_type.starts_with("memory:"))
+                        .filter_map(|sr| Some((sr.id.clone()?, sr.score.unwrap_or(0.0))))
+                        .collect();
+                    if !mem_hits.is_empty() {
+                        let mem_ids: Vec<_> = mem_hits.iter().map(|(id, _)| id.clone()).collect();
+                        let _ = crate::run::append_recalled(&state.db, &run_id, &mem_ids).await;
+                        for (mid, score) in &mem_hits {
+                            let _ = crate::link::upsert_edge(
+                                &state.db, mid, &run_id, "informed", "system", *score,
+                            )
+                            .await;
+                        }
+                    }
+                }
+            }
+            Json(serde_json::json!({"results": r, "count": r.len()}))
+        }
         Err(e) => Json(serde_json::json!({"error": e.to_string()})),
     }
 }
@@ -358,6 +382,8 @@ pub struct RememberReq {
     pub keywords: Option<Vec<String>>,
     pub files: Option<Vec<String>>,
     pub project: Option<String>,
+    #[serde(rename = "sessionId", alias = "session_id")]
+    pub session_id: Option<String>,
 }
 
 pub async fn remember(
@@ -378,6 +404,7 @@ pub async fn remember(
         &body.content,
         &keywords,
         &files,
+        body.session_id.as_deref(),
     )
     .await;
 
@@ -765,7 +792,7 @@ pub async fn memory_links(
         .db
         .query(
             "SELECT out.id AS id, out.title AS title, out.category AS category, \
-             score, via FROM memory_link WHERE in = type::record($id)",
+             relation, score, via FROM edge WHERE in = type::record($id)",
         )
         .bind(("id", memory_id))
         .await
@@ -776,6 +803,28 @@ pub async fn memory_links(
 
     let links: Vec<serde_json::Value> = resp.take(0).unwrap_or_default();
     Json(serde_json::json!({"links": links, "count": links.len()}))
+}
+
+// --- Trace (graph traversal) ---
+
+#[derive(Deserialize)]
+pub struct TraceReq {
+    pub id: String,
+    pub direction: Option<String>,
+    pub relations: Option<Vec<String>>,
+    pub max_hops: Option<usize>,
+}
+
+pub async fn trace_graph(
+    State(state): State<AppState>,
+    Json(body): Json<TraceReq>,
+) -> Json<serde_json::Value> {
+    let direction = body.direction.as_deref().unwrap_or("both");
+    let max_hops = body.max_hops.unwrap_or(2);
+    match crate::trace::trace(&state.db, &body.id, direction, body.relations, max_hops).await {
+        Ok(result) => Json(serde_json::to_value(result).unwrap_or_default()),
+        Err(e) => Json(serde_json::json!({"error": e.to_string()})),
+    }
 }
 
 // --- Digest (project intelligence) ---
@@ -956,13 +1005,13 @@ pub async fn commit(
     Json(body): Json<CommitReq>,
 ) -> Json<serde_json::Value> {
     let session_rid = if let Some(ref sid) = body.session_id {
-        resolve_session_rid(&state, sid).await
+        crate::run::resolve_session(&state.db, sid).await
     } else {
         None
     };
 
     let run_rid = if let Some(ref sid) = body.session_id {
-        resolve_open_run(&state, sid).await
+        crate::run::find_open(&state.db, sid).await.ok().flatten()
     } else {
         None
     };
@@ -1106,48 +1155,6 @@ pub async fn commit_diff(
     }
 }
 
-async fn resolve_session_rid(
-    state: &AppState,
-    session_id: &str,
-) -> Option<surrealdb::types::RecordId> {
-    #[derive(surrealdb::types::SurrealValue, Debug)]
-    struct Row {
-        id: Option<surrealdb::types::RecordId>,
-    }
-    let sid = format!("session:{session_id}");
-    let mut resp = state
-        .db
-        .query("SELECT id FROM type::record($sid)")
-        .bind(("sid", sid))
-        .await
-        .ok()?;
-    let rows: Vec<Row> = resp.take(0).ok()?;
-    rows.into_iter().next().and_then(|r| r.id)
-}
-
-async fn resolve_open_run(
-    state: &AppState,
-    session_id: &str,
-) -> Option<surrealdb::types::RecordId> {
-    let sid_rid = resolve_session_rid(state, session_id).await?;
-    #[derive(surrealdb::types::SurrealValue, Debug)]
-    struct Row {
-        id: Option<surrealdb::types::RecordId>,
-    }
-    let mut resp = state
-        .db
-        .query(
-            "SELECT id, started_at FROM run \
-             WHERE session_id = $sid AND ended_at IS NONE \
-             ORDER BY started_at DESC LIMIT 1",
-        )
-        .bind(("sid", sid_rid))
-        .await
-        .ok()?;
-    let rows: Vec<Row> = resp.take(0).ok()?;
-    rows.into_iter().next().and_then(|r| r.id)
-}
-
 // --- Plans ---
 
 pub async fn plan_upsert(
@@ -1222,13 +1229,22 @@ pub async fn plan_abandon(
 pub struct PlanActivateReq {
     pub project: String,
     pub plan_id: Option<String>,
+    #[serde(rename = "sessionId", alias = "session_id")]
+    pub session_id: Option<String>,
 }
 
 pub async fn plan_activate(
     State(state): State<AppState>,
     Json(body): Json<PlanActivateReq>,
 ) -> Json<serde_json::Value> {
-    match crate::plan::activate(&state.db, &body.project, body.plan_id.as_deref()).await {
+    match crate::plan::activate(
+        &state.db,
+        &body.project,
+        body.plan_id.as_deref(),
+        body.session_id.as_deref(),
+    )
+    .await
+    {
         Ok(Some(plan)) => Json(serde_json::json!({
             "status": "ok",
             "plan": serde_json::to_value(plan).unwrap_or_default()

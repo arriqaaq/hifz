@@ -13,17 +13,17 @@ Turn hifz from log-with-search into a system whose injected context the LLM cons
 | **A-MEM** ([arxiv:2502.12110](https://arxiv.org/pdf/2502.12110)) | Memory Evolution: on new-memory write, LLM mutates *neighbours'* tags/context/links. Zettelkasten-style graph. | Always-on LLM in the write path — we make it opt-in. |
 | **Mem0** ([arxiv:2504.19413](https://arxiv.org/pdf/2504.19413)) | BM25 + vector + graph RRF; recency decay `exp(-age/30)`; access reinforcement `+0.1 per retrieval, cap +2.0`. | Their proprietary orchestrator; we use SurrealDB RRF. |
 | **MemGPT** ([arxiv:2310.08560](https://arxiv.org/abs/2310.08560)) | "Core memory" tier always prepended. | OS-style paging between tiers — hifz doesn't need it given SurrealDB is local. |
-| **MIRIX** ([Agent-Memory-Paper-List](https://github.com/Shichun-Liu/Agent-Memory-Paper-List)) | Typed memory modules (semantic / procedural / episodic) — hifz already has `semantic_hifz`, `procedural_hifz`; we add `run` for task-scoped trajectories (episodic layer). | Full multimodal / resource / knowledge-vault tiers. |
+| **MIRIX** ([Agent-Memory-Paper-List](https://github.com/Shichun-Liu/Agent-Memory-Paper-List)) | Typed memory modules (semantic / procedural / episodic) — hifz has `semantic_memory`, `procedural_memory`, and `run` for task-scoped trajectories (episodic layer). | Full multimodal / resource / knowledge-vault tiers. |
 | **Position: Episodic Memory is Missing** ([arxiv:2502.06975](https://arxiv.org/pdf/2502.06975)) | Task-scoped **run** as the unit of replay (paper: “episode”). | Separate episodic index per agent persona. |
 | **MemoryBank** | Ebbinghaus forgetting curve — informs the `exp(-age/30)` default. | |
 
 ## B. Design tradeoffs
 
 - **Deterministic graph vs LLM-proposed links.** Base graph is KNN + set-overlap. LLM evolution layers on top as opt-in. Retrieval doesn't require creativity; it must be fast and free. The LLM earns its cost rewriting neighbour metadata, not deciding edges.
-- **Per-via edge tables vs single `mem_link` with `via` field.** Single table for join simplicity; `UNIQUE` on `RELATE` only covers `(in, out)`, so per-`via` uniqueness is enforced in Rust. Four-table alternative would give native uniqueness at 4× schema cost.
+- **Per-via edge tables vs single `edge` with `via` field.** Single table for join simplicity; `UNIQUE` on `RELATE` only covers `(in, out)`, so per-`via` uniqueness is enforced in Rust. Four-table alternative would give native uniqueness at 4× schema cost.
 - **Rust-side scoring.** Forced by the fact that SurrealDB has neither `math::exp` nor `time::diff`. Side benefit: scoring experiments don't require schema migrations.
 - **Async evolution.** Write path commits deterministically, evolution runs in a background queue after the dedup window. Write latency stays local. Evolution output is JSON-capped so misbehaving prompts can't corrupt the graph.
-- **`RELATE UNIQUE` limitation** (`(in, out)` only) is the biggest footgun — documented, with Rust dedup as the mitigation.
+- **`RELATE UNIQUE` limitation** (`(in, out)` only, affects `edge` table) is the biggest footgun — documented, with Rust dedup as the mitigation.
 - **Threshold values:** MMR 0.85, KNN cosine-distance 0.25 (`via='embedding'`), Jaccard 0.3 (concept/file). RRF k=10 (literature default is 60; sharper curve suits personal-memory corpora). Override via `SearchConfig::rrf_k`.
 
 ## C. Verified SurrealDB syntax reference
@@ -51,9 +51,9 @@ All patterns were verified against local copies of the SurrealDB source and the 
 
 ## D. Resolved design questions
 
-1. **Memory scoping — project-scoped.** `project: string` is added to `hifz`, `semantic_hifz`, `procedural_hifz`, `hifz_core`, `run`, `mem_link`, `entity`. All search and context queries filter on `project`. Existing rows backfill from `session_ids[0].project`.
+1. **Memory scoping — project-scoped.** `project: string` is present on `memory`, `semantic_memory`, `procedural_memory`, `core_memory`, `run`, `edge`, `entity`. All search and context queries filter on `project`. Existing rows backfill from `session_ids[0].project`.
 2. **Embedding input — richer text.** We embed `title + "\n" + content + "\nconcepts: " + concepts + "\nfiles: " + files`. Ablations can compare against title+content only.
-3. **Evolution scope — curated tiers only.** Evolution runs on `hifz`, `semantic_hifz`, `procedural_hifz`. Observations stay ephemeral — evolving them would be cost-prohibitive with no retrieval benefit, and it matches A-MEM's intent (curated notes, not raw traces).
+3. **Evolution scope — curated tiers only.** Evolution runs on `memory`, `semantic_memory`, `procedural_memory`. Observations stay ephemeral — evolving them would be cost-prohibitive with no retrieval benefit, and it matches A-MEM's intent (curated notes, not raw traces).
 
 ## E. LLM-as-reranker: the debate
 

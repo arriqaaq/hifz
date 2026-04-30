@@ -70,6 +70,7 @@ DEFINE FIELD IF NOT EXISTS files        ON observation TYPE array<string>;
 DEFINE FIELD IF NOT EXISTS importance   ON observation TYPE int;
 DEFINE FIELD IF NOT EXISTS confidence   ON observation TYPE option<float>;
 DEFINE FIELD IF NOT EXISTS embedding    ON observation TYPE option<array<float>>;
+DEFINE FIELD IF NOT EXISTS metadata     ON observation TYPE option<object>;
 
 DEFINE ANALYZER IF NOT EXISTS obs_analyzer TOKENIZERS blank, class
   FILTERS lowercase, snowball(english);
@@ -82,6 +83,7 @@ DEFINE INDEX IF NOT EXISTS obs_facts_ft     ON TABLE observation
 DEFINE INDEX IF NOT EXISTS obs_vec          ON TABLE observation
   FIELDS embedding HNSW DIMENSION 384 DIST COSINE;
 DEFINE INDEX IF NOT EXISTS obs_session      ON TABLE observation FIELDS session_id;
+DEFINE INDEX IF NOT EXISTS obs_type         ON TABLE observation FIELDS obs_type;
 
 DEFINE TABLE IF NOT EXISTS memory SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS project          ON memory TYPE string DEFAULT 'global';
@@ -100,6 +102,7 @@ DEFINE FIELD IF NOT EXISTS version          ON memory TYPE int DEFAULT 1;
 DEFINE FIELD IF NOT EXISTS parent_id        ON memory TYPE option<record<memory>>;
 DEFINE FIELD IF NOT EXISTS supersedes       ON memory TYPE option<array<record<memory>>>;
 DEFINE FIELD IF NOT EXISTS is_latest        ON memory TYPE bool DEFAULT true;
+DEFINE FIELD IF NOT EXISTS pinned           ON memory TYPE bool DEFAULT false;
 DEFINE FIELD IF NOT EXISTS forget_after     ON memory TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS created_at       ON memory TYPE string;
 DEFINE FIELD IF NOT EXISTS updated_at       ON memory TYPE string;
@@ -111,17 +114,6 @@ DEFINE INDEX IF NOT EXISTS mem_vec          ON TABLE memory
   FIELDS embedding HNSW DIMENSION 384 DIST COSINE;
 DEFINE INDEX IF NOT EXISTS mem_project      ON TABLE memory FIELDS project;
 DEFINE INDEX IF NOT EXISTS mem_latest       ON TABLE memory FIELDS is_latest;
-
-DEFINE TABLE IF NOT EXISTS summary SCHEMAFULL;
-DEFINE FIELD IF NOT EXISTS session_id        ON summary TYPE record<session>;
-DEFINE FIELD IF NOT EXISTS project           ON summary TYPE string;
-DEFINE FIELD IF NOT EXISTS created_at        ON summary TYPE string;
-DEFINE FIELD IF NOT EXISTS title             ON summary TYPE string;
-DEFINE FIELD IF NOT EXISTS narrative         ON summary TYPE string;
-DEFINE FIELD IF NOT EXISTS key_decisions     ON summary TYPE array<string>;
-DEFINE FIELD IF NOT EXISTS files_modified    ON summary TYPE array<string>;
-DEFINE FIELD IF NOT EXISTS keywords          ON summary TYPE array<string>;
-DEFINE FIELD IF NOT EXISTS observation_count ON summary TYPE int;
 
 -- === CONSOLIDATION TIERS ===
 
@@ -168,8 +160,6 @@ DEFINE FIELD IF NOT EXISTS outcome         ON run TYPE string DEFAULT 'unknown';
 DEFINE FIELD IF NOT EXISTS observation_ids ON run TYPE array<record<observation>> DEFAULT [];
 DEFINE FIELD IF NOT EXISTS lesson          ON run TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS recalled_ids    ON run TYPE array<record<memory>> DEFAULT [];
-DEFINE FIELD IF NOT EXISTS commit_id       ON run TYPE option<record<commit>>;
-DEFINE FIELD IF NOT EXISTS plan_id         ON run TYPE option<record<plan>>;
 DEFINE INDEX IF NOT EXISTS run_project ON TABLE run FIELDS project;
 DEFINE INDEX IF NOT EXISTS run_session ON TABLE run FIELDS session_id;
 DEFINE ANALYZER IF NOT EXISTS run_analyzer TOKENIZERS blank, class
@@ -193,42 +183,6 @@ DEFINE INDEX IF NOT EXISTS edge_relation ON TABLE edge FIELDS relation;
 DEFINE INDEX IF NOT EXISTS edge_via      ON TABLE edge FIELDS via;
 DEFINE INDEX IF NOT EXISTS edge_in       ON TABLE edge FIELDS in;
 DEFINE INDEX IF NOT EXISTS edge_out      ON TABLE edge FIELDS out;
-
--- === COMMIT TRACKING ===
-DEFINE TABLE IF NOT EXISTS commit SCHEMAFULL;
-DEFINE FIELD IF NOT EXISTS sha            ON commit TYPE string;
-DEFINE FIELD IF NOT EXISTS message        ON commit TYPE string;
-DEFINE FIELD IF NOT EXISTS author         ON commit TYPE string;
-DEFINE FIELD IF NOT EXISTS branch         ON commit TYPE string;
-DEFINE FIELD IF NOT EXISTS project        ON commit TYPE string;
-DEFINE FIELD IF NOT EXISTS files_changed  ON commit TYPE array<string> DEFAULT [];
-DEFINE FIELD IF NOT EXISTS insertions     ON commit TYPE option<int>;
-DEFINE FIELD IF NOT EXISTS deletions      ON commit TYPE option<int>;
-DEFINE FIELD IF NOT EXISTS is_amend       ON commit TYPE bool DEFAULT false;
-DEFINE FIELD IF NOT EXISTS session_id     ON commit TYPE option<record<session>>;
-DEFINE FIELD IF NOT EXISTS run_id         ON commit TYPE option<record<run>>;
-DEFINE FIELD IF NOT EXISTS plan_id        ON commit TYPE option<record<plan>>;
-DEFINE FIELD IF NOT EXISTS timestamp      ON commit TYPE string;
-DEFINE FIELD IF NOT EXISTS created_at     ON commit TYPE string;
-DEFINE INDEX IF NOT EXISTS commit_sha     ON TABLE commit FIELDS sha UNIQUE;
-DEFINE INDEX IF NOT EXISTS commit_project ON TABLE commit FIELDS project;
-
--- === PLAN TRACKING ===
-DEFINE TABLE IF NOT EXISTS plan SCHEMAFULL;
-DEFINE FIELD IF NOT EXISTS file_path      ON plan TYPE string;
-DEFINE FIELD IF NOT EXISTS title          ON plan TYPE string;
-DEFINE FIELD IF NOT EXISTS content        ON plan TYPE string;
-DEFINE FIELD IF NOT EXISTS status         ON plan TYPE string DEFAULT 'active';
-DEFINE FIELD IF NOT EXISTS project        ON plan TYPE string;
-DEFINE FIELD IF NOT EXISTS keywords       ON plan TYPE array<string> DEFAULT [];
-DEFINE FIELD IF NOT EXISTS files          ON plan TYPE array<string> DEFAULT [];
-DEFINE FIELD IF NOT EXISTS session_id     ON plan TYPE option<record<session>>;
-DEFINE FIELD IF NOT EXISTS commit_id      ON plan TYPE option<record<commit>>;
-DEFINE FIELD IF NOT EXISTS created_at     ON plan TYPE string;
-DEFINE FIELD IF NOT EXISTS completed_at   ON plan TYPE option<string>;
-DEFINE INDEX IF NOT EXISTS plan_project   ON TABLE plan FIELDS project;
-DEFINE INDEX IF NOT EXISTS plan_status    ON TABLE plan FIELDS status;
-DEFINE INDEX IF NOT EXISTS plan_file_path ON TABLE plan FIELDS file_path UNIQUE;
 
 DEFINE TABLE IF NOT EXISTS procedural_memory SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS name              ON procedural_memory TYPE string;

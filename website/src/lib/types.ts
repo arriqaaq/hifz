@@ -33,6 +33,7 @@ export interface Observation {
   files: string[];
   importance: number;
   confidence: number | null;
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface Memory {
@@ -52,6 +53,7 @@ export interface Memory {
   parent_id: string | null;
   supersedes: string[] | null;
   is_latest: boolean;
+  pinned: boolean;
   forget_after: string | null;
   created_at: string;
   updated_at: string;
@@ -78,8 +80,6 @@ export interface Run {
   observation_ids: string[];
   recalled_ids?: string[];
   lesson: string | null;
-  commit_id?: string | RecordId | null;
-  plan_id?: string | RecordId | null;
 }
 
 export interface RunDetail {
@@ -92,18 +92,15 @@ export interface RecordId {
   key: { String?: string; Number?: number } | string;
 }
 
-export interface Commit {
-  sha: string;
-  message: string;
-  author: string;
-  branch: string;
-  project: string;
-  files_changed: string[];
-  insertions: number | null;
-  deletions: number | null;
-  session_id: string | null;
-  run_id: string | null;
-  timestamp: string;
+// Commits are stored as observations (obs_type='commit_made').
+// sha, branch, message, files are in the metadata field.
+export interface Commit extends Observation {
+  metadata: {
+    sha: string;
+    branch: string;
+    message: string;
+    files: string[];
+  };
 }
 
 export interface KeywordFreq {

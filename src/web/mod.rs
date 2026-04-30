@@ -130,15 +130,9 @@ pub async fn serve(
         .route("/timeline", axum::routing::get(api::timeline))
         .route("/runs", axum::routing::post(api::runs_search))
         .route("/runs/{id}", axum::routing::get(api::run_detail))
-        .route(
-            "/commits",
-            axum::routing::post(api::commit).get(api::commits_list),
-        )
+        .route("/commits", axum::routing::get(api::commits_list))
         .route("/commits/{sha}/diff", axum::routing::get(api::commit_diff))
-        .route(
-            "/plans",
-            axum::routing::post(api::plan_upsert).get(api::plans_list),
-        )
+        .route("/plans", axum::routing::get(api::plans_list))
         .route("/plans/current", axum::routing::get(api::plan_current))
         .route("/plans/activate", axum::routing::post(api::plan_activate))
         .route(

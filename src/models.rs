@@ -35,6 +35,7 @@ pub struct Observation {
     pub importance: i64,
     pub confidence: Option<f64>,
     pub embedding: Option<Vec<f32>>,
+    pub metadata: Option<serde_json::Value>,
 }
 
 // --- Raw observation from hooks (before compression) ---
@@ -70,6 +71,7 @@ pub struct Memory {
     pub parent_id: Option<surrealdb::types::RecordId>,
     pub supersedes: Option<Vec<surrealdb::types::RecordId>>,
     pub is_latest: bool,
+    pub pinned: bool,
     pub forget_after: Option<String>,
     pub created_at: String,
     pub updated_at: String,
@@ -88,27 +90,6 @@ pub struct Entity {
     pub count: i64,
 }
 
-// --- Commit (git commit tracking) ---
-
-#[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
-pub struct Commit {
-    pub id: Option<surrealdb::types::RecordId>,
-    pub sha: String,
-    pub message: String,
-    pub author: String,
-    pub branch: String,
-    pub project: String,
-    pub files_changed: Vec<String>,
-    pub insertions: Option<i64>,
-    pub deletions: Option<i64>,
-    pub is_amend: bool,
-    pub session_id: Option<surrealdb::types::RecordId>,
-    pub run_id: Option<surrealdb::types::RecordId>,
-    pub plan_id: Option<surrealdb::types::RecordId>,
-    pub timestamp: String,
-    pub created_at: String,
-}
-
 // --- Run ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
@@ -124,26 +105,6 @@ pub struct Run {
     pub observation_ids: Vec<surrealdb::types::RecordId>,
     pub lesson: Option<String>,
     pub recalled_ids: Vec<surrealdb::types::RecordId>,
-    pub commit_id: Option<surrealdb::types::RecordId>,
-    pub plan_id: Option<surrealdb::types::RecordId>,
-}
-
-// --- Plan ---
-
-#[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
-pub struct Plan {
-    pub id: Option<surrealdb::types::RecordId>,
-    pub file_path: String,
-    pub title: String,
-    pub content: String,
-    pub status: String,
-    pub project: String,
-    pub keywords: Vec<String>,
-    pub files: Vec<String>,
-    pub session_id: Option<surrealdb::types::RecordId>,
-    pub commit_id: Option<surrealdb::types::RecordId>,
-    pub created_at: String,
-    pub completed_at: Option<String>,
 }
 
 // --- Core memory (per-project always-on block) ---
@@ -157,22 +118,6 @@ pub struct CoreMemory {
     pub invariants: Vec<String>,
     pub watchlist: Vec<String>,
     pub updated_at: String,
-}
-
-// --- Session Summary ---
-
-#[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
-pub struct SessionSummary {
-    pub id: Option<surrealdb::types::RecordId>,
-    pub session_id: Option<surrealdb::types::RecordId>,
-    pub project: String,
-    pub created_at: String,
-    pub title: String,
-    pub narrative: String,
-    pub key_decisions: Vec<String>,
-    pub files_modified: Vec<String>,
-    pub keywords: Vec<String>,
-    pub observation_count: i64,
 }
 
 // --- Consolidation Tiers ---
@@ -274,6 +219,9 @@ pub struct HookPayload {
     pub timestamp: String,
     #[serde(default)]
     pub source: Option<String>,
+    /// Adapter may pre-set obs_type (e.g. "commit_made"). Overrides inference.
+    #[serde(rename = "obs_type", default)]
+    pub obs_type: Option<String>,
     pub data: serde_json::Value,
 }
 
@@ -294,7 +242,6 @@ pub enum HifzEvent {
     TaskCompleted,
     SessionStop,
     SessionEnd,
-    GitCommit,
     Unknown(String),
 }
 
@@ -316,7 +263,6 @@ impl From<&str> for HifzEvent {
             "SubagentStart" | "subagent_start" => Self::SubagentStart,
             "SubagentStop" | "subagent_stop" => Self::SubagentStop,
             "Notification" | "notification" => Self::Notification,
-            "git_commit" => Self::GitCommit,
             other => Self::Unknown(other.to_string()),
         }
     }
@@ -339,6 +285,9 @@ pub const OBS_TYPES: &[&str] = &[
     "notification",
     "task",
     "compaction_summary",
+    "commit_made",
+    "plan_activated",
+    "session_summary",
     "other",
 ];
 

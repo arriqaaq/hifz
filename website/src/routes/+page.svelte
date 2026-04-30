@@ -137,11 +137,15 @@
           </thead>
           <tbody>
             {#each commits as c}
+              {@const sha = c.metadata?.sha ?? ''}
+              {@const msg = c.metadata?.message ?? c.title}
+              {@const branch = c.metadata?.branch ?? ''}
+              {@const files = c.metadata?.files ?? c.files ?? []}
               <tr>
-                <td class="mono"><a href="/commits/{c.sha}" class="row-link">{c.sha.slice(0, 8)}</a></td>
-                <td class="commit-msg">{c.message}</td>
-                <td><span class="badge badge-blue">{c.branch}</span></td>
-                <td class="mono">{c.files_changed.length}</td>
+                <td class="mono"><a href="/commits/{sha}" class="row-link">{sha.slice(0, 8)}</a></td>
+                <td class="commit-msg">{msg}</td>
+                <td><span class="badge badge-blue">{branch}</span></td>
+                <td class="mono">{files.length}</td>
               </tr>
             {/each}
           </tbody>

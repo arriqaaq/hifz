@@ -82,7 +82,7 @@ async fn find_expired_memories(db: &Surreal<Db>) -> Result<Vec<String>> {
 async fn find_contradictions(db: &Surreal<Db>) -> Result<Vec<String>> {
     // Load recent memories and check Jaccard similarity
     let mut resp = db
-        .query("SELECT id, title, content, keywords, updated_at FROM memory WHERE is_latest = true ORDER BY updated_at DESC LIMIT 100")
+        .query("SELECT id, title, content, keywords, updated_at FROM memory WHERE is_latest = true AND pinned = false ORDER BY updated_at DESC LIMIT 100")
         .await?;
     let memories: Vec<serde_json::Value> = resp.take(0)?;
 
@@ -151,7 +151,7 @@ fn jaccard_similarity(a: &str, b: &str) -> f64 {
 async fn find_weak_memories(db: &Surreal<Db>) -> Result<Vec<String>> {
     // Memories with strength decayed below 0.1
     let mut resp = db
-        .query("SELECT id FROM memory WHERE strength < 0.1 LIMIT 100")
+        .query("SELECT id FROM memory WHERE strength < 0.1 AND pinned = false LIMIT 100")
         .await?;
     let rows: Vec<serde_json::Value> = resp.take(0)?;
     Ok(rows

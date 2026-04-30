@@ -68,10 +68,13 @@ pub async fn save(
 
     // Fire deterministic link + entity generation if we recovered the new id.
     if let Some(new_id) = created.into_iter().next().and_then(|c| c.id) {
-        if let Err(e) =
-            link::generate_links(db, &new_id, project, &embedding, keywords, files).await
-        {
-            tracing::warn!("link generation failed for {new_id:?}: {e}");
+        // Plans use intentional edges (motivated, implemented_by) — skip KNN similarity links
+        if category != "plan" {
+            if let Err(e) =
+                link::generate_links(db, &new_id, project, &embedding, keywords, files).await
+            {
+                tracing::warn!("link generation failed for {new_id:?}: {e}");
+            }
         }
 
         // Entity extraction + via='entity' links.

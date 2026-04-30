@@ -1,22 +1,19 @@
 # hifz Architecture
 
-Persistent memory for Claude Code. Hooks capture what happens during a session, memories store what matters long-term, and a grounding loop ties memories to real outcomes (commits).
+Persistent memory for Claude Code. Hooks capture what happens during a session, memories store what matters long-term, and a knowledge graph ties everything together.
 
 ```mermaid
 flowchart TD
     hooks[Claude Code Hooks] --> observe[observe\ningest]
     observe --> compress[compress\nreduce]
     observe --> run[run\ntask arc]
-    run --> commit[commit\noutcome]
-    commit --> ground[ground\nsignal]
-    ground --> remember[remember\nstore]
-    remember --> link[link\nKNN + Jaccard]
+    remember[remember\nstore] --> link[link\nKNN + Jaccard]
     remember --> entities[entities\nextraction]
     remember --> evolve[evolve\nLLM, opt-in]
     evolve -.->|supersede| remember
-    link --> mem_link[(mem_link edges)]
-    entities --> mem_link
-    evolve --> mem_link
+    link --> edge[(edge graph)]
+    entities --> edge
+    evolve --> edge
 ```
 
 ```mermaid
@@ -34,11 +31,50 @@ flowchart LR
 
 ---
 
+## Two-layer ontology
+
+hifz separates **core knowledge** from **agent capture**:
+
+**Core layer** — always present:
+
+| Table | Purpose |
+|-------|---------|
+| `memory` | Curated, project-scoped long-term knowledge |
+| `edge` | Typed graph edges between memory nodes |
+| `entity` | Named things (files, symbols, concepts, errors) |
+| `core_memory` | MemGPT-style per-project singleton (identity, goals, invariants, watchlist) |
+| `semantic_memory` | Facts consolidated from sessions (tier 1 consolidation) |
+| `procedural_memory` | Workflows consolidated from observations (tier 3 consolidation) |
+
+**Agent capture layer** — optional, populated by adapter hooks:
+
+| Table | Purpose |
+|-------|---------|
+| `session` | Claude Code session lifecycle |
+| `run` | Task-scoped trajectory (prompt → completion) |
+| `observation` | Dense, ephemeral hook records |
+
+`observation` has a `metadata: option<object>` field for structured payloads and a `obs_type` string field. Notable `obs_type` values: `commit_made`, `plan_activated`, `session_summary`.
+
+`memory` has a `pinned: bool DEFAULT false` field. Plans are stored as `memory WHERE category='plan' AND pinned=true AND tags=['active']`.
+
+### Edge vocabulary
+
+Knowledge edges: `similar_to`, `elaborates`, `contradicts`, `supports`, `depends_on`, `alternative_to`, `derived_from`
+
+Provenance edges: `generated_by`, `informed`, `motivated`, `implemented_by`, `part_of`, `follows`
+
+Deterministic link edges (write-time): `embedding`, `concept`, `file`, `entity`
+
+LLM-proposed edges (opt-in): `semantic`
+
+---
+
 ## Observation Pipeline
 
 **Hook → observe → compress → store → run::append**
 
-Claude Code fires shell hooks on events: `SessionStart`, `UserPromptSubmit`, `PostToolUse`, `Stop`, `TaskCompleted`, `SessionEnd`. Each hook POSTs a JSON payload to `/hifz/observe`.
+Claude Code fires shell hooks on events: `SessionStart`, `UserPromptSubmit`, `PostToolUse`, `Stop`, `TaskCompleted`, `SessionEnd`. Each hook POSTs a JSON payload to `/api/v1/observe`.
 
 ### observe.rs
 
@@ -49,7 +85,7 @@ Entry point for all incoming data. Handles run lifecycle before dedup so lifecyc
 
 Then: dedup check (hash of session_id + tool_name + tool_input) → compression → embedding → store observation → append to open run.
 
-Git commit detection runs last: if the Bash tool output matches `[branch sha] message`, it records a commit and links it to the run.
+Git commit detection is handled by the adapter (`adapters/claude-code/scripts/post-tool-use.mjs`). When a Bash tool output matches a commit pattern, the adapter POSTs an observation with `obs_type='commit_made'` and `metadata` containing `sha`, `branch`, `message`, and `files`.
 
 ### compress.rs
 
@@ -79,7 +115,7 @@ Observations embed a compressed summary of the tool call. Memories embed richer 
 
 ### remember.rs — Creation
 
-`/hifz/remember` creates a `hifz` record with:
+`/api/v1/memories` creates a `memory` record with:
 - `version = 1`, `is_latest = true`, `strength = 1.0`
 - Embedding from title + content + concepts + files (see above)
 - Immediate link generation via `link::generate_links`
@@ -87,7 +123,7 @@ Observations embed a compressed summary of the tool call. Memories embed richer 
 
 ### link.rs — Deterministic Linking
 
-When a memory is saved, `generate_links` compares it against every existing memory in the same project via three channels. If any channel exceeds its threshold, a `mem_link` edge is created between the two memories. These edges are later used during retrieval: `search.rs` does 1-hop graph expansion from search hits, pulling in neighbors that didn't match the query directly but are graph-connected to something that did (neighbor score = seed score × 0.5 × edge score).
+When a memory is saved, `generate_links` compares it against every existing memory in the same project via three channels. If any channel exceeds its threshold, an `edge` record is created between the two memories. These edges are later used during retrieval: `search.rs` does 1-hop graph expansion from search hits, pulling in neighbors that didn't match the query directly but are graph-connected to something that did (neighbor score = seed score × 0.5 × edge score).
 
 | Channel | What it compares | Threshold | Score stored on edge |
 |---------|-----------------|-----------|---------------------|
@@ -99,7 +135,7 @@ Entity-based links (`via='entity'`) are added from `entities.rs`. Per-`via` dedu
 
 ### entities.rs — Entity Extraction
 
-Deterministic (no LLM) extraction of four entity types from observations and memories: files, concepts, functions, and identifiers. Entities are upserted into the `entity` table and feed into `mem_link` edges.
+Deterministic (no LLM) extraction of four entity types from observations and memories: files, concepts, functions, and identifiers. Entities are upserted into the `entity` table and feed into `edge` records.
 
 ### evolve.rs — LLM Evolution (opt-in)
 
@@ -107,26 +143,18 @@ Gated by `HIFZ_LLM_EVOLVE=true`. After a memory is saved, gathers up to 5 neighb
 
 - Add keywords, tags, context to the new memory
 - Update neighbor metadata
-- Create new `via='semantic'` links
+- Create new `via='semantic'` edges
 - Mark older memories as **superseded** (`is_latest = false`)
 
 Retrieval works fully without evolution — it's additive.
 
 ---
 
-## Grounding Loop
+## Grounding
 
-### ground.rs — Making Memories Mortal
+Commit grounding is handled by the adapter layer. When `post-tool-use.mjs` detects a git commit in Bash output, it records an observation with `obs_type='commit_made'` and metadata `{sha, branch, message, files}`. The server's `ground.rs` responds to these observations by strengthening memories that reference the committed files (`strength += 15%`, clamped to 1.0).
 
-Two signals connect memories to real-world outcomes:
-
-**Commit strengthens**: When a git commit touches files referenced by a memory, `strength` increases by 15% (clamped to 1.0). The commit ID is appended to `commit_ids`. This is evidence the memory led to real work.
-
-**Uncommitted decays**: When a session ends with file edits but no commit, memories referencing those uncommitted files get `forget_after = now + 60 days`. If the work was abandoned, the memory fades.
-
-### commit.rs — Commit Recording
-
-Detected from Bash tool output by `git_detect.rs`. Enriched with `git show` metadata (author, files changed, insertions/deletions). Linked to session and run. Triggers `ground::on_commit` to strengthen related memories.
+**Uncommitted decay**: When a session ends with file edits but no commit observation, memories referencing those uncommitted files get `forget_after = now + 60 days`. If the work was abandoned, the memory fades.
 
 ### forget.rs — Garbage Collection
 
@@ -165,13 +193,13 @@ MemGPT-style per-project block: identity, goals, invariants, watchlist. Always p
 
 ### consolidate.rs — Four Tiers
 
-Triggered via `POST /hifz/consolidate` (or the `hifz_consolidate` MCP tool). Tiers 1 and 3 require Ollama and are skipped if unavailable.
+Triggered via `POST /api/v1/consolidate` (or the `hifz_consolidate` MCP tool). Tiers 1 and 3 require Ollama and are skipped if unavailable.
 
 | Tier | Name | What it does | Requires LLM |
 |------|------|-------------|:---:|
-| 1 | Semantic | Merges session summaries into `semantic_hifz` facts | Yes |
+| 1 | Semantic | Merges session summaries into `semantic_memory` facts | Yes |
 | 2 | Reflect | Clusters related memories by shared concepts | No |
-| 3 | Procedural | Detects recurring action sequences from observations and extracts them as named workflows into `procedural_hifz` (trigger condition + steps). This is how hifz can automatically learn patterns like "user says X → these actions follow." | Yes |
+| 3 | Procedural | Detects recurring action sequences from observations and extracts them as named workflows into `procedural_memory` (trigger condition + steps). | Yes |
 | 4 | Decay | Exponential decay on `strength` for stale memories | No |
 
 ### Enabling LLM features
@@ -204,7 +232,7 @@ This creates an append-only version chain where only the canonical version of ea
 
 | Module | Purpose |
 |--------|---------|
-| `observe` | Hook payload ingestion, run lifecycle, commit detection |
+| `observe` | Hook payload ingestion, run lifecycle |
 | `compress` | Reduce raw payloads to structured observations |
 | `run` | Task-scoped trajectories (prompt → completion) |
 | `remember` | Memory creation with embedding + linking |
@@ -212,7 +240,6 @@ This creates an append-only version chain where only the canonical version of ea
 | `entities` | Deterministic entity extraction (no LLM) |
 | `evolve` | Opt-in LLM neighbour refinement and supersession |
 | `ground` | Commit strengthening + uncommitted decay |
-| `commit` | Git commit recording and enrichment |
 | `forget` | TTL expiry and contradiction detection |
 | `search` | Hybrid BM25 + HNSW retrieval with RRF fusion |
 | `rank` | Recency/access/strength scoring formula |
@@ -224,11 +251,9 @@ This creates an append-only version chain where only the canonical version of ea
 | `digest` | Project-level concept/file frequency summaries |
 | `dedup` | Content-hash deduplication with TTL |
 | `embed` | fastembed model initialization |
-| `git_detect` | Parse git commit from Bash tool output |
 | `db` | SurrealDB schema and connection |
 | `config` | Configuration from `~/.hifz/.env` |
 | `models` | Shared data structures |
 | `prompts` | System prompt constants for LLM features |
 | `mcp` | MCP server (thin HTTP proxy to REST) |
 | `web` | Axum REST API + static site serving |
-

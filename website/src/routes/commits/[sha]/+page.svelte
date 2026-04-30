@@ -105,28 +105,15 @@
   <div class="commit-header">
     <div class="sha-row">
       <span class="sha-label">Commit</span>
-      <span class="sha-full">{commit.sha}</span>
+      <span class="sha-full">{commit.metadata?.sha ?? sha}</span>
     </div>
-    <h2 class="commit-message">{commit.message}</h2>
+    <h2 class="commit-message">{commit.metadata?.message ?? commit.title}</h2>
   </div>
 
   <div class="meta-grid">
     <div class="meta-item">
-      <span class="meta-label">Author</span>
-      <span class="meta-value">
-        {#if commit.author}
-          <span class="author-name">{authorName(commit.author)}</span>
-          {#if authorEmail(commit.author)}
-            <span class="author-email">{authorEmail(commit.author)}</span>
-          {/if}
-        {:else}
-          —
-        {/if}
-      </span>
-    </div>
-    <div class="meta-item">
       <span class="meta-label">Branch</span>
-      <span class="meta-value"><span class="badge badge-blue">{commit.branch}</span></span>
+      <span class="meta-value"><span class="badge badge-blue">{commit.metadata?.branch ?? '—'}</span></span>
     </div>
     <div class="meta-item">
       <span class="meta-label">Project</span>
@@ -136,20 +123,11 @@
       <span class="meta-label">Date</span>
       <span class="meta-value mono">{formatDate(commit.timestamp)}</span>
     </div>
-    {#if commit.insertions != null || commit.deletions != null}
-      <div class="meta-item">
-        <span class="meta-label">Changes</span>
-        <span class="meta-value">
-          {#if commit.insertions != null}<span class="ins">+{commit.insertions}</span>{/if}
-          {#if commit.deletions != null}<span class="del">-{commit.deletions}</span>{/if}
-        </span>
-      </div>
-    {/if}
     {#if commit.session_id}
       <div class="meta-item">
         <span class="meta-label">Session</span>
         <span class="meta-value">
-          <a href="/sessions/{commit.session_id}" class="session-link">{sessionIdShort(commit.session_id)}</a>
+          <a href="/sessions/{commit.session_id}" class="session-link">{sessionIdShort(String(commit.session_id))}</a>
         </span>
       </div>
     {/if}
@@ -168,11 +146,12 @@
         </div>
       </div>
     {/each}
-  {:else if commit.files_changed.length > 0}
+  {:else if (commit.metadata?.files ?? commit.files ?? []).length > 0}
     <div class="card">
-      <div class="card-title">Files Changed ({commit.files_changed.length})</div>
+      {@const fileList = commit.metadata?.files ?? commit.files ?? []}
+      <div class="card-title">Files Changed ({fileList.length})</div>
       <ul class="file-list">
-        {#each commit.files_changed as f}
+        {#each fileList as f}
           <li class="file-item">{f}</li>
         {/each}
       </ul>

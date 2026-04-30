@@ -61,16 +61,6 @@ pub async fn append_prompt(db: &Surreal<Db>, run_id: &RecordId, prompt: &str) ->
     Ok(())
 }
 
-/// Set the plan_id on a run.
-pub async fn set_plan(db: &Surreal<Db>, run_id: &RecordId, plan_id: &RecordId) -> Result<()> {
-    db.query("UPDATE type::record($rid) SET plan_id = $pid")
-        .bind(("rid", run_id.clone()))
-        .bind(("pid", plan_id.clone()))
-        .await?
-        .check()?;
-    Ok(())
-}
-
 /// Close a run, setting `ended_at` and deriving a lesson from the
 /// highest-importance observation titles if one is not provided.
 pub async fn close(
@@ -122,83 +112,35 @@ pub async fn close(
     Ok(())
 }
 
-/// Close a run with a commit, setting commit_id and using the commit
-/// message as the lesson.
-pub async fn close_with_commit(
-    db: &Surreal<Db>,
-    run_id: &RecordId,
-    commit_id: &RecordId,
-    short_sha: &str,
-    message: &str,
-) -> Result<()> {
-    let now = chrono::Utc::now().to_rfc3339();
-    let lesson = format!("Committed {short_sha}: {message}");
-
-    db.query(
-        "UPDATE type::record($rid) SET \
-         ended_at = $now, outcome = 'committed', \
-         commit_id = $cid, lesson = $lesson",
-    )
-    .bind(("rid", run_id.clone()))
-    .bind(("now", now))
-    .bind(("cid", commit_id.clone()))
-    .bind(("lesson", lesson))
-    .await?
-    .check()?;
-    Ok(())
-}
-
-/// Mark a run as committed without closing it (work may continue).
-/// Sets commit_id and outcome but does NOT set ended_at.
-pub async fn mark_committed(
-    db: &Surreal<Db>,
-    run_id: &RecordId,
-    commit_id: &RecordId,
-    short_sha: &str,
-    message: &str,
-) -> Result<()> {
-    let lesson = format!("Committed {short_sha}: {message}");
-
-    db.query(
-        "UPDATE type::record($rid) SET \
-         outcome = 'committed', \
-         commit_id = $cid, lesson = $lesson",
-    )
-    .bind(("rid", run_id.clone()))
-    .bind(("cid", commit_id.clone()))
-    .bind(("lesson", lesson))
-    .await?
-    .check()?;
-    Ok(())
-}
-
 /// Detect whether a run being closed should be marked "uncommitted".
 /// Returns "uncommitted" if the run has file-write observations but no
-/// commit_id, otherwise "success".
+/// commit_made observation, otherwise "success".
 pub async fn detect_uncommitted_outcome(db: &Surreal<Db>, run_id: &RecordId) -> String {
-    // Check if run already has a commit
     #[derive(Debug, SurrealValue)]
-    struct RunCheck {
-        commit_id: Option<RecordId>,
+    struct CountRow {
+        c: Option<i64>,
     }
+
+    // Check if any commit_made observation belongs to this run
     let mut resp = match db
-        .query("SELECT commit_id FROM type::record($rid)")
+        .query(
+            "SELECT count() AS c FROM observation \
+             WHERE id IN (SELECT VALUE observation_ids FROM type::record($rid))[0] \
+               AND obs_type = 'commit_made' \
+             GROUP ALL",
+        )
         .bind(("rid", run_id.clone()))
         .await
     {
         Ok(r) => r,
         Err(_) => return "success".to_string(),
     };
-    let rows: Vec<RunCheck> = resp.take(0).unwrap_or_default();
-    if rows.first().and_then(|r| r.commit_id.as_ref()).is_some() {
+    let counts: Vec<CountRow> = resp.take(0).unwrap_or_default();
+    if counts.first().and_then(|r| r.c).unwrap_or(0) > 0 {
         return "committed".to_string();
     }
 
     // Check if run has file-write observations
-    #[derive(Debug, SurrealValue)]
-    struct CountRow {
-        c: Option<i64>,
-    }
     let mut resp = match db
         .query(
             "SELECT count() AS c FROM observation \
@@ -213,9 +155,7 @@ pub async fn detect_uncommitted_outcome(db: &Surreal<Db>, run_id: &RecordId) -> 
         Err(_) => return "success".to_string(),
     };
     let counts: Vec<CountRow> = resp.take(0).unwrap_or_default();
-    let has_writes = counts.first().and_then(|r| r.c).unwrap_or(0) > 0;
-
-    if has_writes {
+    if counts.first().and_then(|r| r.c).unwrap_or(0) > 0 {
         "uncommitted".to_string()
     } else {
         "success".to_string()
@@ -401,7 +341,6 @@ pub struct RunWithLesson {
     pub prompts: Option<Vec<String>>,
     pub lesson: Option<String>,
     pub outcome: Option<String>,
-    pub commit_id: Option<RecordId>,
     pub ended_at: Option<String>,
 }
 
@@ -412,14 +351,12 @@ pub async fn recent_with_lessons(
     _query: Option<&str>,
     limit: usize,
 ) -> Result<Vec<RunWithLesson>> {
-    // For now, just get recent runs by ended_at
-    // TODO: Add BM25 search when query is provided
     let mut resp = db
         .query(
-            "SELECT id, prompt, prompts, lesson, outcome, commit_id, ended_at
+            "SELECT id, prompt, prompts, lesson, outcome, ended_at
              FROM run
-             WHERE ended_at IS NOT NONE 
-               AND lesson IS NOT NONE 
+             WHERE ended_at IS NOT NONE
+               AND lesson IS NOT NONE
                AND lesson != ''
                AND project = $project
              ORDER BY ended_at DESC

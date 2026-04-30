@@ -45,7 +45,11 @@ pub struct ConsolidationResult {
 
 async fn tier_semantic(db: &Surreal<Db>, ollama: &OllamaClient) -> Result<usize> {
     let mut resp = db
-        .query("SELECT * FROM summary ORDER BY created_at DESC LIMIT 20")
+        .query(
+            "SELECT session_id, project, narrative, keywords, files \
+             FROM observation WHERE obs_type = 'session_summary' \
+             ORDER BY timestamp DESC LIMIT 20",
+        )
         .await?;
     let summaries: Vec<serde_json::Value> = resp.take(0)?;
 
@@ -96,7 +100,9 @@ async fn tier_reflect(db: &Surreal<Db>) -> Result<usize> {
     }
 
     let mut resp = db
-        .query("SELECT id, keywords FROM memory WHERE is_latest = true LIMIT 100")
+        .query(
+            "SELECT id, keywords FROM memory WHERE is_latest = true AND pinned = false LIMIT 100",
+        )
         .await?;
     let rows: Vec<MemRow> = resp.take(0)?;
 
@@ -284,7 +290,7 @@ async fn tier_decay(db: &Surreal<Db>, decay_days: i64) -> Result<usize> {
     let mut resp = db
         .query(
             "SELECT id, strength, last_accessed_at FROM memory \
-             WHERE strength > 0.1 AND is_latest = true",
+             WHERE strength > 0.1 AND is_latest = true AND pinned = false",
         )
         .await?;
     let memory_memories: Vec<serde_json::Value> = resp.take(0)?;

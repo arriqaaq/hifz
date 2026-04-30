@@ -22,7 +22,7 @@ hifz has two components:
 1. **REST server** — the core process that holds SurrealDB, embeddings, and all API endpoints. You run this in a terminal and keep it open.
 2. **MCP proxy** — a thin stdio process that Claude Code spawns automatically. It forwards MCP tool calls to the REST server via HTTP.
 
-Plugin hooks (auto-capture) and MCP tools (save/recall/search) both talk to the same REST server.
+Adapter hooks (auto-capture) and MCP tools (save/recall/search) both talk to the same REST server.
 
 ```
 Claude Code
@@ -30,8 +30,8 @@ Claude Code
   │     └── hifz mcp (stdio proxy → HTTP)
   │           └── forwards to REST server
   │
-  └── Plugin hooks (PostToolUse, SessionStart, etc.)
-        └── POST http://localhost:3111/hifz/observe
+  └── Adapter hooks (PostToolUse, SessionStart, etc.)
+        └── POST http://localhost:3111/api/v1/observe
               └── same REST server
 
 REST server (single process)
@@ -39,8 +39,14 @@ REST server (single process)
       ├── SurrealDB (embedded, single instance)
       ├── fastembed (all-MiniLM-L6-v2, 384d)
       ├── BM25 + HNSW + RRF search
-      └── All /hifz/* endpoints
+      └── All /api/v1/* endpoints
 ```
+
+### Two usage modes
+
+**Knowledge base** — use the MCP tools (`hifz_save`, `hifz_recall`, `hifz_search`) to manually save and retrieve knowledge across projects. No hooks required. Suitable when you want explicit, curated memory without automatic capture.
+
+**Agent memory** — install the Claude Code adapter (`adapters/claude-code/`) to enable automatic observation capture via hooks, session/run lifecycle tracking, and context injection at session start.
 
 ## Setup
 
@@ -69,7 +75,7 @@ Open a terminal and start the server. **Keep this terminal open** — the server
 The server runs on `http://localhost:3111`. Verify it's up:
 
 ```bash
-curl http://localhost:3111/hifz/health
+curl http://localhost:3111/api/v1/health
 ```
 
 ### Step 3: Add the MCP server to your project
@@ -104,14 +110,14 @@ The MCP proxy defaults to `http://localhost:3111`. To use a different URL:
 }
 ```
 
-### Step 4: Install the plugin (hooks + skills)
+### Step 4: Install the adapter (hooks + skills)
 
-The plugin gives you auto-capture hooks and slash command skills (`/recall`, `/remember`, `/forget`, `/session-history`).
+The Claude Code adapter gives you auto-capture hooks and slash command skills (`/recall`, `/remember`, `/forget`, `/session-history`). It lives in `adapters/claude-code/`.
 
 **Option A: Load for testing (temporary, this session only)**
 
 ```bash
-claude --plugin-dir /path/to/hifz/plugin
+claude --plugin-dir /path/to/hifz/adapters/claude-code
 ```
 
 **Option B: Install permanently via marketplace**
@@ -119,7 +125,7 @@ claude --plugin-dir /path/to/hifz/plugin
 From inside a Claude Code session, run:
 
 ```
-/plugin marketplace add /path/to/hifz/plugin
+/plugin marketplace add /path/to/hifz/adapters/claude-code
 ```
 
 Then:
@@ -183,7 +189,7 @@ Once setup is complete, you don't need to do anything manually:
 
 | Feature | How it works |
 |---------|-------------|
-| **Auto-capture** | Plugin hooks record every tool use, prompt, session start/end to the REST server |
+| **Auto-capture** | Adapter hooks record every tool use, prompt, session start/end to the REST server |
 | **Auto-inject** | On session start, relevant memories and recent observations are injected into context (requires `HIFZ_INJECT_CONTEXT=true`) |
 | **Manual save/recall** | Use MCP tools (`hifz_save`, `hifz_recall`, `hifz_search`) or slash commands (`/recall`, `/remember`) anytime |
 
@@ -220,19 +226,19 @@ Once setup is complete, you don't need to do anything manually:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/hifz/health` | Health check |
-| POST | `/hifz/observe` | Capture observation |
-| POST | `/hifz/session/start` | Start session |
-| POST | `/hifz/session/end` | End session |
-| POST | `/hifz/smart-search` | Hybrid search |
-| POST | `/hifz/remember` | Save memory |
-| POST | `/hifz/forget` | Delete memory |
-| POST | `/hifz/context` | Generate context |
-| GET | `/hifz/digest` | Project intelligence |
-| POST | `/hifz/forget-gc` | Garbage collection |
-| POST | `/hifz/consolidate` | Run consolidation |
-| GET | `/hifz/timeline` | Observation timeline |
-| GET | `/hifz/export` | Export all data |
+| GET | `/api/v1/health` | Health check |
+| POST | `/api/v1/observe` | Capture observation |
+| POST | `/api/v1/session/start` | Start session |
+| POST | `/api/v1/session/end` | End session |
+| POST | `/api/v1/smart-search` | Hybrid search |
+| POST | `/api/v1/memories` | Save memory |
+| POST | `/api/v1/forget` | Delete memory |
+| POST | `/api/v1/context` | Generate context |
+| GET | `/api/v1/digest` | Project intelligence |
+| POST | `/api/v1/forget-gc` | Garbage collection |
+| POST | `/api/v1/consolidate` | Run consolidation |
+| GET | `/api/v1/timeline` | Observation timeline |
+| GET | `/api/v1/export` | Export all data |
 
 ## Configuration
 
@@ -260,16 +266,16 @@ The REST server isn't running. Start it:
 Verify:
 
 ```bash
-curl http://localhost:3111/hifz/health
+curl http://localhost:3111/api/v1/health
 ```
 
 ### hifz not showing in `/mcp`
 
 Claude Code hasn't picked up the `.mcp.json`. Restart Claude Code.
 
-### Plugin not working (no auto-capture)
+### Adapter not working (no auto-capture)
 
-Check if the plugin is installed:
+Check if the adapter is installed:
 
 ```bash
 grep -A2 enabledPlugins ~/.claude/settings.json
@@ -278,7 +284,7 @@ grep -A2 enabledPlugins ~/.claude/settings.json
 You should see `"hifz@hifz": true`. If not, reinstall:
 
 ```
-/plugin marketplace add /path/to/hifz/plugin
+/plugin marketplace add /path/to/hifz/adapters/claude-code
 /plugin install hifz@hifz
 ```
 
@@ -307,7 +313,7 @@ Should print JSON with `protocolVersion` and `serverInfo`.
 ### Test hooks manually
 
 ```bash
-echo '{"session_id":"test","cwd":"/tmp","tool_name":"Read","tool_input":{"file_path":"src/main.rs"}}' | node plugin/scripts/post-tool-use.mjs
+echo '{"session_id":"test","cwd":"/tmp","tool_name":"Read","tool_input":{"file_path":"src/main.rs"}}' | node adapters/claude-code/scripts/post-tool-use.mjs
 ```
 
 ### Rebuild after code changes

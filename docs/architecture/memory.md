@@ -13,7 +13,7 @@ This document is the ground truth for hifz's memory model. It is updated at the 
 | 1b — Rust-side strength·recency·access scoring; access bump on read | shipped |
 | 1c — Query-aware injection + MMR-lite (mem_type + first concept) | shipped |
 | 2 — Core / working memory | shipped |
-| 3 — Graph linking (`mem_link`) | shipped |
+| 3 — Graph linking (`edge`) | shipped |
 | 4 — Entities + runs (auto-run in observe pipeline) | shipped |
 | 5 — Memory Evolution (opt-in LLM, `HIFZ_LLM_EVOLVE=true`) | shipped |
 | 6 — Eval harness (`memory-bench`) | shipped |
@@ -33,19 +33,19 @@ This document is the ground truth for hifz's memory model. It is updated at the 
 erDiagram
     SESSION ||--o{ OBSERVATION : has
     SESSION ||--o{ RUN : contains
-    SESSION ||--o{ SUMMARY : produces
     RUN ||--o{ OBSERVATION : groups
-    HIFZ ||--o{ MEM_LINK : "from/to"
-    HIFZ }o--o{ ENTITY : about
+    MEMORY ||--o{ EDGE : "from/to"
+    MEMORY }o--o{ ENTITY : about
     OBSERVATION }o--o{ ENTITY : mentions
-    HIFZ_CORE ||--|| PROJECT : "per-project singleton"
-    HIFZ ||--|{ PROJECT : scoped
+    CORE_MEMORY ||--|| PROJECT : "per-project singleton"
+    MEMORY ||--|{ PROJECT : scoped
     OBSERVATION ||--|{ PROJECT : scoped
     RUN ||--|{ PROJECT : scoped
 
-    HIFZ {
+    MEMORY {
         string project
         string mem_type
+        string category
         string title
         string content
         array concepts
@@ -54,15 +54,16 @@ erDiagram
         array tags
         string context
         float strength
+        bool pinned
         int access_count
         string last_accessed_at
         vector embedding "HNSW, 384d"
         bool is_latest
     }
-    MEM_LINK {
-        record in "hifz"
-        record out "hifz"
-        string via "embedding|concept|file|entity|semantic"
+    EDGE {
+        record in "memory"
+        record out "memory"
+        string via "embedding|concept|file|entity|semantic|similar_to|elaborates|contradicts|supports|depends_on|alternative_to|derived_from|generated_by|informed|motivated|implemented_by|part_of|follows"
         float score
     }
     ENTITY {
@@ -71,6 +72,13 @@ erDiagram
         string project
         int count
     }
+    OBSERVATION {
+        record session_id
+        string obs_type
+        object metadata
+        string title
+        string narrative
+    }
     RUN {
         record session_id
         string prompt
@@ -78,7 +86,7 @@ erDiagram
         array observation_ids
         string lesson
     }
-    HIFZ_CORE {
+    CORE_MEMORY {
         string project
         string identity
         array goals
@@ -89,14 +97,14 @@ erDiagram
 
 ### Tier semantics
 
-- **`observation`** — dense, ephemeral, auto-captured by hooks. Embedded. Feeds entities. Never evolved.
-- **`hifz`** — curated, project-scoped long-term memory. Embedded + indexed + linked. May be evolved.
-- **`semantic_hifz`** — facts consolidated from sessions (tier 1 of existing consolidation). May be evolved.
-- **`procedural_hifz`** — workflows consolidated from observations (tier 3). May be evolved.
-- **`run`** — task-scoped trajectory (new, Phase 4).
-- **`hifz_core`** — per-project singleton: identity, goals, invariants, watchlist (new, Phase 2).
-- **`mem_link`** — graph edges between memories (new, Phase 3).
-- **`entity`** — typed named things mentioned by observations and memories (new, Phase 4).
+- **`observation`** — dense, ephemeral, auto-captured by hooks. Has `obs_type` and `metadata` fields. Notable types: `commit_made`, `plan_activated`, `session_summary`. Never evolved.
+- **`memory`** — curated, project-scoped long-term knowledge. Embedded + indexed + linked. `pinned=true` marks always-on entries (e.g. active plans). May be evolved.
+- **`semantic_memory`** — facts consolidated from sessions (tier 1 consolidation). May be evolved.
+- **`procedural_memory`** — workflows consolidated from observations (tier 3 consolidation). May be evolved.
+- **`run`** — task-scoped trajectory (Phase 4).
+- **`core_memory`** — per-project singleton: identity, goals, invariants, watchlist (Phase 2).
+- **`edge`** — typed graph edges between memories (Phase 3).
+- **`entity`** — typed named things mentioned by observations and memories (Phase 4).
 
 ---
 
@@ -104,7 +112,7 @@ erDiagram
 
 ```mermaid
 flowchart TD
-    Hook[Claude Code hook] --> API["/hifz/observe"]
+    Hook[Claude Code hook] --> API["/api/v1/observe"]
     API --> Dedup{"dedup.rs<br/>5-min SHA window"}
     Dedup -- duplicate --> Drop[drop]
     Dedup -- new --> Compress["compress.rs<br/>synthetic or LLM"]
@@ -113,12 +121,12 @@ flowchart TD
     Entities --> WriteObs[INSERT observation]
     Entities --> UpsertEnt["UPSERT entity +<br/>RELATE obs-mentions-entity"]
 
-    User[User calls hifz_save] --> Remember["/hifz/remember"]
+    User[User calls hifz_save] --> Remember["/api/v1/memories"]
     Remember --> EmbedMem["Embedder<br/>richer text"]
     EmbedMem --> EntitiesMem[entities.rs]
-    EntitiesMem --> WriteMem[INSERT hifz]
+    EntitiesMem --> WriteMem[INSERT memory]
     WriteMem --> LinkGen["link.rs<br/>KNN + concept + file + entity"]
-    LinkGen --> Relate["RELATE a->mem_link->b UNIQUE<br/>(Rust-side via-dedup)"]
+    LinkGen --> Relate["RELATE a->edge->b UNIQUE<br/>(Rust-side via-dedup)"]
     Relate --> EvolveGate{"HIFZ_LLM_EVOLVE?"}
     EvolveGate -- off --> DoneW[commit]
     EvolveGate -- on --> Queue[enqueue evolve job]
@@ -132,22 +140,22 @@ flowchart TD
 ```mermaid
 flowchart TD
     Trigger["Hook trigger<br/>SessionStart / UserPromptSubmit / PreCompact"] --> BuildQ[Build query from hook payload]
-    BuildQ --> Core["SELECT hifz_core<br/>WHERE project=$p"]
+    BuildQ --> Core["SELECT core_memory<br/>WHERE project=$p"]
     Core --> Search["search_hybrid(project, query)"]
-    Search --> Vec["vector KNN<br/>hifz.embedding"]
+    Search --> Vec["vector KNN<br/>memory.embedding"]
     Search --> FT["BM25<br/>title + content"]
     Search --> FTObs["BM25 + vector<br/>observation"]
     Vec --> RRF["search::rrf(...)"]
     FT --> RRF
     FTObs --> RRF
     RRF --> Rust["Rust-side score =<br/>strength · exp(-age/30) · access_boost"]
-    Rust --> Graph["1-hop expand<br/>mem_link via=any"]
-    Graph --> MMR["MMR diversify<br/>cos sim <= 0.85"]
+    Rust --> Graph["1-hop expand<br/>edge via=any"]
+    Graph["1-hop expand<br/>edge via=any"] --> MMR["MMR diversify<br/>cos sim <= 0.85"]
     MMR --> TokenBudget["fit token budget<br/>(1500/2048)"]
     TokenBudget --> Output["# Core<br/># Saved memories<br/># Recent observations"]
     Output --> ClaudeCtx[Claude Code additionalContext]
 
-    Output --> Access["UPDATE hifz SET<br/>access_count += 1,<br/>last_accessed_at = now()"]
+    Output --> Access["UPDATE memory SET<br/>access_count += 1,<br/>last_accessed_at = now()"]
 ```
 
 ### Diversification rule
@@ -198,10 +206,10 @@ Base graph is deterministic. Edges are created at write time.
 Two queries — `SELECT ->edge->node.*` does *not* return edge fields, so edges and neighbour rows are fetched separately and joined in Rust:
 
 ```surql
-SELECT in, out, score, via FROM mem_link WHERE in IN $top_ids;
+SELECT in, out, score, via FROM edge WHERE in IN $top_ids;
 
 SELECT id, title, content, mem_type, strength, created_at, access_count
-FROM hifz WHERE id IN $neighbour_ids AND is_latest = true;
+FROM memory WHERE id IN $neighbour_ids AND is_latest = true;
 ```
 
 Neighbours are scored `seed_score * 0.5 * edge.score`, merged with primary candidates, re-ranked with the same Rust-side formula, then MMR-diversified.
@@ -219,15 +227,15 @@ sequenceDiagram
     participant L as LLM
     participant DB as SurrealDB
 
-    W->>DB: INSERT hifz $new (deterministic)
-    W->>DB: link.rs creates mem_link edges
+    W->>DB: INSERT memory $new (deterministic)
+    W->>DB: link.rs creates edge records
     W->>Q: enqueue(new.id) iff HIFZ_LLM_EVOLVE
-    Q->>DB: SELECT $new + KNN neighbours + mem_link
+    Q->>DB: SELECT $new + KNN neighbours + edge
     Q->>L: prompt(new, neighbours, edges)
     L-->>Q: JSON {new_note, neighbour_updates[<=5]}
     loop for each neighbour_update
-        Q->>DB: UPDATE hifz SET keywords=array::difference(array::concat(...),...), tags=..., context=...
-        Q->>DB: RELATE neighbour->mem_link->new UNIQUE (if link_to_new)
+        Q->>DB: UPDATE memory SET keywords=array::difference(array::concat(...),...), tags=..., context=...
+        Q->>DB: RELATE neighbour->edge->new UNIQUE (if link_to_new)
         alt supersedes
             Q->>DB: UPDATE older SET is_latest=false, supersedes=[newer.id]
         end
@@ -242,7 +250,7 @@ sequenceDiagram
   "new_note": { "keywords": [...], "tags": [...], "context": "why-this-matters one-liner" },
   "neighbour_updates": [
     {
-      "id": "hifz:abc",
+      "id": "memory:abc",
       "keywords_add":  [...], "keywords_remove": [...],
       "tags_add":      [...], "tags_remove":     [...],
       "context_rewrite": "…" | null,

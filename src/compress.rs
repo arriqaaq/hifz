@@ -25,7 +25,10 @@ pub fn compress_synthetic(payload: &HookPayload) -> CompressResult {
         .and_then(|v| v.as_str())
         .unwrap_or("unknown");
 
-    let obs_type = infer_obs_type(tool_name, &payload.hook_type);
+    let obs_type = payload
+        .obs_type
+        .clone()
+        .unwrap_or_else(|| infer_obs_type(tool_name, &payload.hook_type));
     let title = if payload.hook_type == "prompt_submit" {
         let prompt = data.get("prompt").and_then(|v| v.as_str()).unwrap_or("");
         if prompt.len() > 60 {
@@ -67,8 +70,12 @@ pub async fn compress_llm(
         .complete(prompts::COMPRESSION_SYSTEM, &user_prompt)
         .await?;
 
-    // Parse XML response
-    parse_compression_xml(&response)
+    let mut result = parse_compression_xml(&response)?;
+    // Adapter-supplied obs_type overrides LLM inference
+    if let Some(ref ot) = payload.obs_type {
+        result.obs_type = ot.clone();
+    }
+    Ok(result)
 }
 
 fn parse_compression_xml(xml: &str) -> anyhow::Result<CompressResult> {

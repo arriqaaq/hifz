@@ -1,16 +1,13 @@
-use std::path::Path;
-
 use anyhow::Result;
 use surrealdb::Surreal;
 use surrealdb::types::{RecordId, SurrealValue};
 
-use crate::commit;
 use crate::compress::{compress_llm, compress_synthetic};
 use crate::db::Db;
 use crate::dedup::DedupMap;
 use crate::embed::Embedder;
-use crate::git_detect;
 use crate::ground;
+use crate::link;
 use crate::models::HookPayload;
 use crate::ollama::OllamaClient;
 use crate::run;
@@ -24,7 +21,6 @@ pub async fn observe(
     ollama: Option<&OllamaClient>,
     auto_compress: bool,
     payload: HookPayload,
-    git_path: Option<&Path>,
 ) -> Result<Option<String>> {
     // Run lifecycle — fire before dedup so lifecycle events aren't dropped.
     // Runs are task-scoped: UserPromptSubmit appends to open run or starts new.
@@ -42,23 +38,10 @@ pub async fn observe(
 
             // Check if run already open for this session
             if let Some(open_run) = run::find_open(db, &payload.session_id).await.ok().flatten() {
-                // Append prompt to existing run (don't close)
                 let _ = run::append_prompt(db, &open_run, &prompt).await;
             } else {
-                // No open run — start new one
                 if let Some(session_rid) = run::resolve_session(db, &payload.session_id).await {
-                    if let Ok(Some(run_id)) =
-                        run::start(db, &session_rid, &payload.project, &prompt).await
-                    {
-                        // Link to active plan if one exists
-                        if let Ok(Some(active_plan)) =
-                            crate::plan::get_active(db, &payload.project).await
-                        {
-                            if let Some(plan_id) = active_plan.id.as_ref() {
-                                let _ = run::set_plan(db, &run_id, plan_id).await;
-                            }
-                        }
-                    }
+                    let _ = run::start(db, &session_rid, &payload.project, &prompt).await;
                 }
             }
         }
@@ -205,53 +188,12 @@ pub async fn observe(
         .bind(("sid", format!("session:{}", payload.session_id)))
         .await?;
 
-    // Detect git commits from Bash tool output
-    tracing::debug!(
-        tool_name = tool_name,
-        hook_type = %payload.hook_type,
-        has_tool_input = payload.data.get("tool_input").or_else(|| payload.data.get("toolInput")).is_some(),
-        has_tool_output = payload.data.get("tool_output").or_else(|| payload.data.get("toolOutput")).is_some(),
-        "git_detect: checking observation"
-    );
-    if tool_name == "Bash" || tool_name == "Shell" {
-        let command_str = payload
-            .data
-            .get("tool_input")
-            .or_else(|| payload.data.get("toolInput"))
-            .and_then(|ti| ti.get("command"))
-            .and_then(|c| c.as_str())
-            .unwrap_or("");
-        let output_str = payload
-            .data
-            .get("tool_output")
-            .or_else(|| payload.data.get("toolOutput"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
-        tracing::info!(
-            command = command_str,
-            output_len = output_str.len(),
-            output_preview = &output_str[..output_str.len().min(200)],
-            "git_detect: Bash tool, checking for commit"
-        );
-        let detected = git_detect::detect_commit(&payload.data);
-        tracing::info!(detected = detected.is_some(), "git_detect: result");
-        if let Some(detected) = detected {
-            let session_rid = run::resolve_session(db, &payload.session_id).await;
-            let run_rid = run::find_open(db, &payload.session_id).await.ok().flatten();
-            let data = commit::CommitData {
-                sha: detected.sha,
-                message: detected.message,
-                author: String::new(),
-                branch: detected.branch,
-                project: payload.project.clone(),
-                files_changed: vec![],
-                insertions: None,
-                deletions: None,
-                is_amend: false,
-                timestamp: payload.timestamp.clone(),
-            };
-            if let Err(e) = commit::record_commit(db, data, session_rid, run_rid, git_path).await {
-                tracing::warn!("commit recording failed: {e}");
+    // When adapter sends a commit_made observation, trigger grounding and causal edge
+    if compressed.obs_type == "commit_made" {
+        let _ = ground::on_commit_observation(db, &payload.project, &compressed.files).await;
+        if let Some(obs_id) = new_obs_id.as_ref() {
+            if let Ok(Some(run_id)) = run::find_open(db, &payload.session_id).await {
+                let _ = link::upsert_edge(db, obs_id, &run_id, "generated_by", "system", 1.0).await;
             }
         }
     }

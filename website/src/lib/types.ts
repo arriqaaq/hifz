@@ -22,7 +22,8 @@ export interface Session {
 
 export interface Observation {
   id: string;
-  session_id: string | null;
+  session_id: string | RecordId | null;
+  project?: string;
   timestamp: string;
   obs_type: string;
   title: string;

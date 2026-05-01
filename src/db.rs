@@ -172,7 +172,7 @@ DEFINE INDEX IF NOT EXISTS run_lesson_ft ON TABLE run
 -- === KNOWLEDGE GRAPH EDGES ===
 -- Generic relation table: any record type can be an endpoint.
 -- Relation types (derived_from, informed, similar_to, etc.) are prescribed
--- by application-level enums; unknown strings accepted for extensibility.
+-- by application-level enums, with unknown strings accepted for extensibility.
 DEFINE TABLE IF NOT EXISTS edge SCHEMAFULL TYPE RELATION;
 DEFINE FIELD IF NOT EXISTS relation   ON edge TYPE string;
 DEFINE FIELD IF NOT EXISTS via        ON edge TYPE string;
@@ -193,5 +193,23 @@ DEFINE FIELD IF NOT EXISTS strength          ON procedural_memory TYPE float DEF
 DEFINE FIELD IF NOT EXISTS source_sessions   ON procedural_memory TYPE array<record<session>>;
 DEFINE FIELD IF NOT EXISTS created_at        ON procedural_memory TYPE string;
 DEFINE FIELD IF NOT EXISTS updated_at        ON procedural_memory TYPE string;
+
+DEFINE TABLE IF NOT EXISTS event SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS source          ON event TYPE string;
+DEFINE FIELD IF NOT EXISTS event_type      ON event TYPE string;
+DEFINE FIELD IF NOT EXISTS session_id      ON event TYPE option<record<session>>;
+DEFINE FIELD IF NOT EXISTS run_id          ON event TYPE option<record<run>>;
+DEFINE FIELD IF NOT EXISTS sequence        ON event TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS timestamp       ON event TYPE string;
+DEFINE FIELD IF NOT EXISTS parent_event_id ON event TYPE option<record<event>>;
+DEFINE FIELD IF NOT EXISTS payload_hash    ON event TYPE string;
+DEFINE FIELD IF NOT EXISTS payload         ON event TYPE option<object> FLEXIBLE;
+DEFINE FIELD IF NOT EXISTS metadata        ON event TYPE option<object> FLEXIBLE;
+DEFINE INDEX IF NOT EXISTS event_source      ON TABLE event FIELDS source;
+DEFINE INDEX IF NOT EXISTS event_type        ON TABLE event FIELDS event_type;
+DEFINE INDEX IF NOT EXISTS event_session     ON TABLE event FIELDS session_id;
+DEFINE INDEX IF NOT EXISTS event_run         ON TABLE event FIELDS run_id;
+DEFINE INDEX IF NOT EXISTS event_hash        ON TABLE event FIELDS payload_hash UNIQUE;
+DEFINE INDEX IF NOT EXISTS event_session_seq ON TABLE event FIELDS source, session_id, sequence;
 
 "#;

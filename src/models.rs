@@ -160,8 +160,10 @@ pub struct SearchResult {
     pub timestamp: String,
     pub importance: i64,
     pub score: Option<f64>,
+    /// Optional because rows from BM25/text-search paths don't carry the
+    /// graph-expansion flag — only KNN-expanded rows set it.
     #[serde(default)]
-    pub is_neighbor: bool,
+    pub is_neighbor: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
@@ -204,6 +206,209 @@ pub struct KeywordFreq {
 pub struct FileFreq {
     pub file: String,
     pub frequency: i64,
+}
+
+// --- Generic event ledger (producer-agnostic) ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventRequest {
+    pub source: String,
+    pub event_type: String,
+    #[serde(default)]
+    pub session_id: Option<String>,
+    #[serde(default)]
+    pub run_id: Option<String>,
+    #[serde(default)]
+    pub sequence: Option<i64>,
+    pub timestamp: String,
+    #[serde(default)]
+    pub parent_event_id: Option<String>,
+    pub payload_hash: String,
+    #[serde(default)]
+    pub payload: Option<serde_json::Value>,
+    #[serde(default)]
+    pub metadata: Option<serde_json::Value>,
+}
+
+// --- Request types for library / REST API ---
+//
+// These mirror the on-the-wire JSON shape used by the REST handlers, exposed
+// here so library users can construct them directly. `Default` is provided so
+// callers can use `EventsListReq { source: Some("foo".into()), ..Default::default() }`.
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct EventsListReq {
+    #[serde(default)]
+    pub source: Option<String>,
+    #[serde(default)]
+    pub event_type: Option<String>,
+    #[serde(default)]
+    pub session_id: Option<String>,
+    #[serde(default)]
+    pub run_id: Option<String>,
+    #[serde(default)]
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SessionStartReq {
+    #[serde(rename = "sessionId")]
+    pub session_id: String,
+    pub project: String,
+    pub cwd: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ObservationsReq {
+    #[serde(default)]
+    pub query: Option<String>,
+    #[serde(default)]
+    pub project: Option<String>,
+    #[serde(default)]
+    pub session_id: Option<String>,
+    #[serde(default)]
+    pub obs_type: Option<String>,
+    #[serde(default)]
+    pub since: Option<String>,
+    #[serde(default)]
+    pub until: Option<String>,
+    #[serde(default)]
+    pub min_importance: Option<i64>,
+    #[serde(default)]
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct MemoriesReq {
+    #[serde(default)]
+    pub query: Option<String>,
+    #[serde(default)]
+    pub project: Option<String>,
+    #[serde(default)]
+    pub category: Option<String>,
+    #[serde(default)]
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SearchReq {
+    pub query: String,
+    #[serde(default)]
+    pub limit: Option<usize>,
+    #[serde(default)]
+    pub mode: Option<String>,
+    #[serde(default)]
+    pub project: Option<String>,
+    #[serde(default, rename = "sessionId", alias = "session_id")]
+    pub session_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct RememberReq {
+    pub title: String,
+    pub content: String,
+    #[serde(default)]
+    pub category: Option<String>,
+    #[serde(default)]
+    pub keywords: Option<Vec<String>>,
+    #[serde(default)]
+    pub files: Option<Vec<String>>,
+    #[serde(default)]
+    pub project: Option<String>,
+    #[serde(default, rename = "sessionId", alias = "session_id")]
+    pub session_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct RunsReq {
+    pub query: String,
+    #[serde(default)]
+    pub project: Option<String>,
+    #[serde(default)]
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CoreEditReq {
+    pub project: String,
+    pub field: String,
+    pub op: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TraceReq {
+    pub id: String,
+    #[serde(default)]
+    pub direction: Option<String>,
+    #[serde(default)]
+    pub relations: Option<Vec<String>>,
+    #[serde(default)]
+    pub max_hops: Option<usize>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PlanActivateReq {
+    pub project: String,
+    #[serde(default)]
+    pub plan_id: Option<String>,
+    #[serde(default, rename = "sessionId", alias = "session_id")]
+    pub session_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PlansListReq {
+    #[serde(default)]
+    pub project: Option<String>,
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CommitsReq {
+    #[serde(default)]
+    pub project: Option<String>,
+    #[serde(default)]
+    pub branch: Option<String>,
+    #[serde(default)]
+    pub limit: Option<usize>,
+    #[serde(default)]
+    pub sha: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ExportReq {
+    #[serde(default)]
+    pub project: Option<String>,
+    #[serde(default)]
+    pub session_id: Option<String>,
+    #[serde(default)]
+    pub obs_type: Option<String>,
+    #[serde(default)]
+    pub since: Option<String>,
+    #[serde(default)]
+    pub until: Option<String>,
+    #[serde(default)]
+    pub min_importance: Option<i64>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TimelineReq {
+    #[serde(default)]
+    pub session_id: Option<String>,
+    #[serde(default)]
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ContextReq {
+    pub project: String,
+    #[serde(default)]
+    pub token_budget: Option<usize>,
+    #[serde(default)]
+    pub query: Option<String>,
 }
 
 // --- Hook payload from agent harness ---

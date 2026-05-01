@@ -1,0 +1,21 @@
+{
+  "name": "@hifz/pi-extension",
+  "version": "0.1.0",
+  "description": "Pi extension that captures every Pi event into the local Hifz memory store.",
+  "type": "module",
+  "main": "./index.ts",
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20.6.0"
+  },
+  "devDependencies": {
+    "@mariozechner/pi-coding-agent": "^0.70.6",
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.3"
+  }
+}

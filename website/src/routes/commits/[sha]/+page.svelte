@@ -32,7 +32,8 @@
     }
   });
 
-  function projectName(path: string): string {
+  function projectName(path: string | undefined | null): string {
+    if (!path) return '—';
     return path.split('/').pop() ?? path;
   }
 
@@ -127,7 +128,7 @@
       <div class="meta-item">
         <span class="meta-label">Session</span>
         <span class="meta-value">
-          <a href="/sessions/{commit.session_id}" class="session-link">{sessionIdShort(String(commit.session_id))}</a>
+          <a href="/sessions/{String(commit.session_id)}" class="session-link">{sessionIdShort(String(commit.session_id))}</a>
         </span>
       </div>
     {/if}
@@ -147,8 +148,8 @@
       </div>
     {/each}
   {:else if (commit.metadata?.files ?? commit.files ?? []).length > 0}
+    {@const fileList = commit.metadata?.files ?? commit.files ?? []}
     <div class="card">
-      {@const fileList = commit.metadata?.files ?? commit.files ?? []}
       <div class="card-title">Files Changed ({fileList.length})</div>
       <ul class="file-list">
         {#each fileList as f}

@@ -15,10 +15,19 @@
     "@sveltejs/adapter-static": "^3.0.10",
     "@sveltejs/kit": "^2.50.2",
     "@sveltejs/vite-plugin-svelte": "^6.2.4",
+    "@types/cytoscape": "^3.21.9",
     "@types/node": "^25.6.0",
     "svelte": "^5.54.0",
     "svelte-check": "^4.4.2",
     "typescript": "^5.9.3",
     "vite": "^7.3.1"
+  },
+  "dependencies": {
+    "@popperjs/core": "^2.11.8",
+    "cytoscape": "^3.33.3",
+    "cytoscape-cxtmenu": "^3.5.0",
+    "cytoscape-fcose": "^2.2.0",
+    "cytoscape-popper": "^4.0.1",
+    "tippy.js": "^6.3.7"
   }
 }

@@ -36,7 +36,7 @@ impl DedupMap {
     /// Compute a SHA-256 fingerprint for deduplication.
     pub fn compute_hash(session_id: &str, tool_name: &str, tool_input: &str) -> String {
         let input = if tool_input.len() > 500 {
-            &tool_input[..500]
+            crate::truncate_at_char_boundary(tool_input, 500)
         } else {
             tool_input
         };

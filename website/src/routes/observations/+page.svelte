@@ -1,20 +1,42 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { searchObservations } from '$lib/api';
+  import { page } from '$app/state';
+  import { searchObservations, getSessions } from '$lib/api';
   import type { Observation } from '$lib/types';
   import LoadingSpinner from '$lib/components/common/LoadingSpinner.svelte';
+  import FilterBar from '$lib/components/filters/FilterBar.svelte';
+  import {
+    type Filters,
+    readFilters,
+    applyFilters,
+    toApiParams,
+  } from '$lib/stores/filters';
 
   let observations = $state<Observation[]>([]);
   let loading = $state(true);
-  let query = $state('');
   let error = $state('');
   let expandedId = $state<string | null>(null);
+  let projects = $state<string[]>([]);
+  let lastUrl = '';
 
-  async function doSearch() {
+  // Reactive filters from URL.
+  let filters = $derived<Filters>(readFilters(page.url));
+
+  async function doSearch(f: Filters) {
     loading = true;
     error = '';
     try {
-      const res = await searchObservations(query || '*', 100);
+      const apiParams = toApiParams(f);
+      const res = await searchObservations({
+        query: apiParams.query || '*',
+        sessionId: apiParams.sessionId,
+        project: apiParams.project,
+        obsType: apiParams.obsType,
+        since: apiParams.since,
+        until: apiParams.until,
+        minImportance: apiParams.minImportance,
+        limit: 100,
+      });
       observations = res.observations;
     } catch (e) {
       error = e instanceof Error ? e.message : 'Search failed';
@@ -23,11 +45,36 @@
     }
   }
 
-  onMount(doSearch);
+  onMount(async () => {
+    try {
+      const r = await getSessions(200);
+      const seen = new Set<string>();
+      for (const s of r.sessions) {
+        if (s.project && !seen.has(s.project)) seen.add(s.project);
+      }
+      projects = Array.from(seen).sort();
+    } catch {
+      // non-fatal
+    }
+  });
 
-  function handleSubmit(e: SubmitEvent) {
+  // Re-run search whenever URL changes.
+  $effect(() => {
+    const currentUrl = page.url.search;
+    if (currentUrl === lastUrl && observations.length > 0) return;
+    lastUrl = currentUrl;
+    void doSearch(filters);
+  });
+
+  function onFiltersChange(next: Filters) {
+    void applyFilters(next);
+  }
+
+  function onQuerySubmit(e: SubmitEvent) {
     e.preventDefault();
-    doSearch();
+    const fd = new FormData(e.currentTarget as HTMLFormElement);
+    const q = String(fd.get('q') ?? '');
+    void applyFilters({ ...filters, query: q });
   }
 
   function formatTime(ts: string): string {
@@ -55,12 +102,20 @@
   }
 </script>
 
-<div class="search-form">
-  <form onsubmit={handleSubmit} class="search-row">
-    <input type="text" placeholder="Search observations..." bind:value={query} class="search-input" />
+<form class="search-form" onsubmit={onQuerySubmit}>
+  <div class="search-row">
+    <input
+      type="text"
+      name="q"
+      placeholder="Search observations…"
+      value={filters.query}
+      class="search-input"
+    />
     <button type="submit" class="btn btn--accent btn--small">Search</button>
-  </form>
-</div>
+  </div>
+</form>
+
+<FilterBar {filters} {projects} onChange={onFiltersChange} />
 
 {#if error}
   <div class="card" style="border-color: var(--accent);">
@@ -71,7 +126,7 @@
 {#if loading}
   <LoadingSpinner />
 {:else if observations.length === 0}
-  <p class="empty">No observations found. Observations are recorded when the agent runs tool calls.</p>
+  <p class="empty">No observations match these filters.</p>
 {:else}
   <p class="result-meta">{observations.length} observations</p>
   <div class="timeline">
@@ -135,7 +190,7 @@
 {/if}
 
 <style>
-  .search-form { margin-bottom: 20px; }
+  .search-form { margin-bottom: 12px; }
   .search-row {
     display: flex;
     gap: 0;
@@ -169,12 +224,8 @@
     cursor: pointer;
     transition: border-color 150ms;
   }
-  .obs-card:hover {
-    border-color: var(--ink-muted);
-  }
-  .obs-card.expanded {
-    border-color: var(--accent);
-  }
+  .obs-card:hover { border-color: var(--ink-muted); }
+  .obs-card.expanded { border-color: var(--accent); }
 
   .obs-header {
     display: flex;
@@ -189,24 +240,9 @@
     cursor: pointer;
   }
 
-  .obs-time {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: 500;
-    color: var(--ink-muted);
-  }
-
-  .obs-imp {
-    font-size: 11px;
-    color: var(--yellow);
-  }
-
-  .expand-icon {
-    margin-left: auto;
-    font-size: 16px;
-    font-weight: bold;
-    color: var(--ink-faint);
-  }
+  .obs-time { font-family: var(--font-mono); font-size: 11px; font-weight: 500; color: var(--ink-muted); }
+  .obs-imp { font-size: 11px; color: var(--yellow); }
+  .expand-icon { margin-left: auto; font-size: 16px; font-weight: bold; color: var(--ink-faint); }
 
   .obs-title {
     margin: 0 0 4px;
@@ -217,23 +253,9 @@
     letter-spacing: 0.04em;
   }
 
-  .obs-sub {
-    margin: 0 0 6px;
-    font-size: 11px;
-    color: var(--ink-muted);
-    font-family: var(--font-ui);
-  }
-
-  .obs-narrative {
-    margin: 0 0 10px;
-    font-size: 12px;
-    color: var(--ink-secondary);
-    line-height: 1.5;
-  }
-  .obs-narrative.truncated {
-    color: var(--ink-faint);
-    font-style: italic;
-  }
+  .obs-sub { margin: 0 0 6px; font-size: 11px; color: var(--ink-muted); font-family: var(--font-ui); }
+  .obs-narrative { margin: 0 0 10px; font-size: 12px; color: var(--ink-secondary); line-height: 1.5; }
+  .obs-narrative.truncated { color: var(--ink-faint); font-style: italic; }
 
   .obs-code {
     margin: 0 0 10px;
@@ -249,14 +271,9 @@
     word-break: break-word;
     max-height: 300px;
   }
-  .obs-code code {
-    font-family: inherit;
-    font-size: inherit;
-  }
+  .obs-code code { font-family: inherit; font-size: inherit; }
 
-  .obs-section {
-    margin-bottom: 10px;
-  }
+  .obs-section { margin-bottom: 10px; }
   .section-label {
     display: block;
     font-family: var(--font-ui);
@@ -268,13 +285,7 @@
     margin-bottom: 4px;
   }
 
-  .obs-facts {
-    margin: 0;
-    padding-left: 16px;
-    font-size: 11px;
-    color: var(--ink-secondary);
-    line-height: 1.5;
-  }
+  .obs-facts { margin: 0; padding-left: 16px; font-size: 11px; color: var(--ink-secondary); line-height: 1.5; }
   .obs-facts li { margin-bottom: 2px; }
 
   .fact-code {
@@ -285,20 +296,8 @@
     border-radius: 2px;
   }
 
-  .obs-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    margin-bottom: 8px;
-  }
-
-  .obs-meta {
-    display: flex;
-    gap: 16px;
-    font-family: var(--font-mono);
-    font-size: 10px;
-    color: var(--ink-faint);
-  }
+  .obs-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+  .obs-meta { display: flex; gap: 16px; font-family: var(--font-mono); font-size: 10px; color: var(--ink-faint); }
 
   .empty {
     text-align: center;

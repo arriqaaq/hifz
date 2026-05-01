@@ -3,6 +3,8 @@ use std::sync::Arc;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
+use hifz::Hifz;
+
 #[derive(Parser)]
 #[command(
     name = "hifz",
@@ -83,35 +85,30 @@ async fn async_main(cli: Cli) -> Result<()> {
             port,
             db_path,
             memory,
-            ollama_url,
-            ollama_model,
+            ollama_url: _,
+            ollama_model: _,
         } => {
+            // Note: --ollama-url and --ollama-model CLI args are kept for back-compat
+            // but config is now loaded from ~/.hifz/.env via Hifz::open_*. To override,
+            // set OLLAMA_URL / OLLAMA_MODEL env vars (recognised by `config::load_config`).
             tracing::info!("hifz v{} starting...", env!("CARGO_PKG_VERSION"));
 
-            let db = if memory {
+            let hifz = if memory {
                 tracing::info!("Storage: in-memory (ephemeral)");
-                hifz::db::connect_mem().await?
+                Hifz::open_memory().await?
             } else {
                 tracing::info!("Storage: SurrealKV ({})", db_path);
-                hifz::db::connect(&db_path).await?
+                Hifz::open_persistent(&db_path).await?
             };
 
-            let embedder = Arc::new(hifz::embed::Embedder::new()?);
-            hifz::db::init_schema(&db, embedder.dimension()).await?;
-
-            let ollama = if let Some(ref url) = ollama_url {
-                tracing::info!("Ollama: {url} (model: {ollama_model})");
-                Some(Arc::new(hifz::ollama::OllamaClient::new(
-                    Some(url.clone()),
-                    Some(ollama_model),
-                )))
+            tracing::info!("REST API: http://127.0.0.1:{port}/api/v1/*");
+            tracing::info!("Embeddings: fastembed ({} dims)", hifz.embedder.dimension());
+            if hifz.ollama.is_some() {
+                tracing::info!("Ollama: enabled");
             } else {
                 tracing::info!("Ollama: not configured (zero-LLM mode)");
-                None
-            };
-
-            let git_path = which::which("git").ok();
-            if let Some(ref p) = git_path {
+            }
+            if let Some(ref p) = hifz.git_path {
                 tracing::info!("Git: {}", p.display());
             } else {
                 tracing::warn!(
@@ -120,21 +117,7 @@ async fn async_main(cli: Cli) -> Result<()> {
                 );
             }
 
-            let config = hifz::config::load_config();
-            tracing::info!("REST API: http://127.0.0.1:{port}/api/v1/*");
-            tracing::info!("Embeddings: fastembed ({} dims)", embedder.dimension());
-
-            hifz::web::serve(
-                db,
-                port,
-                embedder,
-                ollama,
-                config.auto_compress,
-                config.token_budget,
-                config.llm_evolve,
-                git_path,
-            )
-            .await?;
+            hifz::web::serve(hifz, port).await?;
         }
 
         Command::Mcp { url } => {

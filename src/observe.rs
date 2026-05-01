@@ -228,3 +228,78 @@ async fn ensure_session(db: &Surreal<Db>, payload: &HookPayload) -> Result<()> {
 
     Ok(())
 }
+
+// --- Observations search (lifted from web/api.rs::observations_search) ---
+
+/// Search observations with optional filters (session, project, obs_type, time
+/// range, importance) and optional BM25 query. Returns the legacy wire shape
+/// `{"observations": [...], "count": N}`.
+pub async fn search(
+    db: &surrealdb::Surreal<crate::db::Db>,
+    params: crate::models::ObservationsReq,
+) -> anyhow::Result<serde_json::Value> {
+    let limit = params.limit.unwrap_or(100);
+    let query = params.query.as_deref().unwrap_or("*");
+
+    let mut sql = String::from("SELECT * FROM observation");
+    let mut conditions = Vec::new();
+
+    if let Some(ref sid) = params.session_id {
+        let sid_clean = sid.strip_prefix("session:").unwrap_or(sid);
+        conditions.push(format!(
+            "session_id = type::record('session:{}')",
+            sid_clean.replace('\'', "")
+        ));
+    }
+    if params.project.is_some() {
+        conditions.push("project = $project".to_string());
+    }
+    if let Some(ref types) = params.obs_type {
+        let parts: Vec<String> = types
+            .split(',')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(|s| format!("'{}'", s.replace('\'', "")))
+            .collect();
+        if !parts.is_empty() {
+            conditions.push(format!("obs_type IN [{}]", parts.join(", ")));
+        }
+    }
+    if params.since.is_some() {
+        conditions.push("timestamp >= $since".to_string());
+    }
+    if params.until.is_some() {
+        conditions.push("timestamp <= $until".to_string());
+    }
+    if let Some(min_imp) = params.min_importance {
+        conditions.push(format!("importance >= {}", min_imp));
+    }
+    if !query.is_empty() && query != "*" {
+        conditions.push("(title @@ $q OR narrative @@ $q)".to_string());
+    }
+
+    if !conditions.is_empty() {
+        sql.push_str(" WHERE ");
+        sql.push_str(&conditions.join(" AND "));
+    }
+    sql.push_str(&format!(" ORDER BY timestamp DESC LIMIT {limit}"));
+
+    let mut q = db.query(&sql);
+    if query != "*" && !query.is_empty() {
+        q = q.bind(("q", query.to_string()));
+    }
+    if let Some(ref project) = params.project {
+        q = q.bind(("project", project.clone()));
+    }
+    if let Some(ref since) = params.since {
+        q = q.bind(("since", since.clone()));
+    }
+    if let Some(ref until) = params.until {
+        q = q.bind(("until", until.clone()));
+    }
+
+    let mut resp = q.await?;
+    let observations: Vec<serde_json::Value> = resp.take(0).unwrap_or_default();
+    let count = observations.len();
+    Ok(serde_json::json!({"observations": observations, "count": count}))
+}

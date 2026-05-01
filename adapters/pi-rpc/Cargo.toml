@@ -1,0 +1,25 @@
+[package]
+name = "pi-rpc-adapter"
+version = "0.1.0"
+edition = "2024"
+description = "Headless harness that runs `pi --mode rpc` and forwards every event to Hifz in-process via the library API."
+publish = false
+
+[[bin]]
+name = "pi-rpc-adapter"
+path = "src/main.rs"
+
+[dependencies]
+hifz = { path = "../.." }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+sha2 = "0.10"
+memchr = "2"
+bytes = "1"
+clap = { version = "4", features = ["derive", "env"] }
+uuid = { version = "1", features = ["v4"] }
+chrono = "0.4"

@@ -4,17 +4,27 @@
   import { getTimeline } from '$lib/api';
   import type { Observation } from '$lib/types';
   import LoadingSpinner from '$lib/components/common/LoadingSpinner.svelte';
+  import Waterfall from '$lib/components/timeline/Waterfall.svelte';
+  import CytoscapeGraph, {
+    type GraphInputNode,
+    type GraphInputEdge,
+  } from '$lib/components/graph/CytoscapeGraph.svelte';
+  import DetailDrawer from '$lib/components/common/DetailDrawer.svelte';
+  import { inferEdges, type CausalEdge } from '$lib/timeline/causality';
 
   let observations = $state<Observation[]>([]);
   let loading = $state(true);
   let error = $state('');
+  let selectedId = $state<string | undefined>(undefined);
+  let drawerObs = $state<Observation | null>(null);
+  let listMode = $state(false);
 
   let sessionId = $derived(decodeURIComponent(page.params.id ?? ''));
   let timelineId = $derived(sessionId.replace(/^session:/, ''));
 
   onMount(async () => {
     try {
-      const res = await getTimeline(timelineId, 200);
+      const res = await getTimeline(timelineId, 500);
       observations = res.observations;
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load';
@@ -23,237 +33,245 @@
     }
   });
 
+  function extractId(id: unknown): string {
+    if (typeof id === 'string') return id;
+    if (id && typeof id === 'object') {
+      const o = id as Record<string, unknown>;
+      if (typeof o.key === 'string') return o.key;
+      if (o.key && typeof o.key === 'object' && 'String' in (o.key as Record<string, unknown>)) {
+        return (o.key as { String: string }).String;
+      }
+    }
+    return String(id);
+  }
+
+  let causalEdges = $derived<CausalEdge[]>(inferEdges(observations));
+
+  let graphNodes = $derived.by<GraphInputNode[]>(() => {
+    return observations
+      .filter((o) => o.title !== 'unknown call' && o.obs_type !== 'conversation')
+      .map((o) => ({
+        id: extractId(o.id),
+        label: o.title,
+        type: o.obs_type,
+        kind: 'observation' as const,
+        keywords: o.keywords,
+        files: o.files,
+        timestamp: o.timestamp,
+        obs_type: o.obs_type,
+        importance: o.importance,
+        raw: o,
+      }));
+  });
+
+  let graphEdges = $derived<GraphInputEdge[]>(
+    causalEdges.map((e) => ({ source: e.source, target: e.target, kind: e.kind })),
+  );
+
+  let summary = $derived.by(() => {
+    if (observations.length === 0) return null;
+    const first = observations[0];
+    const last = observations[observations.length - 1];
+    const start = new Date(first.timestamp).getTime();
+    const end = new Date(last.timestamp).getTime();
+    const ms = Math.max(0, end - start);
+    const mins = Math.floor(ms / 60000);
+    return {
+      count: observations.length,
+      start: new Date(first.timestamp),
+      end: new Date(last.timestamp),
+      durationLabel: mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`,
+    };
+  });
+
+  function onWaterfallSelect(obs: Observation | null) {
+    drawerObs = obs;
+    selectedId = obs ? extractId(obs.id) : undefined;
+  }
+
+  function onGraphSelect(n: GraphInputNode | null) {
+    if (!n) {
+      drawerObs = null;
+      return;
+    }
+    drawerObs = n.raw as Observation;
+    selectedId = n.id;
+  }
+
+  function fmt(d: Date): string {
+    return d.toLocaleString([], {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+
+  function isMuted(obs: Observation): boolean {
+    return obs.title === 'unknown call' || obs.title === 'User submitted a prompt.';
+  }
+
   function formatTime(ts: string): string {
-    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    return new Date(ts).toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
   }
 </script>
 
-<a href="/sessions" class="back-link">&larr; All Sessions</a>
+<div class="page" class:has-drawer={drawerObs !== null}>
+  <header class="head">
+    <h2 class="title">Session timeline</h2>
+    {#if summary}
+      <div class="meta">
+        <span>{fmt(summary.start)} → {fmt(summary.end)}</span>
+        <span class="dot">·</span>
+        <span>{summary.durationLabel}</span>
+        <span class="dot">·</span>
+        <span>{summary.count} observations</span>
+        <span class="dot">·</span>
+        <span>{causalEdges.length} causal links</span>
+      </div>
+    {/if}
+    <div class="mode-switch">
+      <button class="mode-btn" class:active={!listMode} onclick={() => (listMode = false)}>Timeline</button>
+      <button class="mode-btn" class:active={listMode} onclick={() => (listMode = true)}>List</button>
+    </div>
+  </header>
 
-<div class="session-header">
-  <span class="session-label">Session</span>
-  <span class="session-id">{sessionId}</span>
+  {#if loading}
+    <LoadingSpinner />
+  {:else if error}
+    <div class="card" style="border-color: var(--accent);">
+      <p style="color: var(--accent); margin: 0;">{error}</p>
+    </div>
+  {:else if observations.length === 0}
+    <p class="empty">No observations in this session.</p>
+  {:else if !listMode}
+    <section class="pane mini-graph">
+      <h3 class="pane-h">Causal graph</h3>
+      <div class="mini-graph-area">
+        <CytoscapeGraph
+          nodes={graphNodes}
+          edges={graphEdges}
+          bind:selectedId
+          onSelect={onGraphSelect}
+          compact={true}
+        />
+      </div>
+    </section>
+
+    <section class="pane waterfall-pane">
+      <h3 class="pane-h">Time axis</h3>
+      <Waterfall
+        {observations}
+        edges={causalEdges}
+        bind:selectedId
+        onSelect={onWaterfallSelect}
+      />
+    </section>
+  {:else}
+    <ol class="list">
+      {#each observations as obs}
+        {@const muted = isMuted(obs)}
+        <li class="list-item" class:muted>
+          <span class="list-time">{formatTime(obs.timestamp)}</span>
+          <span class="badge badge-blue">{obs.obs_type}</span>
+          <button
+            type="button"
+            class="list-title"
+            onclick={() => onWaterfallSelect(obs)}
+          >
+            {obs.title}
+          </button>
+          {#if obs.importance >= 7}
+            <span class="list-imp">★ {obs.importance}</span>
+          {/if}
+        </li>
+      {/each}
+    </ol>
+  {/if}
 </div>
 
-{#if loading}
-  <LoadingSpinner />
-{:else if error}
-  <div class="card" style="border-color: var(--accent);">
-    <p style="color: var(--accent); margin: 0;">{error}</p>
-  </div>
-{:else if observations.length === 0}
-  <p class="empty">No observations recorded</p>
-{:else}
-  <div class="timeline">
-    {#each observations as obs (obs.id)}
-      {#if obs.title === 'unknown call' || obs.narrative === 'User submitted a prompt.'}
-        <div class="obs-muted">
-          <span class="obs-time">{formatTime(obs.timestamp)}</span>
-          <span class="badge badge-blue" style="opacity: 0.5">{obs.obs_type}</span>
-          <span class="obs-muted-text">{obs.narrative || obs.title}</span>
-        </div>
-      {:else}
-        <div class="card obs-card">
-          <div class="obs-header">
-            <span class="obs-time">{formatTime(obs.timestamp)}</span>
-            <span class="badge badge-blue">{obs.obs_type}</span>
-            {#if obs.importance >= 7}
-              <span class="obs-imp">&#9733; {obs.importance}</span>
-            {/if}
-          </div>
-          <h4 class="obs-title">{obs.title}</h4>
-          {#if obs.subtitle}
-            <p class="obs-sub">{obs.subtitle}</p>
-          {/if}
-          {#if obs.narrative}
-            {#if obs.obs_type === 'command_run' || obs.obs_type === 'file_edit' || obs.obs_type === 'file_write'}
-              <pre class="obs-code"><code>{obs.narrative}</code></pre>
-            {:else}
-              <p class="obs-narrative">{obs.narrative}</p>
-            {/if}
-          {/if}
-          {#if obs.facts.length > 0}
-            <details class="obs-facts-details">
-              <summary class="obs-facts-summary">{obs.facts.length} detail{obs.facts.length > 1 ? 's' : ''}</summary>
-              <ul class="obs-facts">
-                {#each obs.facts as fact}
-                  <li><code class="fact-code">{fact}</code></li>
-                {/each}
-              </ul>
-            </details>
-          {/if}
-          {#if (obs.keywords?.length ?? 0) > 0 || obs.files.length > 0}
-            <div class="obs-tags">
-              {#each obs.keywords ?? [] as c}
-                <span class="badge badge-yellow">{c}</span>
-              {/each}
-              {#each obs.files as f}
-                <span class="badge badge-cyan" style="font-family: var(--font-mono); font-size: 9px">{f.split('/').pop()}</span>
-              {/each}
-            </div>
-          {/if}
-        </div>
-      {/if}
-    {/each}
-  </div>
-{/if}
+<DetailDrawer
+  item={drawerObs ? { kind: 'observation', data: drawerObs } : null}
+  onClose={() => {
+    drawerObs = null;
+    selectedId = undefined;
+  }}
+/>
 
 <style>
-  .back-link {
-    display: inline-block;
-    font-size: 11px;
-    font-weight: 600;
-    font-family: var(--font-ui);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--ink-muted);
-    margin-bottom: 16px;
-    transition: color 150ms;
-  }
-  .back-link:hover { color: var(--accent); }
-
-  .session-header {
-    margin-bottom: 24px;
-  }
-  .session-label {
-    display: block;
-    font-size: 9px;
-    font-weight: 600;
-    font-family: var(--font-ui);
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: var(--ink-muted);
-    margin-bottom: 4px;
-  }
-  .session-id {
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--ink-faint);
-  }
-
-  .timeline {
+  .page {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    max-width: 860px;
+    gap: 14px;
   }
 
-  .obs-card {
-    padding: 16px 20px;
-  }
-
-  .obs-header {
+  .head {
     display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 8px;
-  }
-
-  .obs-time {
-    font-family: var(--font-mono);
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--ink-muted);
-  }
-
-  .obs-imp {
-    font-size: 11px;
-    color: var(--yellow);
-    margin-left: auto;
-  }
-
-  .obs-title {
-    margin: 0 0 4px;
-    font-size: 14px;
-    font-weight: 700;
-    font-family: var(--font-display);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-
-  .obs-sub {
-    margin: 0 0 6px;
-    font-size: 12px;
-    color: var(--ink-muted);
-    font-family: var(--font-ui);
-  }
-
-  .obs-narrative {
-    margin: 0 0 10px;
-    font-size: 13px;
-    color: var(--ink-secondary);
-    line-height: 1.6;
-  }
-
-  .obs-facts {
-    margin: 0 0 10px;
-    padding-left: 18px;
-    font-size: 12px;
-    color: var(--ink-secondary);
-    line-height: 1.6;
-  }
-  .obs-facts li { margin-bottom: 2px; }
-
-  .obs-tags {
-    display: flex;
+    align-items: baseline;
+    gap: 16px;
     flex-wrap: wrap;
-    gap: 4px;
   }
-
-  .obs-code {
-    margin: 0 0 10px;
-    padding: 10px 14px;
-    background: var(--bg-alt, #F0F0EC);
-    border: 1px solid var(--border-light);
+  .title {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 700;
+  }
+  .meta {
+    display: flex;
+    gap: 6px;
     font-family: var(--font-mono);
     font-size: 11px;
-    line-height: 1.5;
-    color: var(--ink-secondary);
-    overflow-x: auto;
-    white-space: pre-wrap;
-    word-break: break-word;
+    color: var(--ink-muted);
+    flex-wrap: wrap;
   }
-  .obs-code code {
-    font-family: inherit;
-    font-size: inherit;
+  .dot { color: var(--ink-faint); }
+
+  .mode-switch {
+    margin-left: auto;
+    display: inline-flex;
+    border: 1px solid var(--border);
+  }
+  .mode-btn {
+    padding: 4px 12px;
+    background: var(--bg);
+    border: none;
+    font-size: 10px;
+    font-family: var(--font-ui);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-muted);
+    cursor: pointer;
+  }
+  .mode-btn:not(:last-child) { border-right: 1px solid var(--border); }
+  .mode-btn.active {
+    background: var(--ink);
+    color: var(--bg);
   }
 
-  .obs-facts-details {
-    margin: 0 0 10px;
+  .pane {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
   }
-  .obs-facts-summary {
+  .pane-h {
+    margin: 0;
     font-family: var(--font-ui);
-    font-size: 10px;
+    font-size: 9px;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.1em;
     color: var(--ink-faint);
-    cursor: pointer;
-    padding: 4px 0;
-  }
-  .obs-facts-summary:hover { color: var(--ink-muted); }
-
-  .fact-code {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    background: var(--bg-alt, #F0F0EC);
-    padding: 1px 4px;
-    border-radius: 2px;
   }
 
-  .obs-muted {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 6px 12px;
-    font-size: 11px;
-    color: var(--ink-faint);
-    border-left: 2px solid var(--border-light);
-  }
-  .obs-muted-text {
-    font-family: var(--font-ui);
-    font-size: 11px;
-    color: var(--ink-faint);
+  .mini-graph .mini-graph-area {
+    height: 240px;
+    border: 1px solid var(--border);
+    overflow: hidden;
   }
 
   .empty {
@@ -263,4 +281,46 @@
     font-family: var(--font-ui);
     font-size: 13px;
   }
+
+  .list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .list-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    border: 1px solid var(--border-light);
+  }
+  .list-item.muted { opacity: 0.5; }
+  .list-time {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-muted);
+    min-width: 70px;
+  }
+  .list-title {
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    flex: 1;
+    font-family: var(--font-body);
+    font-size: 12px;
+    color: var(--ink);
+    padding: 0;
+  }
+  .list-title:hover { color: var(--accent); }
+  .list-imp {
+    font-size: 11px;
+    color: var(--yellow);
+    font-family: var(--font-ui);
+  }
+
+  .has-drawer { padding-right: min(440px, 90vw); }
 </style>

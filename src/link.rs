@@ -358,10 +358,12 @@ pub async fn create_run_structure_edges(
     #[derive(Debug, SurrealValue)]
     struct Row {
         id: Option<RecordId>,
+        #[allow(dead_code)]
+        ended_at: Option<String>,
     }
     let mut resp = db
         .query(
-            "SELECT id FROM run \
+            "SELECT id, ended_at FROM run \
              WHERE session_id = $sid AND id != $rid AND ended_at IS NOT NONE \
              ORDER BY ended_at DESC LIMIT 1",
         )
@@ -400,4 +402,31 @@ mod tests {
         let b: HashSet<&str> = HashSet::new();
         assert_eq!(jaccard(&a, &b), 0.0);
     }
+}
+
+// --- Memory links listing (lifted from web/api.rs::memory_links) ---
+
+/// List outbound graph edges from a memory. Returns the legacy wire shape
+/// `{"links": [...], "count": N}` with each link's title/category/relation/score.
+pub async fn list_for(
+    db: &surrealdb::Surreal<crate::db::Db>,
+    memory_id: &str,
+) -> anyhow::Result<serde_json::Value> {
+    let id = if memory_id.starts_with("memory:") {
+        memory_id.to_string()
+    } else {
+        format!("memory:{memory_id}")
+    };
+
+    let mut resp = db
+        .query(
+            "SELECT out.id AS id, out.title AS title, out.category AS category, \
+             relation, score, via FROM edge WHERE in = type::record($id)",
+        )
+        .bind(("id", id))
+        .await?;
+
+    let links: Vec<serde_json::Value> = resp.take(0).unwrap_or_default();
+    let count = links.len();
+    Ok(serde_json::json!({"links": links, "count": count}))
 }

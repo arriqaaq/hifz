@@ -1,84 +1,18 @@
 pub mod api;
 
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::time::Instant;
-
 use anyhow::Result;
 use axum::Router;
-use dashmap::DashMap;
-use surrealdb::Surreal;
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 
-use crate::db::Db;
-use crate::dedup::DedupMap;
-use crate::embed::Embedder;
-use crate::ollama::OllamaClient;
+use crate::Hifz;
 
-#[derive(Clone)]
-pub struct AppState {
-    pub db: Surreal<Db>,
-    pub embedder: Arc<Embedder>,
-    pub ollama: Option<Arc<OllamaClient>>,
-    pub dedup: Arc<DedupMap>,
-    pub auto_compress: bool,
-    pub token_budget: usize,
-    pub llm_evolve: bool,
-    pub started_at: Instant,
-    pub git_path: Option<PathBuf>,
-    pub git_repo_cache: Arc<DashMap<String, bool>>,
-}
+/// Axum-shared state. Aliased to `Hifz` so handlers continue to compile
+/// unchanged; the rename is purely structural.
+pub type AppState = Hifz;
 
-impl AppState {
-    pub fn is_git_repo(&self, project: &str) -> bool {
-        if let Some(cached) = self.git_repo_cache.get(project) {
-            return *cached;
-        }
-        let is_repo = self
-            .git_path
-            .as_ref()
-            .map(|git| {
-                std::process::Command::new(git)
-                    .args(["rev-parse", "--git-dir"])
-                    .current_dir(project)
-                    .output()
-                    .map(|o| o.status.success())
-                    .unwrap_or(false)
-            })
-            .unwrap_or(false);
-        if !is_repo {
-            tracing::debug!("{project} is not a git repository — commit enrichment skipped");
-        }
-        self.git_repo_cache.insert(project.to_string(), is_repo);
-        is_repo
-    }
-}
-
-pub async fn serve(
-    db: Surreal<Db>,
-    port: u16,
-    embedder: Arc<Embedder>,
-    ollama: Option<Arc<OllamaClient>>,
-    auto_compress: bool,
-    token_budget: usize,
-    llm_evolve: bool,
-    git_path: Option<PathBuf>,
-) -> Result<()> {
-    let state = AppState {
-        db,
-        embedder,
-        ollama,
-        dedup: Arc::new(DedupMap::new()),
-        auto_compress,
-        token_budget,
-        llm_evolve,
-        started_at: Instant::now(),
-        git_path,
-        git_repo_cache: Arc::new(DashMap::new()),
-    };
-
+pub async fn serve(state: Hifz, port: u16) -> Result<()> {
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods(Any)
@@ -123,6 +57,12 @@ pub async fn serve(
         .route("/sessions/end", axum::routing::post(api::session_end))
         .route("/sessions/{id}", axum::routing::get(api::session_get))
         .route("/observe", axum::routing::post(api::observe))
+        .route(
+            "/events",
+            axum::routing::post(api::event_ingest).get(api::events_list),
+        )
+        .route("/events/batch", axum::routing::post(api::events_batch))
+        .route("/events/{id}", axum::routing::get(api::event_get))
         .route(
             "/observations",
             axum::routing::get(api::observations_search),

@@ -280,6 +280,8 @@ pub async fn find_open(db: &Surreal<Db>, session_id: &str) -> Result<Option<Reco
     #[derive(Debug, SurrealValue)]
     struct Row {
         id: Option<RecordId>,
+        #[allow(dead_code)]
+        started_at: Option<String>,
     }
     let sid = if session_id.starts_with("session:") {
         session_id.to_string()
@@ -288,7 +290,7 @@ pub async fn find_open(db: &Surreal<Db>, session_id: &str) -> Result<Option<Reco
     };
     let mut resp = db
         .query(
-            "SELECT id FROM run \
+            "SELECT id, started_at FROM run \
              WHERE session_id = type::record($sid) AND ended_at IS NONE \
              ORDER BY started_at DESC LIMIT 1",
         )
@@ -367,4 +369,40 @@ pub async fn recent_with_lessons(
         .await?;
     let rows: Vec<RunWithLesson> = resp.take(0).unwrap_or_default();
     Ok(rows)
+}
+
+// --- Run detail with observations (lifted from web/api.rs::run_detail) ---
+
+/// Fetch one run plus all its observations, ordered by timestamp ASC.
+/// Returns `{"run": {...}, "observations": [...]}` matching the legacy shape.
+pub async fn detail(db: &Surreal<Db>, id: &str) -> anyhow::Result<serde_json::Value> {
+    let run_rid = if id.starts_with("run:") {
+        id.to_string()
+    } else {
+        format!("run:{id}")
+    };
+
+    let mut resp = db
+        .query("SELECT * FROM type::record($rid)")
+        .bind(("rid", run_rid.clone()))
+        .await?;
+    let runs: Vec<serde_json::Value> = resp.take(0).unwrap_or_default();
+    let Some(run) = runs.into_iter().next() else {
+        return Ok(serde_json::json!({"error": "run not found"}));
+    };
+
+    let mut obs_resp = db
+        .query(
+            "SELECT * FROM observation \
+             WHERE id IN (SELECT VALUE observation_ids FROM type::record($rid))[0] \
+             ORDER BY timestamp ASC",
+        )
+        .bind(("rid", run_rid))
+        .await?;
+    let observations: Vec<serde_json::Value> = obs_resp.take(0).unwrap_or_default();
+
+    Ok(serde_json::json!({
+        "run": run,
+        "observations": observations
+    }))
 }

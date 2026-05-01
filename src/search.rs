@@ -312,7 +312,7 @@ async fn expand_from_graph(db: &Surreal<Db>, results: &mut Vec<SearchResult>, li
             timestamp: created,
             importance: (strength * 10.0) as i64,
             score: Some(final_score),
-            is_neighbor: true,
+            is_neighbor: Some(true),
         });
     }
 
@@ -456,7 +456,7 @@ async fn search_memories_with_config(
                 timestamp: created_at,
                 importance: (strength * 10.0) as i64,
                 score: Some(score),
-                is_neighbor: false,
+                is_neighbor: Some(false),
             }
         })
         .collect();
@@ -643,7 +643,7 @@ pub async fn search_runs_for_context(
                 timestamp: row.ended_at.unwrap_or_default(),
                 importance: 5,
                 score: Some(score),
-                is_neighbor: false,
+                is_neighbor: Some(false),
             }
         })
         .collect();
@@ -655,7 +655,7 @@ fn truncate_str(s: &str, max: usize) -> String {
     if s.len() <= max {
         s.to_string()
     } else {
-        format!("{}…", &s[..max])
+        format!("{}…", crate::truncate_at_char_boundary(s, max))
     }
 }
 
@@ -739,7 +739,7 @@ mod tests {
             timestamp: String::new(),
             importance: 5,
             score: Some(1.0 - idx as f64 * 0.01),
-            is_neighbor: false,
+            is_neighbor: Some(false),
         }
     }
 

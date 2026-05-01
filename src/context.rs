@@ -355,15 +355,22 @@ async fn query_aware_memories(
 /// Synthesise a query from project state when no explicit query is given.
 /// Uses project name + titles of the most recent high-importance observations.
 async fn synthesise_query(db: &Surreal<Db>, project: &str) -> Result<String> {
+    #[derive(Debug, surrealdb::types::SurrealValue)]
+    struct Row {
+        title: Option<String>,
+        #[allow(dead_code)]
+        importance: Option<i64>,
+    }
     let mut resp = db
         .query(
-            "SELECT VALUE title FROM observation \
+            "SELECT title, importance FROM observation \
              WHERE session_id.project = $project AND importance >= 5 \
              ORDER BY importance DESC LIMIT 5",
         )
         .bind(("project", project.to_string()))
         .await?;
-    let titles: Vec<String> = resp.take(0).unwrap_or_default();
+    let rows: Vec<Row> = resp.take(0).unwrap_or_default();
+    let titles: Vec<String> = rows.into_iter().filter_map(|r| r.title).collect();
     let mut q = project.to_string();
     if !titles.is_empty() {
         q.push(' ');

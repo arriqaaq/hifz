@@ -46,7 +46,7 @@ pub struct ConsolidationResult {
 async fn tier_semantic(db: &Surreal<Db>, ollama: &OllamaClient) -> Result<usize> {
     let mut resp = db
         .query(
-            "SELECT session_id, project, narrative, keywords, files \
+            "SELECT session_id, project, narrative, keywords, files, timestamp \
              FROM observation WHERE obs_type = 'session_summary' \
              ORDER BY timestamp DESC LIMIT 20",
         )

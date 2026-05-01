@@ -121,8 +121,25 @@ export function forgetGc(): Promise<unknown> {
   return post(`${CORE}/forget-gc`);
 }
 
-export function getExport(): Promise<unknown> {
-  return get(`${CORE}/export`);
+export interface ExportFilters {
+  project?: string;
+  sessionId?: string;
+  obsType?: string;
+  since?: string;
+  until?: string;
+  minImportance?: number;
+}
+
+export function getExport(filters: ExportFilters = {}): Promise<unknown> {
+  const params = new URLSearchParams();
+  if (filters.project) params.set('project', filters.project);
+  if (filters.sessionId) params.set('session_id', filters.sessionId);
+  if (filters.obsType) params.set('obs_type', filters.obsType);
+  if (filters.since) params.set('since', filters.since);
+  if (filters.until) params.set('until', filters.until);
+  if (filters.minImportance) params.set('min_importance', String(filters.minImportance));
+  const qs = params.toString();
+  return get(qs ? `${CORE}/export?${qs}` : `${CORE}/export`);
 }
 
 // --- Agent Pipeline API ---
@@ -165,16 +182,28 @@ export function getCommitDiff(sha: string): Promise<{ sha: string; diff: string 
   return get(`${AGENT}/commits/${encodeURIComponent(sha)}/diff`);
 }
 
+export interface ObservationFilters {
+  query?: string;
+  project?: string;
+  sessionId?: string;
+  obsType?: string;
+  since?: string;
+  until?: string;
+  minImportance?: number;
+  limit?: number;
+}
+
 export function searchObservations(
-  query?: string,
-  limit = 100,
-  project?: string,
-  sessionId?: string,
+  filters: ObservationFilters = {},
 ): Promise<{ observations: Observation[]; count: number }> {
   const params = new URLSearchParams();
-  if (query) params.set('query', query);
-  if (project) params.set('project', project);
-  if (sessionId) params.set('session_id', sessionId);
-  params.set('limit', String(limit));
+  if (filters.query) params.set('query', filters.query);
+  if (filters.project) params.set('project', filters.project);
+  if (filters.sessionId) params.set('session_id', filters.sessionId);
+  if (filters.obsType) params.set('obs_type', filters.obsType);
+  if (filters.since) params.set('since', filters.since);
+  if (filters.until) params.set('until', filters.until);
+  if (filters.minImportance) params.set('min_importance', String(filters.minImportance));
+  params.set('limit', String(filters.limit ?? 100));
   return get(`${AGENT}/observations?${params}`);
 }

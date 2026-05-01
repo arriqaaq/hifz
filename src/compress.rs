@@ -32,7 +32,7 @@ pub fn compress_synthetic(payload: &HookPayload) -> CompressResult {
     let title = if payload.hook_type == "prompt_submit" {
         let prompt = data.get("prompt").and_then(|v| v.as_str()).unwrap_or("");
         if prompt.len() > 60 {
-            format!("Prompt: {}…", &prompt[..60])
+            format!("Prompt: {}…", crate::truncate_at_char_boundary(prompt, 60))
         } else if !prompt.is_empty() {
             format!("Prompt: {prompt}")
         } else {
@@ -167,10 +167,10 @@ fn build_title(tool_name: &str, data: &serde_json::Value) -> String {
                 .map(|l| l.trim())
                 .find(|l| !l.is_empty() && !l.starts_with('#'))
                 .unwrap_or(command);
-            // Truncate at first pipe or 80 chars
+            // Truncate at first pipe or 80 chars (UTF-8 safe).
             let short = match first_cmd.find('|') {
                 Some(pos) if pos < 80 => &first_cmd[..pos],
-                _ if first_cmd.len() > 80 => &first_cmd[..80],
+                _ if first_cmd.len() > 80 => crate::truncate_at_char_boundary(first_cmd, 80),
                 _ => first_cmd,
             };
             return format!("{tool_name}: {}", short.trim());
@@ -200,7 +200,7 @@ fn extract_facts(data: &serde_json::Value) -> Vec<String> {
                 let val_str = match val {
                     serde_json::Value::String(s) => {
                         if s.len() > 200 {
-                            format!("{}...", &s[..200])
+                            format!("{}...", crate::truncate_at_char_boundary(s, 200))
                         } else {
                             s.clone()
                         }
@@ -208,7 +208,7 @@ fn extract_facts(data: &serde_json::Value) -> Vec<String> {
                     _ => {
                         let s = val.to_string();
                         if s.len() > 200 {
-                            format!("{}...", &s[..200])
+                            format!("{}...", crate::truncate_at_char_boundary(&s, 200))
                         } else {
                             s
                         }
@@ -233,7 +233,7 @@ fn extract_facts(data: &serde_json::Value) -> Vec<String> {
         {
             if !output.is_empty() {
                 let truncated = if output.len() > 300 {
-                    format!("{}...", &output[..300])
+                    format!("{}...", crate::truncate_at_char_boundary(output, 300))
                 } else {
                     output.to_string()
                 };
@@ -336,7 +336,7 @@ fn build_narrative(tool_name: &str, hook_type: &str, data: &serde_json::Value) -
                     .collect::<Vec<_>>()
                     .join(" | ");
                 if last_lines.len() > 200 {
-                    format!("{}…", &last_lines[..200])
+                    format!("{}…", crate::truncate_at_char_boundary(&last_lines, 200))
                 } else {
                     last_lines
                 }
@@ -354,7 +354,7 @@ fn build_narrative(tool_name: &str, hook_type: &str, data: &serde_json::Value) -
             if prompt.is_empty() {
                 "User submitted a prompt.".to_string()
             } else if prompt.len() > 120 {
-                format!("{}…", &prompt[..120])
+                format!("{}…", crate::truncate_at_char_boundary(prompt, 120))
             } else {
                 prompt.to_string()
             }

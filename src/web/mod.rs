@@ -56,6 +56,7 @@ pub async fn serve(state: Hifz, port: u16) -> Result<()> {
         )
         .route("/sessions/end", axum::routing::post(api::session_end))
         .route("/sessions/{id}", axum::routing::get(api::session_get))
+        .route("/sessions/{id}/tree", axum::routing::get(api::session_tree))
         .route("/observe", axum::routing::post(api::observe))
         .route(
             "/events",

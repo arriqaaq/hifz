@@ -29,71 +29,7 @@ This document is the ground truth for hifz's memory model. It is updated at the 
 
 ## 1. Data model
 
-```mermaid
-erDiagram
-    SESSION ||--o{ OBSERVATION : has
-    SESSION ||--o{ RUN : contains
-    RUN ||--o{ OBSERVATION : groups
-    MEMORY ||--o{ EDGE : "from/to"
-    MEMORY }o--o{ ENTITY : about
-    OBSERVATION }o--o{ ENTITY : mentions
-    CORE_MEMORY ||--|| PROJECT : "per-project singleton"
-    MEMORY ||--|{ PROJECT : scoped
-    OBSERVATION ||--|{ PROJECT : scoped
-    RUN ||--|{ PROJECT : scoped
-
-    MEMORY {
-        string project
-        string mem_type
-        string category
-        string title
-        string content
-        array concepts
-        array files
-        array keywords
-        array tags
-        string context
-        float strength
-        bool pinned
-        int access_count
-        string last_accessed_at
-        vector embedding "HNSW, 384d"
-        bool is_latest
-    }
-    EDGE {
-        record in "memory"
-        record out "memory"
-        string via "embedding|concept|file|entity|semantic|similar_to|elaborates|contradicts|supports|depends_on|alternative_to|derived_from|generated_by|informed|motivated|implemented_by|part_of|follows"
-        float score
-    }
-    ENTITY {
-        string kind "file|symbol|concept|error"
-        string name
-        string project
-        int count
-    }
-    OBSERVATION {
-        record session_id
-        string obs_type
-        object metadata
-        string title
-        string narrative
-    }
-    RUN {
-        record session_id
-        string prompt
-        string outcome
-        array observation_ids
-        string lesson
-    }
-    CORE_MEMORY {
-        string project
-        string identity
-        array goals
-        array invariants
-        array watchlist
-    }
-```
+<p align="center"><img src="../img/data-model.svg" alt="hifz data model" width="100%"></p>
 
 ### Tier semantics
 
@@ -110,53 +46,15 @@ erDiagram
 
 ## 2. Write pipeline (observation → memory)
 
-```mermaid
-flowchart TD
-    Hook[Claude Code hook] --> API["/api/v1/observe"]
-    API --> Dedup{"dedup.rs<br/>5-min SHA window"}
-    Dedup -- duplicate --> Drop[drop]
-    Dedup -- new --> Compress["compress.rs<br/>synthetic or LLM"]
-    Compress --> Embed["Embedder<br/>(title+content+concepts+files)"]
-    Embed --> Entities["entities.rs<br/>regex + files + concepts"]
-    Entities --> WriteObs[INSERT observation]
-    Entities --> UpsertEnt["UPSERT entity +<br/>RELATE obs-mentions-entity"]
-
-    User[User calls hifz_save] --> Remember["/api/v1/memories"]
-    Remember --> EmbedMem["Embedder<br/>richer text"]
-    EmbedMem --> EntitiesMem[entities.rs]
-    EntitiesMem --> WriteMem[INSERT memory]
-    WriteMem --> LinkGen["link.rs<br/>KNN + concept + file + entity"]
-    LinkGen --> Relate["RELATE a->edge->b UNIQUE<br/>(Rust-side via-dedup)"]
-    Relate --> EvolveGate{"HIFZ_LLM_EVOLVE?"}
-    EvolveGate -- off --> DoneW[commit]
-    EvolveGate -- on --> Queue[enqueue evolve job]
-    Queue --> DoneW
-```
+<p align="center"><img src="../img/write-path.svg" alt="hifz write path" width="100%"></p>
 
 ---
 
 ## 3. Read / injection pipeline
 
-```mermaid
-flowchart TD
-    Trigger["Hook trigger<br/>SessionStart / UserPromptSubmit / PreCompact"] --> BuildQ[Build query from hook payload]
-    BuildQ --> Core["SELECT core_memory<br/>WHERE project=$p"]
-    Core --> Search["search_hybrid(project, query)"]
-    Search --> Vec["vector KNN<br/>memory.embedding"]
-    Search --> FT["BM25<br/>title + content"]
-    Search --> FTObs["BM25 + vector<br/>observation"]
-    Vec --> RRF["search::rrf(...)"]
-    FT --> RRF
-    FTObs --> RRF
-    RRF --> Rust["Rust-side score =<br/>strength · exp(-age/30) · access_boost"]
-    Rust --> Graph["1-hop expand<br/>edge via=any"]
-    Graph["1-hop expand<br/>edge via=any"] --> MMR["MMR diversify<br/>cos sim <= 0.85"]
-    MMR --> TokenBudget["fit token budget<br/>(1500/2048)"]
-    TokenBudget --> Output["# Core<br/># Saved memories<br/># Recent observations"]
-    Output --> ClaudeCtx[Claude Code additionalContext]
+<p align="center"><img src="../img/read-path.svg" alt="hifz read path" width="100%"></p>
 
-    Output --> Access["UPDATE memory SET<br/>access_count += 1,<br/>last_accessed_at = now()"]
-```
+After ranking, results are MMR-diversified (cos sim ≤ 0.85), fit to a token budget (1500/2048), and emitted as `# Core` / `# Saved memories` / `# Recent observations` sections to the Claude Code `additionalContext` field. Each surfaced memory's `access_count` is bumped and `last_accessed_at` updated, feeding the access component of the rank formula on subsequent queries.
 
 ### Diversification rule
 
@@ -220,28 +118,7 @@ Neighbours are scored `seed_score * 0.5 * edge.score`, merged with primary candi
 
 Gated by `HIFZ_LLM_EVOLVE=true`. Matches A-MEM §*Memory Evolution*: on a new-memory write, the LLM inspects the new note + its KNN/graph neighbours, then proposes *updates to the neighbours*.
 
-```mermaid
-sequenceDiagram
-    participant W as Write path
-    participant Q as Evolve queue
-    participant L as LLM
-    participant DB as SurrealDB
-
-    W->>DB: INSERT memory $new (deterministic)
-    W->>DB: link.rs creates edge records
-    W->>Q: enqueue(new.id) iff HIFZ_LLM_EVOLVE
-    Q->>DB: SELECT $new + KNN neighbours + edge
-    Q->>L: prompt(new, neighbours, edges)
-    L-->>Q: JSON {new_note, neighbour_updates[<=5]}
-    loop for each neighbour_update
-        Q->>DB: UPDATE memory SET keywords=array::difference(array::concat(...),...), tags=..., context=...
-        Q->>DB: RELATE neighbour->edge->new UNIQUE (if link_to_new)
-        alt supersedes
-            Q->>DB: UPDATE older SET is_latest=false, supersedes=[newer.id]
-        end
-    end
-    Q->>DB: UPDATE $new SET keywords, tags, context
-```
+<p align="center"><img src="../img/evolve.svg" alt="memory evolution sequence" width="100%"></p>
 
 ### LLM output contract
 
@@ -278,26 +155,15 @@ sequenceDiagram
 
 ## 6. Phase map
 
-```mermaid
-flowchart LR
-    P6["Phase 6<br/>Eval harness"]:::foundation
-    P1["Phase 1<br/>Retrieval quality"]:::core
-    P2["Phase 2<br/>Core memory"]:::core
-    P3["Phase 3<br/>Graph linking"]:::graph
-    P4["Phase 4<br/>Entities + runs"]:::graph
-    P5["Phase 5<br/>Evolution (LLM opt-in)"]:::llm
+Build order (each block depends on the prior):
 
-    P6 --> P1
-    P1 --> P2
-    P1 --> P3
-    P3 --> P4
-    P4 --> P5
+1. **Phase 6 — Eval harness** (`memory-bench`). Foundation: nothing else lands without measurement.
+2. **Phase 1 — Retrieval quality**. Embedded memories, project scoping, Rust-side rank, query-aware injection.
+3. **Phase 2 — Core memory** and **Phase 3 — Graph linking** (parallel; both build on Phase 1).
+4. **Phase 4 — Entities + runs**. Builds on Phase 3.
+5. **Phase 5 — Evolution (LLM, opt-in)**. Builds on Phase 4.
 
-    classDef foundation fill:#eef,stroke:#55a
-    classDef core fill:#efe,stroke:#5a5
-    classDef graph fill:#fef,stroke:#a5a
-    classDef llm fill:#ffe,stroke:#aa5
-```
+See the **Phase status** table at the top of this document for the current shipped/planned state of each phase.
 
 ## 7. Migrations
 

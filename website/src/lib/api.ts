@@ -152,6 +152,14 @@ export function getTimeline(sessionId: string, limit = 50): Promise<{ observatio
   return get(`${AGENT}/timeline?session_id=${encodeURIComponent(sessionId)}&limit=${limit}`);
 }
 
+export function getSessionTree(sessionId: string): Promise<{
+  session: Session | null;
+  runs: Run[];
+  observations: Observation[];
+}> {
+  return get(`${AGENT}/sessions/${encodeURIComponent(sessionId)}/tree`);
+}
+
 export function searchRuns(
   query: string,
   project?: string,

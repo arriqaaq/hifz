@@ -2,8 +2,10 @@ export interface HealthResponse {
   status: string;
   version: string;
   sessions: number;
+  runs: number;
   observations: number;
   memories: number;
+  commits: number;
   uptime_seconds: number;
 }
 

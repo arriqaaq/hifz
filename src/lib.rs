@@ -205,6 +205,46 @@ impl Hifz {
     pub async fn run_detail(&self, id: &str) -> Result<serde_json::Value> {
         crate::run::detail(&self.db, id).await
     }
+    /// Tree view of one session: session + its runs + observations.
+    /// Reuses `session::get`, `run::list_by_session`, and `observe::search`
+    /// so this helper stays consistent with every other read path.
+    pub async fn session_tree(&self, id: &str) -> Result<serde_json::Value> {
+        let session_value = crate::session::get(&self.db, id).await?;
+        // session::get returns `{"error": ...}` on miss; normalize to null.
+        let session = match session_value.get("error") {
+            Some(_) => serde_json::Value::Null,
+            None => session_value,
+        };
+
+        let runs = crate::run::list_by_session(&self.db, id).await?;
+
+        let obs_resp = crate::observe::search(
+            &self.db,
+            crate::models::ObservationsReq {
+                session_id: Some(id.trim_start_matches("session:").to_string()),
+                limit: Some(500),
+                ..Default::default()
+            },
+        )
+        .await?;
+        // observe::search returns DESC; flip to ASC for the trace tree.
+        let mut observations: Vec<serde_json::Value> = obs_resp
+            .get("observations")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+        observations.sort_by(|a, b| {
+            let ta = a.get("timestamp").and_then(|v| v.as_str()).unwrap_or("");
+            let tb = b.get("timestamp").and_then(|v| v.as_str()).unwrap_or("");
+            ta.cmp(tb)
+        });
+
+        Ok(serde_json::json!({
+            "session": session,
+            "runs": runs,
+            "observations": observations,
+        }))
+    }
 
     // --- Memory ---
     pub async fn remember(&self, req: crate::models::RememberReq) -> Result<serde_json::Value> {

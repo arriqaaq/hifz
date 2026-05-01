@@ -1,5 +1,7 @@
 <script lang="ts">
   import type { Observation, Memory } from '$lib/types';
+  import EntityChip from '$lib/components/entity/EntityChip.svelte';
+  import { kindForObsType } from '$lib/components/entity/entityHelpers';
 
   type Item =
     | { kind: 'observation'; data: Observation }
@@ -47,7 +49,13 @@
   <aside class="drawer">
     <header class="drawer-head">
       {#if item.kind === 'observation'}
-        <span class="badge badge-blue">{item.data.obs_type}</span>
+        <EntityChip
+          kind={kindForObsType(item.data.obs_type)}
+          id={extractId(item.data.id)}
+          label={item.data.obs_type}
+          size="sm"
+          href={null}
+        />
       {:else}
         <span class="badge badge-purple">memory · {item.data.category}</span>
       {/if}
@@ -65,7 +73,7 @@
           {@const sid = sessionIdFromObs(obs)}
           <dt>Session</dt>
           <dd>
-            <a href={`/sessions/${encodeURIComponent(sid)}`}>{sid.slice(0, 12)}…</a>
+            <EntityChip kind="session" id={sid} size="sm" />
             {#if onFilterToSession}
               <button type="button" class="link-btn" onclick={() => onFilterToSession(sid)}>
                 filter to this →
@@ -175,8 +183,8 @@
     height: 100vh;
     width: min(440px, 90vw);
     background: var(--bg);
-    border-left: 1px solid var(--border);
-    box-shadow: -4px 0 0 0 var(--border-light);
+    border-left: 1px solid var(--line-strong);
+    box-shadow: -4px 0 0 0 var(--line);
     z-index: 50;
     overflow-y: auto;
     padding: 16px 20px;
@@ -189,7 +197,7 @@
     justify-content: space-between;
     margin-bottom: 8px;
     padding-bottom: 8px;
-    border-bottom: 1px solid var(--border-light);
+    border-bottom: 1px solid var(--line);
   }
 
   .close {
@@ -227,7 +235,6 @@
     padding-top: 2px;
   }
   .meta dd { margin: 0; color: var(--ink); font-family: var(--font-mono); font-size: 10px; }
-  .meta a { color: var(--accent); text-decoration: underline; }
 
   .link-btn {
     background: none;
@@ -269,8 +276,8 @@
   .code {
     margin: 0;
     padding: 10px 12px;
-    background: var(--bg-alt, #F0F0EC);
-    border: 1px solid var(--border-light);
+    background: var(--surface-alt);
+    border: 1px solid var(--line);
     font-family: var(--font-mono);
     font-size: 10px;
     line-height: 1.5;

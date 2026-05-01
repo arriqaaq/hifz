@@ -5,31 +5,50 @@
   import CytoscapeGraph, {
     type GraphInputNode,
     type GraphInputEdge,
+    type EdgeRel,
   } from '$lib/components/graph/CytoscapeGraph.svelte';
   import LoadingSpinner from '$lib/components/common/LoadingSpinner.svelte';
   import FilterBar from '$lib/components/filters/FilterBar.svelte';
-  import DetailDrawer from '$lib/components/common/DetailDrawer.svelte';
   import { type Filters, readFilters, applyFilters, toApiParams } from '$lib/stores/filters';
-  import type { Observation, Memory } from '$lib/types';
+  import { goto } from '$app/navigation';
+  import type { Observation, Memory, Run, Session } from '$lib/types';
+  import EntityChip from '$lib/components/entity/EntityChip.svelte';
+  import { extractId as extractEntityId } from '$lib/components/entity/entityHelpers';
+  import { shell } from '$lib/stores/shell.svelte';
+  import { Columns2, X as XIcon } from 'lucide-svelte';
+
+  type RawNode = { id: string; kind: GraphInputNode['kind']; label: string };
+  type RawEdge = { source: string; target: string; rel: EdgeRel };
 
   let nodes = $state<GraphInputNode[]>([]);
   let edges = $state<GraphInputEdge[]>([]);
   let allNodes = $state<GraphInputNode[]>([]);
   let allEdges = $state<GraphInputEdge[]>([]);
+  let rawById = new Map<string, Observation | Memory | Run | Session>();
   let loading = $state(true);
   let error = $state('');
   let projects = $state<string[]>([]);
   let selectedId = $state<string | undefined>(undefined);
-  let drawerItem = $state<
-    | { kind: 'observation'; data: Observation }
-    | { kind: 'memory'; data: Memory }
-    | null
-  >(null);
   let localMode = $state(false);
   let localDepth = $state(2);
   let lastSearch = '';
 
   let filters = $derived<Filters>(readFilters(page.url));
+  let split = $derived(page.url.searchParams.get('split') ?? '');
+
+  function toggleSplit() {
+    const url = new URL(page.url);
+    if (split === 'observations') {
+      url.searchParams.delete('split');
+    } else {
+      url.searchParams.set('split', 'observations');
+    }
+    void goto(`${url.pathname}?${url.searchParams.toString()}`, {
+      replaceState: true,
+      keepFocus: true,
+      noScroll: true,
+    });
+  }
 
   function extractId(id: unknown): string {
     if (typeof id === 'string') return id;
@@ -55,69 +74,48 @@
         since: apiParams.since,
         until: apiParams.until,
         minImportance: apiParams.minImportance,
-      })) as Record<string, unknown[]>;
+      })) as Record<string, unknown>;
 
-      const memories = (data.memories ?? []) as Memory[];
-      const observations = (data.observations ?? []) as Observation[];
-
-      const ns: GraphInputNode[] = [];
-      const conceptMap = new Map<string, string[]>();
-
-      for (const m of memories) {
-        const id = extractId(m.id);
-        ns.push({
-          id,
-          label: m.title,
-          type: m.category,
-          kind: 'memory',
-          keywords: m.keywords,
-          files: m.files,
-          raw: m,
-        });
-        for (const c of m.keywords ?? []) {
-          if (!conceptMap.has(c)) conceptMap.set(c, []);
-          conceptMap.get(c)!.push(id);
+      // Build a lookup so node clicks can resolve back to the full record
+      // without re-querying. Memories/observations/runs/sessions all carry
+      // their own `id` field; we key the map on the canonical record string.
+      rawById = new Map();
+      const indexById = (rows: unknown, _label: string) => {
+        if (!Array.isArray(rows)) return;
+        for (const row of rows as Array<Record<string, unknown>>) {
+          const id = extractId(row.id);
+          if (id) rawById.set(id, row as unknown as Observation | Memory | Run | Session);
         }
-      }
+      };
+      indexById(data.observations, 'observation');
+      indexById(data.memories, 'memory');
+      indexById(data.runs, 'run');
+      indexById(data.sessions, 'session');
 
-      for (const o of observations) {
-        if (o.title === 'unknown call' || o.obs_type === 'conversation') continue;
-        const id = extractId(o.id);
-        ns.push({
-          id,
-          label: o.title,
-          type: o.obs_type,
-          kind: 'observation',
-          keywords: o.keywords,
-          files: o.files,
-          timestamp: o.timestamp,
-          obs_type: o.obs_type,
-          importance: o.importance,
-          raw: o,
-        });
-        for (const c of o.keywords ?? []) {
-          if (!conceptMap.has(c)) conceptMap.set(c, []);
-          conceptMap.get(c)!.push(id);
-        }
-      }
+      const rawNodes = (data.nodes ?? []) as RawNode[];
+      const rawEdges = (data.edges ?? []) as RawEdge[];
 
-      // Build edges from shared concepts
-      const edgeSet = new Set<string>();
-      const es: GraphInputEdge[] = [];
-      for (const indices of conceptMap.values()) {
-        if (indices.length > 20) continue;
-        for (let i = 0; i < indices.length; i++) {
-          for (let j = i + 1; j < indices.length; j++) {
-            const a = indices[i];
-            const b = indices[j];
-            const key = a < b ? `${a}~${b}` : `${b}~${a}`;
-            if (!edgeSet.has(key)) {
-              edgeSet.add(key);
-              es.push({ source: a, target: b });
-            }
-          }
-        }
-      }
+      const ns: GraphInputNode[] = rawNodes.map((n) => {
+        const raw = rawById.get(n.id);
+        return {
+          id: n.id,
+          label: n.label,
+          type: typeForNode(n, raw),
+          kind: n.kind,
+          keywords: (raw as { keywords?: string[] } | undefined)?.keywords,
+          files: (raw as { files?: string[] } | undefined)?.files,
+          timestamp: (raw as { timestamp?: string } | undefined)?.timestamp,
+          obs_type: (raw as { obs_type?: string } | undefined)?.obs_type,
+          importance: (raw as { importance?: number } | undefined)?.importance,
+          raw,
+        } satisfies GraphInputNode;
+      });
+
+      const es: GraphInputEdge[] = rawEdges.map((e) => ({
+        source: e.source,
+        target: e.target,
+        rel: e.rel,
+      }));
 
       allNodes = ns;
       allEdges = es;
@@ -131,6 +129,19 @@
     } finally {
       loading = false;
     }
+  }
+
+  function typeForNode(n: RawNode, raw: unknown): string {
+    // The Cytoscape stylesheet keys node colour off `data(type)`. For
+    // observations + commits we want the obs_type colour; for memories
+    // the category; otherwise fall back to the kind itself.
+    if (n.kind === 'observation' || n.kind === 'commit') {
+      return ((raw as { obs_type?: string } | undefined)?.obs_type) ?? n.kind;
+    }
+    if (n.kind === 'memory') {
+      return ((raw as { category?: string } | undefined)?.category) ?? 'memory';
+    }
+    return n.kind;
   }
 
   function applyLocalView() {
@@ -186,14 +197,19 @@
 
   function onSelect(n: GraphInputNode | null) {
     if (!n) {
-      drawerItem = null;
+      shell.closeDrawer();
       if (localMode) applyLocalView();
       return;
     }
-    if (n.kind === 'memory') {
-      drawerItem = { kind: 'memory', data: n.raw as Memory };
-    } else {
-      drawerItem = { kind: 'observation', data: n.raw as Observation };
+    if (n.kind === 'memory' && n.raw) {
+      shell.openDrawer({ kind: 'memory', id: n.id, data: n.raw as Memory });
+    } else if ((n.kind === 'observation' || n.kind === 'commit') && n.raw) {
+      shell.openDrawer({
+        kind: 'observation',
+        id: n.id,
+        data: n.raw as Observation,
+        onFilterToSession: filterToSession,
+      });
     }
     if (localMode) applyLocalView();
   }
@@ -221,7 +237,7 @@
 
   function filterToSession(sid: string) {
     void applyFilters({ ...filters, sessionId: sid });
-    drawerItem = null;
+    shell.closeDrawer();
   }
 </script>
 
@@ -243,28 +259,67 @@
         <span class="hint-inline">click a node to set the root</span>
       {/if}
     {/if}
+    <button type="button" class="split-btn" onclick={toggleSplit} title="Toggle split with observations">
+      {#if split === 'observations'}
+        <XIcon size={12} strokeWidth={1.6} />
+        Close split
+      {:else}
+        <Columns2 size={12} strokeWidth={1.6} />
+        Split: observations
+      {/if}
+    </button>
     <span class="stat">{nodes.length} nodes · {edges.length} edges{#if allNodes.length !== nodes.length} (of {allNodes.length}){/if}</span>
   </div>
 
-  <div class="graph-area">
-    {#if loading}
-      <LoadingSpinner />
-    {:else if error}
-      <div class="card" style="border-color: var(--accent);">
-        <p style="color: var(--accent); margin: 0;">{error}</p>
-      </div>
-    {:else if nodes.length === 0}
-      <p class="empty">No data to visualize. Try clearing filters or check the server is running.</p>
-    {:else}
-      <CytoscapeGraph {nodes} {edges} bind:selectedId {onSelect} {onExpand} />
+  <div class="layout" class:split={split === 'observations'}>
+    <div class="graph-area">
+      {#if loading}
+        <LoadingSpinner />
+      {:else if error}
+        <div class="card" style="border-color: var(--accent);">
+          <p style="color: var(--accent); margin: 0;">{error}</p>
+        </div>
+      {:else if nodes.length === 0}
+        <p class="empty">No data to visualize. Try clearing filters or check the server is running.</p>
+      {:else}
+        <CytoscapeGraph {nodes} {edges} bind:selectedId {onSelect} {onExpand} />
+      {/if}
+    </div>
+
+    {#if split === 'observations'}
+      <aside class="split-pane">
+        <h3 class="pane-h">Observations ({nodes.filter((n) => n.kind === 'observation').length})</h3>
+        <ol class="obs-list">
+          {#each nodes.filter((n) => n.kind === 'observation') as n}
+            <li class="obs-list-item" class:selected={selectedId === n.id}>
+              <button
+                type="button"
+                class="obs-list-row"
+                onclick={() => {
+                  selectedId = n.id;
+                  if (n.raw) {
+                    shell.openDrawer({
+                      kind: 'observation',
+                      id: n.id,
+                      data: n.raw as Observation,
+                      onFilterToSession: filterToSession,
+                    });
+                  }
+                }}
+              >
+                <EntityChip kind="observation" id={n.id} label={n.obs_type ?? 'obs'} size="sm" href={null} />
+                {#if (n.raw as Observation | undefined)?.session_id}
+                  {@const sid = extractEntityId((n.raw as Observation).session_id)}
+                  <EntityChip kind="session" id={sid} size="sm" />
+                {/if}
+                <span class="obs-list-title">{n.label}</span>
+              </button>
+            </li>
+          {/each}
+        </ol>
+      </aside>
     {/if}
   </div>
-
-  <DetailDrawer
-    item={drawerItem}
-    onClose={() => (drawerItem = null)}
-    onFilterToSession={filterToSession}
-  />
 </div>
 
 <style>
@@ -310,6 +365,89 @@
     font-style: italic;
   }
 
+  .split-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-family: var(--font-ui);
+    color: var(--ink-secondary);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+  }
+  .split-btn:hover {
+    background: var(--surface-alt);
+    border-color: var(--line-strong);
+  }
+
+  .layout {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    min-height: 0;
+  }
+  .layout.split {
+    grid-template-columns: 1.3fr 1fr;
+  }
+
+  .split-pane {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    overflow-y: auto;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .pane-h {
+    margin: 0 0 8px;
+    font-family: var(--font-ui);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-faint);
+  }
+
+  .obs-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .obs-list-item.selected .obs-list-row {
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+  }
+  .obs-list-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+    border-radius: var(--radius-sm);
+    flex-wrap: wrap;
+  }
+  .obs-list-row:hover { background: var(--surface-alt); }
+  .obs-list-title {
+    flex: 1;
+    font-family: var(--font-ui);
+    font-size: 11.5px;
+    color: var(--ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .stat {
     margin-left: auto;
     font-family: var(--font-mono);
@@ -320,7 +458,7 @@
   .graph-area {
     flex: 1;
     position: relative;
-    border: 1px solid var(--border);
+    border: 1px solid var(--line-strong);
     overflow: hidden;
   }
 

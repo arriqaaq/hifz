@@ -205,13 +205,13 @@
   .meta-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    border: 1px solid var(--border);
+    border: 1px solid var(--line-strong);
     margin-bottom: 24px;
   }
   .meta-item {
     padding: 12px 16px;
-    border-bottom: 1px solid var(--border-light);
-    border-right: 1px solid var(--border-light);
+    border-bottom: 1px solid var(--line);
+    border-right: 1px solid var(--line);
   }
   .meta-label {
     display: block;
@@ -250,7 +250,7 @@
   .file-list { list-style: none; padding: 0; margin: 0; }
   .file-item {
     padding: 6px 0;
-    border-bottom: 1px solid var(--border-light);
+    border-bottom: 1px solid var(--line);
     font-family: var(--font-mono);
     font-size: 12px;
     color: var(--ink-secondary);
@@ -258,7 +258,7 @@
   .file-item:last-child { border-bottom: none; }
 
   .diff-file {
-    border: 1px solid var(--border);
+    border: 1px solid var(--line-strong);
     margin-bottom: 16px;
     overflow: hidden;
   }
@@ -267,8 +267,8 @@
     font-family: var(--font-mono);
     font-size: 12px;
     font-weight: 600;
-    background: var(--bg-alt, #F0F0EC);
-    border-bottom: 1px solid var(--border);
+    background: var(--surface-alt);
+    border-bottom: 1px solid var(--line-strong);
     color: var(--ink-secondary);
   }
   .diff-body {
@@ -293,7 +293,7 @@
     color: var(--ink-secondary);
   }
   .diff-hunk {
-    background: var(--bg-alt, #F0F0EC);
+    background: var(--surface-alt);
     color: var(--ink-faint);
     padding: 4px 14px;
     font-style: italic;

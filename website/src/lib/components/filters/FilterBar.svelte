@@ -137,7 +137,7 @@
 
 <style>
   .filter-bar {
-    border: 1px solid var(--border);
+    border: 1px solid var(--line-strong);
     background: var(--bg);
     margin-bottom: 16px;
     padding: 10px 14px;
@@ -168,7 +168,7 @@
     font-size: 11px;
     font-family: var(--font-ui);
     background: var(--bg);
-    border: 1px solid var(--border);
+    border: 1px solid var(--line-strong);
     color: var(--ink);
     cursor: pointer;
   }
@@ -186,12 +186,12 @@
     font-size: 11px;
     font-family: var(--font-ui);
     background: transparent;
-    border: 1px solid var(--border);
+    border: 1px solid var(--line-strong);
     color: var(--ink);
     cursor: pointer;
   }
   .chip-active {
-    background: var(--bg-alt, #F0F0EC);
+    background: var(--surface-alt);
     border-color: var(--ink-muted);
     display: inline-flex;
     gap: 6px;
@@ -216,8 +216,8 @@
     left: 0;
     z-index: 10;
     background: var(--bg);
-    border: 1px solid var(--border);
-    box-shadow: 4px 4px 0 0 var(--border-light);
+    border: 1px solid var(--line-strong);
+    box-shadow: 4px 4px 0 0 var(--line);
     min-width: 180px;
     display: flex;
     flex-direction: column;
@@ -233,7 +233,7 @@
     color: var(--ink);
     cursor: pointer;
   }
-  .types-menu-item:hover { background: var(--bg-alt, #F0F0EC); }
+  .types-menu-item:hover { background: var(--surface-alt); }
   .types-menu-item.active { color: var(--accent); font-weight: 600; }
 
   .clear {
@@ -252,7 +252,7 @@
     font-size: 11px;
     font-family: var(--font-mono);
     background: var(--bg);
-    border: 1px solid var(--border);
+    border: 1px solid var(--line-strong);
     color: var(--ink);
   }
   .arrow { color: var(--ink-faint); font-size: 11px; }
@@ -262,11 +262,11 @@
     font-size: 10px;
     font-family: var(--font-ui);
     background: transparent;
-    border: 1px solid var(--border-light);
+    border: 1px solid var(--line);
     color: var(--ink-muted);
     cursor: pointer;
   }
-  .preset:hover { color: var(--ink); border-color: var(--border); }
+  .preset:hover { color: var(--ink); border-color: var(--line-strong); }
 
   .slider {
     width: 120px;

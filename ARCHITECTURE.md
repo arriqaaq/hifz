@@ -1,37 +1,30 @@
 # hifz Architecture
 
-Persistent memory for Claude Code. Hooks capture what happens during a session, memories store what matters long-term, and a knowledge graph ties everything together.
+Local-first persistent memory. A single Rust process (`hifz serve`) owns an embedded SurrealDB, a fastembed ONNX embedder, the search index, the REST API, and the static dashboard. Anything that speaks HTTP — applications, scripts, agents — can save and search memories. The Claude Code adapter is the reference integration: hooks capture what happens during a session, memories store what matters long-term, and a knowledge graph ties everything together.
 
-```mermaid
-flowchart TD
-    hooks[Claude Code Hooks] --> observe[observe\ningest]
-    observe --> compress[compress\nreduce]
-    observe --> run[run\ntask arc]
-    remember[remember\nstore] --> link[link\nKNN + Jaccard]
-    remember --> entities[entities\nextraction]
-    remember --> evolve[evolve\nLLM, opt-in]
-    evolve -.->|supersede| remember
-    link --> edge[(edge graph)]
-    entities --> edge
-    evolve --> edge
-```
+## Topology
 
-```mermaid
-flowchart LR
-    subgraph Retrieval
-        search[search\nBM25 + HNSW] --> rrf[RRF fusion]
-        rrf --> rerank[rerank\nLLM or cross-encoder]
-        rerank --> rank[rank\nrecency + access + strength]
-    end
+<p align="center"><img src="docs/img/topology.svg" alt="hifz topology" width="100%"></p>
 
-    subgraph Background
-        consolidate[consolidate\n4 tiers] --> forget[forget\nGC + contradiction]
-    end
-```
+The MCP proxy (`hifz mcp`) is a thin stdio bridge that translates MCP tool calls into HTTP. Adapters (like `adapters/claude-code/`) speak the same HTTP API.
+
+## Pipelines
+
+### Write path
+
+<p align="center"><img src="docs/img/write-path.svg" alt="hifz write path" width="100%"></p>
+
+### Read path
+
+<p align="center"><img src="docs/img/read-path.svg" alt="hifz read path" width="100%"></p>
+
+Background processing — `consolidate` (4 tiers) and `forget` (GC + contradiction detection) — runs on demand via `POST /consolidate` and `POST /forget-gc`. See [Consolidation](#consolidation) below.
 
 ---
 
 ## Two-layer ontology
+
+<p align="center"><img src="docs/img/ontology.svg" alt="hifz two-layer ontology" width="100%"></p>
 
 hifz separates **core knowledge** from **agent capture**:
 
@@ -187,6 +180,27 @@ Recency decays, access reinforces, grounding-derived strength anchors.
 
 MemGPT-style per-project block: identity, goals, invariants, watchlist. Always prepended to injected context so these never drift out on compaction.
 
+### plans.rs — Plans as Pinned Memory
+
+Plans are stored as `memory` records with `category='plan'`, `pinned=true`, and `tags=['active']` while active. The lifecycle:
+
+- `POST /api/v1/plans/activate` — promotes a memory to active, appends its title to `core_memory.goals` so the plan rides along on every context injection.
+- `POST /api/v1/plans/{id}/complete` — clears the `active` tag and unpins; the memory remains searchable as historical context.
+- `POST /api/v1/plans/{id}/abandon` — same as complete, but tagged `abandoned`.
+- `GET /api/v1/plans/current` and `GET /api/v1/plans` — list active or all plans.
+
+Treating plans as memories means they participate in linking, search, and graph traversal; activation is just a pin + a goal injection.
+
+### run.rs — Run Search
+
+Runs are persisted task-trajectories (see Observation Pipeline). After the fact they are queryable:
+
+- `POST /api/v1/runs` — search by query/project/session, full-text over the lesson summary.
+- `GET /api/v1/runs/{id}` — fetch a run with its observation chain.
+- `GET /api/v1/runs/count` — counts for dashboard tiles.
+
+The `hifz_runs` MCP tool wraps `/runs`.
+
 ---
 
 ## Consolidation
@@ -226,6 +240,8 @@ Memories have `version`, `parent_id`, `supersedes[]`, `is_latest`. When evolutio
 
 This creates an append-only version chain where only the canonical version of each memory is surfaced.
 
+<p align="center"><img src="docs/img/versioning.svg" alt="memory version chain" width="80%"></p>
+
 ---
 
 ## Module Index
@@ -257,3 +273,57 @@ This creates an append-only version chain where only the canonical version of ea
 | `prompts` | System prompt constants for LLM features |
 | `mcp` | MCP server (thin HTTP proxy to REST) |
 | `web` | Axum REST API + static site serving |
+| `plans` | Plans-as-memory lifecycle (activate / complete / abandon) |
+| `commits` | Commit ingestion and diff serving |
+| `event` | Generic event ingestion (`/events`, `/events/batch`) |
+| `session` | Session lifecycle and tree assembly |
+| `timeline` | Chronological observation queries |
+| `trace` | Knowledge-graph traversal from a seed node |
+| `reindex` | Rebuild BM25 / HNSW indexes |
+| `export` | Bulk export of all memory data |
+| `health` | Liveness and readiness endpoints |
+| `ollama` | Ollama HTTP client wrapper |
+
+---
+
+## MCP Surface (17 tools)
+
+The MCP proxy (`hifz mcp`) exposes a curated subset of the REST API as MCP tools, grouped by purpose. Each tool wraps one or more `/api/v1/*` endpoints.
+
+| Group | Tool | Wraps |
+|---|---|---|
+| **Memory** | `hifz_save` | `POST /memories` |
+| | `hifz_recall` | `POST /search` + graph expansion |
+| | `hifz_search` | `POST /search` |
+| | `hifz_delete` | `DELETE /memories/{id}` |
+| | `hifz_evolve` | `POST /memories/{id}/evolve` |
+| **Core** | `hifz_core_get` | `GET /core/{project}` |
+| | `hifz_core_edit` | `PATCH /core/{project}` |
+| **Plans** | `hifz_current_plan` | `GET /plans/current` |
+| | `hifz_plans` | `GET /plans` |
+| | `hifz_activate_plan` | `POST /plans/activate` |
+| **Trajectories** | `hifz_sessions` | `GET /sessions` |
+| | `hifz_runs` | `POST /runs` |
+| | `hifz_timeline` | `GET /timeline` |
+| | `hifz_digest` | `GET /digest` |
+| | `hifz_export` | `GET /export` |
+| **Graph** | `hifz_trace` | `POST /trace` |
+| **Provenance** | `hifz_commits` | `GET /commits` |
+
+The proxy is intentionally thin: schema validation, JSON ↔ MCP conversion, and HTTP forwarding only. All real logic stays in the server, so REST clients and MCP clients see the same behavior.
+
+---
+
+## Dashboard
+
+A SvelteKit single-page app lives in `website/` and is served as static assets by the `web` module under `http://localhost:3111`. It is read-mostly: it consumes the same REST API and never bypasses it.
+
+| Route | Reads |
+|---|---|
+| `/` | `/health`, `/digest`, `/sessions`, `/commits` |
+| `/memories` | `/memories` (GET search) |
+| `/observations` | `/observations` |
+| `/sessions`, `/sessions/[id]` | `/sessions`, `/sessions/{id}/tree` |
+| `/runs`, `/runs/[id]` | `/runs`, `/runs/{id}` |
+| `/commits`, `/commits/[sha]` | `/commits`, `/commits/{sha}/diff` |
+| `/graph` | `/trace`, `/memories/{id}/links` |

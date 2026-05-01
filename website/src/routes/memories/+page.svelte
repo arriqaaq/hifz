@@ -144,7 +144,7 @@
   .search-row {
     display: flex;
     gap: 0;
-    border: 1px solid var(--border);
+    border: 1px solid var(--line-strong);
   }
   .search-input {
     flex: 1;
@@ -234,8 +234,8 @@
   .content-text {
     margin: 0;
     padding: 12px;
-    background: var(--bg-alt, #F0F0EC);
-    border: 1px solid var(--border-light);
+    background: var(--surface-alt);
+    border: 1px solid var(--line);
     font-family: var(--font-body);
     font-size: 12px;
     line-height: 1.6;
@@ -260,7 +260,7 @@
     font-size: 10px;
     color: var(--ink-faint);
     padding-top: 8px;
-    border-top: 1px solid var(--border-light);
+    border-top: 1px solid var(--line);
   }
 
   .del-btn {

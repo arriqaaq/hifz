@@ -11,7 +11,7 @@
     id: string;
     label: string;
     type: string;
-    kind: 'memory' | 'observation';
+    kind: 'memory' | 'observation' | 'session' | 'run' | 'commit';
     keywords?: string[];
     files?: string[];
     timestamp?: string;
@@ -20,10 +20,24 @@
     raw?: unknown;
   }
 
+  export type EdgeClass =
+    | 'shared-keyword'
+    | 'causal-file'
+    | 'causal-keyword'
+    | 'causal-memory';
+  export type EdgeRel =
+    | 'IN_SESSION'
+    | 'IN_RUN'
+    | 'SHARES_FILE'
+    | 'RECALLS'
+    | 'DISTILLED_FROM'
+    | 'PRODUCED_BY';
+
   export interface GraphInputEdge {
     source: string;
     target: string;
-    kind?: 'shared-keyword' | 'causal-file' | 'causal-keyword' | 'causal-memory';
+    kind?: EdgeClass;
+    rel?: EdgeRel;
   }
 
   let {
@@ -74,7 +88,12 @@
     }
     for (const e of es) {
       els.push({
-        data: { id: `${e.source}__${e.target}`, source: e.source, target: e.target },
+        data: {
+          id: `${e.source}__${e.target}`,
+          source: e.source,
+          target: e.target,
+          rel: e.rel ?? '',
+        },
         classes: e.kind ?? '',
       });
     }
@@ -171,6 +190,20 @@
       cy.on('mouseover', 'node', (evt) => evt.target.addClass('show-label'));
       cy.on('mouseout', 'node', (evt) => evt.target.removeClass('show-label'));
     }
+
+    // Neighborhood dim: on hover, fade everything outside the 1-hop neighborhood.
+    cy.on('mouseover', 'node', (evt) => {
+      if (!cy) return;
+      const node = evt.target;
+      const keep = node.closedNeighborhood();
+      cy.elements().not(keep).addClass('faded');
+      keep.connectedEdges().addClass('show-label');
+    });
+    cy.on('mouseout', 'node', () => {
+      if (!cy) return;
+      cy.elements().removeClass('faded');
+      cy.edges().removeClass('show-label');
+    });
   });
 
   // Re-render when input changes.
@@ -285,7 +318,7 @@
     flex-direction: column;
     gap: 6px;
     background: rgba(249, 249, 247, 0.95);
-    border: 1px solid var(--border);
+    border: 1px solid var(--line-strong);
     padding: 8px 10px;
   }
   .ctrl-group {
@@ -308,11 +341,11 @@
     font-weight: 500;
     font-family: var(--font-ui);
     background: var(--bg);
-    border: 1px solid var(--border);
+    border: 1px solid var(--line-strong);
     color: var(--ink);
     cursor: pointer;
   }
-  .ctrl-btn:hover { background: var(--bg-alt, #F0F0EC); }
+  .ctrl-btn:hover { background: var(--surface-alt); }
   .ctrl-btn.active {
     background: var(--ink);
     color: var(--bg);
@@ -327,7 +360,7 @@
     z-index: 2;
     padding: 6px 10px;
     background: rgba(249, 249, 247, 0.85);
-    border: 1px solid var(--border-light);
+    border: 1px solid var(--line);
     font-family: var(--font-ui);
     font-size: 10px;
     color: var(--ink-faint);

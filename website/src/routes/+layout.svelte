@@ -1,39 +1,47 @@
 <script lang="ts">
   import '../app.css';
-  import { page } from '$app/state';
   import { onMount } from 'svelte';
   import { getHealth } from '$lib/api';
   import type { HealthResponse } from '$lib/types';
+  import Sidebar from '$lib/components/shell/Sidebar.svelte';
+  import SecondaryPanel from '$lib/components/shell/SecondaryPanel.svelte';
+  import Breadcrumb from '$lib/components/shell/Breadcrumb.svelte';
+  import CommandBar from '$lib/components/shell/CommandBar.svelte';
+  import DetailDrawer from '$lib/components/common/DetailDrawer.svelte';
+  import { shell } from '$lib/stores/shell.svelte';
+  import { PanelLeft, PanelLeftClose, Command as CommandIcon } from 'lucide-svelte';
 
   let { children } = $props();
 
   let health = $state<HealthResponse | null>(null);
 
-  const tabs = [
-    { label: 'Dashboard', href: '/', desc: 'Overview of sessions, commits, and top keywords' },
-    { label: 'Sessions', href: '/sessions', desc: 'Claude Code sessions — each conversation from start to end' },
-    { label: 'Runs', href: '/runs', desc: 'Task-scoped trajectories within a session (prompt to completion)' },
-    { label: 'Observations', href: '/observations', desc: 'Raw events: tool calls, prompts, and outputs' },
-    { label: 'Memories', href: '/memories', desc: 'Curated knowledge: patterns, preferences, and facts' },
-    { label: 'Graph', href: '/graph', desc: 'Visual map of keywords and their connections' },
-  ];
-
-  function isActive(href: string): boolean {
-    if (href === '/') return page.url.pathname === '/';
-    return page.url.pathname.startsWith(href);
-  }
-
-  function formatDate(): string {
-    return new Date().toLocaleDateString('en-US', {
-      weekday: 'short',
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    }).toUpperCase();
-  }
-
   onMount(() => {
-    getHealth().then(h => { health = h; }).catch(() => {});
+    getHealth()
+      .then((h) => {
+        health = h;
+      })
+      .catch(() => {});
+
+    function onKey(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      const inField =
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable);
+
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        shell.toggleCommand();
+        return;
+      }
+      if (!inField && e.key === '[' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        shell.togglePanel();
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   });
 </script>
 
@@ -42,143 +50,182 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 </svelte:head>
 
-<div class="app">
-  <header class="app-header">
-    <div class="header-left">
-      <span class="logo">hifz</span>
-      {#if health}
-        <span class="version">v{health.version}</span>
-      {/if}
-    </div>
-    <div class="header-right">
-      <span class="date">{formatDate()}</span>
-      {#if health}
-        <span class="ws-status connected">
-          <span class="health-dot healthy"></span>
-          {health.status}
-        </span>
-      {:else}
-        <span class="ws-status">
-          <span class="health-dot"></span>
-          disconnected
-        </span>
-      {/if}
-    </div>
-  </header>
+<div class="app" class:panel-collapsed={!shell.panelOpen}>
+  <Sidebar />
+  <SecondaryPanel />
 
-  <nav class="tab-bar">
-    {#each tabs as tab}
-      <a
-        href={tab.href}
-        class="tab"
-        class:active={isActive(tab.href)}
-        title={tab.desc}
-      >{tab.label}</a>
-    {/each}
-  </nav>
+  <header class="topbar">
+    <button
+      type="button"
+      class="icon-btn"
+      onclick={() => shell.togglePanel()}
+      title={shell.panelOpen ? 'Collapse panel ([)' : 'Expand panel ([)'}
+      aria-label="Toggle secondary panel"
+    >
+      {#if shell.panelOpen}
+        <PanelLeftClose size={16} strokeWidth={1.6} />
+      {:else}
+        <PanelLeft size={16} strokeWidth={1.6} />
+      {/if}
+    </button>
+
+    <Breadcrumb />
+
+    <div class="topbar-spacer"></div>
+
+    <button
+      type="button"
+      class="cmdk-trigger"
+      onclick={() => shell.toggleCommand()}
+      title="Command palette (⌘K)"
+    >
+      <CommandIcon size={12} strokeWidth={1.6} />
+      <span class="cmdk-label">Search…</span>
+      <span class="kbd">⌘K</span>
+    </button>
+
+    {#if health}
+      <span class="health-pill" title={`Server uptime ${Math.floor(health.uptime_seconds / 60)}m`}>
+        <span class="dot dot-ok"></span>
+        v{health.version}
+      </span>
+    {:else}
+      <span class="health-pill health-pill--off">
+        <span class="dot"></span>
+        offline
+      </span>
+    {/if}
+  </header>
 
   <main class="content">
     {@render children()}
   </main>
 </div>
 
+<CommandBar />
+
+{#if shell.drawerOpen && shell.drawerItem}
+  {@const item = shell.drawerItem}
+  {#if item.kind === 'observation'}
+    <DetailDrawer
+      item={{ kind: 'observation', data: item.data }}
+      onClose={() => shell.closeDrawer()}
+      onFilterToSession={item.onFilterToSession}
+    />
+  {:else if item.kind === 'memory'}
+    <DetailDrawer item={{ kind: 'memory', data: item.data }} onClose={() => shell.closeDrawer()} />
+  {/if}
+{/if}
+
 <style>
   .app {
+    display: grid;
+    grid-template-columns: var(--rail-w) var(--panel-w) 1fr;
+    grid-template-rows: 48px 1fr;
+    grid-template-areas:
+      'rail panel header'
+      'rail panel main';
     min-height: 100vh;
     background: var(--bg);
   }
 
-  .app-header {
+  .app.panel-collapsed {
+    grid-template-columns: var(--rail-w) 0 1fr;
+  }
+
+  .topbar {
+    grid-area: header;
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    padding: 10px 40px;
-    border-bottom: 1px solid var(--border-light);
+    gap: 12px;
+    padding: 0 16px;
     background: var(--bg);
+    border-bottom: 1px solid var(--line);
+    position: sticky;
+    top: 0;
+    z-index: 5;
   }
 
-  .header-left {
-    display: flex;
-    align-items: baseline;
-    gap: 10px;
+  .topbar-spacer {
+    flex: 1;
   }
 
-  .logo {
-    font-family: var(--font-display);
-    font-size: 22px;
-    font-weight: 900;
+  .icon-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    color: var(--ink-muted);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid transparent;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .icon-btn:hover {
+    background: var(--surface-alt);
     color: var(--ink);
   }
 
-  .version {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    color: var(--ink-faint);
-  }
-
-  .header-right {
-    display: flex;
+  .cmdk-trigger {
+    display: inline-flex;
     align-items: center;
-    gap: 16px;
+    gap: 8px;
+    padding: 5px 10px 5px 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--ink-muted);
+    font-size: 12px;
+    font-family: var(--font-ui);
+    cursor: pointer;
+    min-width: 200px;
+  }
+  .cmdk-trigger:hover {
+    border-color: var(--line-strong);
+    color: var(--ink);
+  }
+  .cmdk-label {
+    flex: 1;
+    text-align: left;
   }
 
-  .date {
+  .kbd {
     font-family: var(--font-mono);
     font-size: 10px;
     color: var(--ink-faint);
-    letter-spacing: 0.06em;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 1px 5px;
+    background: var(--bg);
   }
 
-  .ws-status {
+  .health-pill {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    border: 1px solid var(--border-light);
-    font-size: 10px;
-    font-family: var(--font-ui);
     padding: 3px 10px;
-    text-transform: uppercase;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    color: var(--ink-faint);
-  }
-  .ws-status.connected {
-    border-color: var(--green);
-    color: var(--green);
-  }
-
-  .tab-bar {
-    display: flex;
-    gap: 0;
-    border-bottom: 1px solid var(--border-light);
-    padding: 0 40px;
-    background: var(--bg);
-  }
-
-  .tab {
-    padding: 12px 16px;
-    font-family: var(--font-ui);
+    border: 1px solid var(--line);
+    border-radius: 999px;
     font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
+    font-family: var(--font-mono);
     color: var(--ink-muted);
-    border-bottom: 2px solid transparent;
-    transition: color 150ms, border-color 150ms;
-    text-decoration: none;
+    background: var(--surface);
   }
-  .tab:hover {
-    color: var(--ink);
+  .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--ink-faint);
   }
-  .tab.active {
-    color: var(--accent);
-    border-bottom-color: var(--accent);
+  .dot-ok {
+    background: var(--c-run);
   }
 
   .content {
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 24px 40px;
-    background: var(--bg);
+    grid-area: main;
+    padding: 18px 24px;
+    overflow-x: hidden;
   }
 </style>

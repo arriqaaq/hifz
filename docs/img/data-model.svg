@@ -1,0 +1,194 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 640" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif">
+  <defs>
+    <style>
+      .table-core { fill: #ffffff; stroke: #8b5cf6; stroke-width: 1.6; }
+      .header-core { fill: #ede9fe; }
+      .title-core { font-size: 14px; font-weight: 700; fill: #4c1d95; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.04em; }
+      .table-cap { fill: #ffffff; stroke: #f97316; stroke-width: 1.6; }
+      .header-cap { fill: #ffedd5; }
+      .title-cap { font-size: 14px; font-weight: 700; fill: #9a3412; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.04em; }
+      .field { font-size: 11px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; fill: #18181b; }
+      .ftype { font-size: 11px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; fill: #71717a; }
+      .key { fill: #2563eb; font-weight: 600; }
+      .vec { fill: #16a34a; font-weight: 600; }
+      .rel-line { stroke: #52525b; stroke-width: 1.4; fill: none; }
+      .rel-label { font-size: 11px; font-weight: 600; fill: #3f3f46; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .legend-bg { fill: #fafafa; stroke: #e4e4e7; }
+      .legend-text { font-size: 11px; fill: #3f3f46; }
+    </style>
+  </defs>
+
+  <!-- MEMORY (top-left, big) -->
+  <g>
+    <rect class="table-core" x="20" y="20" width="280" height="280" rx="8"/>
+    <rect class="header-core" x="20" y="20" width="280" height="28" rx="8"/>
+    <rect class="header-core" x="20" y="40" width="280" height="8"/>
+    <text class="title-core" x="34" y="39">MEMORY</text>
+    <g transform="translate(34, 66)">
+      <text class="field" y="0">project</text><text class="ftype" x="160" y="0">string</text>
+      <text class="field" y="18">title</text><text class="ftype" x="160" y="18">string</text>
+      <text class="field" y="36">content</text><text class="ftype" x="160" y="36">string</text>
+      <text class="field" y="54">category</text><text class="ftype" x="160" y="54">pattern · fact …</text>
+      <text class="field" y="72">concepts</text><text class="ftype" x="160" y="72">array&lt;string&gt;</text>
+      <text class="field" y="90">files</text><text class="ftype" x="160" y="90">array&lt;string&gt;</text>
+      <text class="field" y="108">tags · keywords</text><text class="ftype" x="160" y="108">array&lt;string&gt;</text>
+      <text class="field" y="126">strength</text><text class="ftype" x="160" y="126">float [0,1]</text>
+      <text class="field" y="144">access_count</text><text class="ftype" x="160" y="144">int</text>
+      <text class="field" y="162">pinned</text><text class="ftype" x="160" y="162">bool</text>
+      <text class="field key" y="180">embedding</text><text class="ftype vec" x="160" y="180">vector · HNSW 384d</text>
+      <text class="field" y="198">is_latest · supersedes</text><text class="ftype" x="160" y="198">bool · array</text>
+      <text class="field" y="216">forget_after</text><text class="ftype" x="160" y="216">datetime · null</text>
+    </g>
+  </g>
+
+  <!-- EDGE (top-middle) -->
+  <g>
+    <rect class="table-core" x="340" y="20" width="240" height="170" rx="8"/>
+    <rect class="header-core" x="340" y="20" width="240" height="28" rx="8"/>
+    <rect class="header-core" x="340" y="40" width="240" height="8"/>
+    <text class="title-core" x="354" y="39">EDGE  (relation)</text>
+    <g transform="translate(354, 66)">
+      <text class="field key" y="0">in</text><text class="ftype" x="60" y="0">→ memory</text>
+      <text class="field key" y="18">out</text><text class="ftype" x="60" y="18">→ memory</text>
+      <text class="field" y="36">via</text><text class="ftype" x="60" y="36">embedding · concept ·</text>
+      <text class="ftype" x="60" y="50">file · entity · semantic ·</text>
+      <text class="ftype" x="60" y="64">similar_to · contradicts ·</text>
+      <text class="ftype" x="60" y="78">depends_on · supports …</text>
+      <text class="field" y="96">score</text><text class="ftype" x="60" y="96">float</text>
+    </g>
+  </g>
+
+  <!-- ENTITY (top-right) -->
+  <g>
+    <rect class="table-core" x="620" y="20" width="280" height="170" rx="8"/>
+    <rect class="header-core" x="620" y="20" width="280" height="28" rx="8"/>
+    <rect class="header-core" x="620" y="40" width="280" height="8"/>
+    <text class="title-core" x="634" y="39">ENTITY</text>
+    <g transform="translate(634, 66)">
+      <text class="field" y="0">project</text><text class="ftype" x="120" y="0">string</text>
+      <text class="field" y="18">kind</text><text class="ftype" x="120" y="18">file · symbol · concept · error</text>
+      <text class="field" y="36">name</text><text class="ftype" x="120" y="36">string</text>
+      <text class="field" y="54">count</text><text class="ftype" x="120" y="54">int</text>
+    </g>
+  </g>
+
+  <!-- CORE_MEMORY (middle-right of MEMORY) -->
+  <g>
+    <rect class="table-core" x="340" y="220" width="240" height="160" rx="8"/>
+    <rect class="header-core" x="340" y="220" width="240" height="28" rx="8"/>
+    <rect class="header-core" x="340" y="240" width="240" height="8"/>
+    <text class="title-core" x="354" y="239">CORE_MEMORY</text>
+    <g transform="translate(354, 266)">
+      <text class="field key" y="0">project</text><text class="ftype" x="120" y="0">unique</text>
+      <text class="field" y="18">identity</text><text class="ftype" x="120" y="18">string</text>
+      <text class="field" y="36">goals</text><text class="ftype" x="120" y="36">array&lt;string&gt;</text>
+      <text class="field" y="54">invariants</text><text class="ftype" x="120" y="54">array&lt;string&gt;</text>
+      <text class="field" y="72">watchlist</text><text class="ftype" x="120" y="72">array&lt;string&gt;</text>
+    </g>
+  </g>
+
+  <!-- SEMANTIC + PROCEDURAL (right column) -->
+  <g>
+    <rect class="table-core" x="620" y="220" width="280" height="160" rx="8"/>
+    <rect class="header-core" x="620" y="220" width="280" height="28" rx="8"/>
+    <rect class="header-core" x="620" y="240" width="280" height="8"/>
+    <text class="title-core" x="634" y="239">SEMANTIC_MEMORY · PROCEDURAL_MEMORY</text>
+    <g transform="translate(634, 266)">
+      <text class="ftype" y="0">consolidated tiers above raw memory.</text>
+      <text class="ftype" y="18">semantic · facts merged from session summaries</text>
+      <text class="ftype" y="36">procedural · workflows extracted from observations</text>
+      <text class="ftype" y="58">share fields with MEMORY (embedded, linked, evolved).</text>
+    </g>
+  </g>
+
+  <!-- CAPTURE LAYER -->
+  <!-- SESSION (bottom-left) -->
+  <g>
+    <rect class="table-cap" x="20" y="420" width="240" height="150" rx="8"/>
+    <rect class="header-cap" x="20" y="420" width="240" height="28" rx="8"/>
+    <rect class="header-cap" x="20" y="440" width="240" height="8"/>
+    <text class="title-cap" x="34" y="439">SESSION</text>
+    <g transform="translate(34, 466)">
+      <text class="field key" y="0">id</text><text class="ftype" x="100" y="0">record</text>
+      <text class="field" y="18">project</text><text class="ftype" x="100" y="18">string</text>
+      <text class="field" y="36">started_at</text><text class="ftype" x="100" y="36">datetime</text>
+      <text class="field" y="54">ended_at</text><text class="ftype" x="100" y="54">datetime · null</text>
+    </g>
+  </g>
+
+  <!-- RUN (bottom-middle) -->
+  <g>
+    <rect class="table-cap" x="300" y="420" width="280" height="200" rx="8"/>
+    <rect class="header-cap" x="300" y="420" width="280" height="28" rx="8"/>
+    <rect class="header-cap" x="300" y="440" width="280" height="8"/>
+    <text class="title-cap" x="314" y="439">RUN  (task trajectory)</text>
+    <g transform="translate(314, 466)">
+      <text class="field key" y="0">session_id</text><text class="ftype" x="120" y="0">→ session</text>
+      <text class="field" y="18">project</text><text class="ftype" x="120" y="18">string</text>
+      <text class="field" y="36">prompt</text><text class="ftype" x="120" y="36">string</text>
+      <text class="field" y="54">outcome</text><text class="ftype" x="120" y="54">string</text>
+      <text class="field" y="72">observation_ids</text><text class="ftype" x="120" y="72">array&lt;record&gt;</text>
+      <text class="field" y="90">lesson</text><text class="ftype" x="120" y="90">string · derived</text>
+      <text class="field" y="108">opened_at</text><text class="ftype" x="120" y="108">datetime</text>
+      <text class="field" y="126">closed_at</text><text class="ftype" x="120" y="126">datetime · null</text>
+    </g>
+  </g>
+
+  <!-- OBSERVATION (bottom-right) -->
+  <g>
+    <rect class="table-cap" x="620" y="420" width="280" height="200" rx="8"/>
+    <rect class="header-cap" x="620" y="420" width="280" height="28" rx="8"/>
+    <rect class="header-cap" x="620" y="440" width="280" height="8"/>
+    <text class="title-cap" x="634" y="439">OBSERVATION</text>
+    <g transform="translate(634, 466)">
+      <text class="field key" y="0">session_id</text><text class="ftype" x="120" y="0">→ session</text>
+      <text class="field" y="18">obs_type</text><text class="ftype" x="120" y="18">commit_made · plan_…</text>
+      <text class="field" y="36">title · narrative</text><text class="ftype" x="120" y="36">string</text>
+      <text class="field" y="54">facts</text><text class="ftype" x="120" y="54">array&lt;string&gt;</text>
+      <text class="field" y="72">concepts · files</text><text class="ftype" x="120" y="72">array&lt;string&gt;</text>
+      <text class="field" y="90">metadata</text><text class="ftype" x="120" y="90">object · null</text>
+      <text class="field" y="108">importance</text><text class="ftype" x="120" y="108">float [0,1]</text>
+      <text class="field key" y="126">embedding</text><text class="ftype vec" x="120" y="126">vector 384d</text>
+    </g>
+  </g>
+
+  <!-- Relations -->
+  <!-- MEMORY ⟷ EDGE -->
+  <path class="rel-line" d="M 300 100 L 340 100"/>
+  <text class="rel-label" x="305" y="92">||--o{</text>
+
+  <path class="rel-line" d="M 580 60 C 600 60, 600 100, 620 100"/>
+  <path class="rel-line" d="M 580 60 C 600 60, 600 60, 620 60"/>
+
+  <!-- MEMORY ⟶ ENTITY (mentions) -->
+  <path class="rel-line" d="M 300 80 C 470 60, 580 60, 620 60"/>
+
+  <!-- MEMORY ⟶ CORE_MEMORY (per-project) -->
+  <path class="rel-line" d="M 300 270 L 340 270"/>
+  <text class="rel-label" x="305" y="262">project</text>
+
+  <!-- SESSION ⟶ RUN -->
+  <path class="rel-line" d="M 260 490 L 300 490"/>
+  <text class="rel-label" x="265" y="482">||--o{</text>
+
+  <!-- SESSION ⟶ OBSERVATION -->
+  <path class="rel-line" d="M 260 520 C 400 540, 540 540, 620 520"/>
+  <text class="rel-label" x="430" y="554">||--o{</text>
+
+  <!-- RUN ⟶ OBSERVATION groups -->
+  <path class="rel-line" d="M 580 490 L 620 490"/>
+  <text class="rel-label" x="585" y="482">groups</text>
+
+  <!-- OBSERVATION ⟶ ENTITY mentions (cross-layer) -->
+  <path class="rel-line" d="M 760 420 L 760 200" stroke-dasharray="4 3"/>
+  <text class="rel-label" x="768" y="318">mentions</text>
+
+  <!-- Legend -->
+  <g>
+    <rect class="legend-bg" x="20" y="600" width="280" height="30" rx="6"/>
+    <rect x="32" y="608" width="16" height="14" rx="3" fill="#ede9fe" stroke="#8b5cf6"/>
+    <text class="legend-text" x="56" y="619">core layer</text>
+    <rect x="142" y="608" width="16" height="14" rx="3" fill="#ffedd5" stroke="#f97316"/>
+    <text class="legend-text" x="166" y="619">capture layer</text>
+  </g>
+</svg>

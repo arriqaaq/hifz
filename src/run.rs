@@ -251,6 +251,21 @@ pub async fn search(
     Ok(rows)
 }
 
+/// All runs for a single session, ordered by `started_at` ascending.
+/// Accepts a session id with or without the `session:` prefix.
+pub async fn list_by_session(db: &Surreal<Db>, session_id: &str) -> Result<Vec<serde_json::Value>> {
+    let sid = if session_id.starts_with("session:") {
+        session_id.to_string()
+    } else {
+        format!("session:{session_id}")
+    };
+    let mut resp = db
+        .query("SELECT * FROM run WHERE session_id = type::record($sid) ORDER BY started_at ASC")
+        .bind(("sid", sid))
+        .await?;
+    Ok(resp.take(0).unwrap_or_default())
+}
+
 // ---------------------------------------------------------------------------
 // Public helpers for session/run resolution (used by remember, web/api, etc.)
 // ---------------------------------------------------------------------------

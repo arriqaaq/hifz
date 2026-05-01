@@ -3,6 +3,7 @@
   import { getSessions } from '$lib/api';
   import type { Session } from '$lib/types';
   import LoadingSpinner from '$lib/components/common/LoadingSpinner.svelte';
+  import EntityChip from '$lib/components/entity/EntityChip.svelte';
 
   let allSessions = $state<Session[]>([]);
   let loading = $state(true);
@@ -90,6 +91,7 @@
     <table>
       <thead>
         <tr>
+          <th>Session</th>
           <th>Project</th>
           <th>Name</th>
           <th>Status</th>
@@ -101,7 +103,8 @@
       <tbody>
         {#each filteredSessions() as s (extractId(s.id))}
           <tr>
-            <td><a href="/sessions/{extractId(s.id)}" class="row-link">{projectName(s.project)}</a></td>
+            <td><EntityChip kind="session" id={extractId(s.id)} size="sm" /></td>
+            <td><span class="badge badge-cyan">{projectName(s.project)}</span></td>
             <td class="name-cell">{s.name ?? '—'}</td>
             <td>
               {#if s.ended_at}
@@ -125,7 +128,7 @@
   .search-row {
     display: flex;
     gap: 0;
-    border: 1px solid var(--border);
+    border: 1px solid var(--line-strong);
   }
   .search-input {
     flex: 1;
@@ -142,12 +145,6 @@
     color: var(--ink-faint);
     margin-bottom: 12px;
   }
-
-  .row-link {
-    font-weight: 700;
-    color: var(--ink);
-  }
-  .row-link:hover { color: var(--accent); }
 
   .name-cell {
     max-width: 300px;

@@ -20,6 +20,7 @@ pub async fn report(
     let uptime = started_at.elapsed().as_secs();
 
     let sessions = count(db, "SELECT count() AS c FROM session GROUP ALL").await;
+    let runs = count(db, "SELECT count() AS c FROM run GROUP ALL").await;
     let observations = count(db, "SELECT count() AS c FROM observation GROUP ALL").await;
     let memories = count(db, "SELECT count() AS c FROM memory GROUP ALL").await;
     let commits = count(
@@ -32,6 +33,7 @@ pub async fn report(
         "status": "healthy",
         "version": env!("CARGO_PKG_VERSION"),
         "sessions": sessions,
+        "runs": runs,
         "observations": observations,
         "memories": memories,
         "commits": commits,

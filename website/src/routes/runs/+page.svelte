@@ -3,6 +3,7 @@
   import { searchRuns } from '$lib/api';
   import type { Run } from '$lib/types';
   import LoadingSpinner from '$lib/components/common/LoadingSpinner.svelte';
+  import EntityChip from '$lib/components/entity/EntityChip.svelte';
 
   let runs = $state<Run[]>([]);
   let loading = $state(true);
@@ -100,17 +101,20 @@
     <table>
       <thead>
         <tr>
+          <th>Run</th>
+          <th>Session</th>
           <th>Outcome</th>
           <th>Prompt</th>
           <th>Lesson</th>
           <th>Obs</th>
-          <th>Session</th>
           <th>Date</th>
         </tr>
       </thead>
       <tbody>
         {#each runs as run (extractId(run.id))}
           <tr class="run-row">
+            <td><EntityChip kind="run" id={extractId(run.id)} size="sm" /></td>
+            <td><EntityChip kind="session" id={extractSessionId(run.session_id)} size="sm" /></td>
             <td>
               <span class="badge {outcomeClass(run.outcome)}">{run.outcome}</span>
             </td>
@@ -119,7 +123,6 @@
             </td>
             <td class="lesson-cell">{run.lesson ?? '—'}</td>
             <td class="mono">{run.observation_ids?.length ?? 0}</td>
-            <td><a href="/sessions/{extractSessionId(run.session_id)}" class="row-link">view</a></td>
             <td class="mono faint">{formatDate(run.started_at)} {formatTime(run.started_at)}</td>
           </tr>
         {/each}
@@ -133,7 +136,7 @@
   .search-row {
     display: flex;
     gap: 0;
-    border: 1px solid var(--border);
+    border: 1px solid var(--line-strong);
   }
   .search-input {
     flex: 1;
@@ -155,7 +158,7 @@
     transition: background-color 150ms;
   }
   .run-row:hover {
-    background-color: var(--bg-alt, #F8F8F6);
+    background-color: var(--surface-alt);
   }
 
   .prompt-cell {

@@ -142,7 +142,7 @@
     font-size: 11px;
     font-family: var(--font-ui);
     background: transparent;
-    border: 1px dashed var(--border);
+    border: 1px dashed var(--line-strong);
     color: var(--ink-muted);
     cursor: pointer;
   }
@@ -156,8 +156,8 @@
     align-items: center;
     gap: 6px;
     padding: 3px 4px 3px 10px;
-    background: var(--bg-alt, #F0F0EC);
-    border: 1px solid var(--border);
+    background: var(--surface-alt);
+    border: 1px solid var(--line-strong);
     font-size: 11px;
     font-family: var(--font-ui);
   }
@@ -182,8 +182,8 @@
     width: 320px;
     max-height: 360px;
     background: var(--bg);
-    border: 1px solid var(--border);
-    box-shadow: 4px 4px 0 0 var(--border-light);
+    border: 1px solid var(--line-strong);
+    box-shadow: 4px 4px 0 0 var(--line);
     display: flex;
     flex-direction: column;
   }
@@ -191,7 +191,7 @@
   .dropdown-search {
     padding: 8px 12px;
     border: none;
-    border-bottom: 1px solid var(--border-light);
+    border-bottom: 1px solid var(--line);
     font-size: 12px;
     font-family: var(--font-body);
     outline: none;
@@ -212,14 +212,14 @@
     padding: 6px 12px;
     background: none;
     border: none;
-    border-bottom: 1px solid var(--border-light);
+    border-bottom: 1px solid var(--line);
     cursor: pointer;
     text-align: left;
     font-family: var(--font-ui);
     font-size: 11px;
   }
   .dropdown-item:hover {
-    background: var(--bg-alt, #F0F0EC);
+    background: var(--surface-alt);
   }
 
   .item-project {

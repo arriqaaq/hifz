@@ -222,7 +222,7 @@
   .waterfall {
     position: relative;
     width: 100%;
-    border: 1px solid var(--border);
+    border: 1px solid var(--line-strong);
     background: var(--bg);
     padding: 8px 0 0 110px;
   }
@@ -233,7 +233,7 @@
   }
 
   .tick-line {
-    stroke: var(--border-light);
+    stroke: var(--line);
     stroke-width: 0.5;
     stroke-dasharray: 2 3;
   }
@@ -244,7 +244,7 @@
   }
 
   .lane-line {
-    stroke: var(--border-light);
+    stroke: var(--line);
     stroke-width: 0.5;
   }
 
@@ -306,7 +306,7 @@
     display: flex;
     gap: 16px;
     padding: 6px 12px;
-    border-top: 1px solid var(--border-light);
+    border-top: 1px solid var(--line);
     font-family: var(--font-ui);
     font-size: 10px;
     color: var(--ink-faint);

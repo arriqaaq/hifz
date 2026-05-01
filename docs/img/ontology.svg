@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 540" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif">
+  <defs>
+    <style>
+      .layer { fill: #fafafa; stroke: #d4d4d8; stroke-width: 1.5; }
+      .layer-core { fill: #f5f3ff; stroke: #a78bfa; }
+      .layer-capture { fill: #fff7ed; stroke: #fb923c; }
+      .layer-label { font-size: 14px; font-weight: 600; fill: #3f3f46; letter-spacing: 0.02em; text-transform: uppercase; }
+      .layer-sub { font-size: 12px; fill: #71717a; }
+      .node { fill: #ffffff; stroke: #d4d4d8; stroke-width: 1.2; }
+      .node-core { stroke: #8b5cf6; }
+      .node-capture { stroke: #f97316; }
+      .node-name { font-size: 14px; font-weight: 600; fill: #18181b; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .node-desc { font-size: 11px; fill: #71717a; }
+      .arrow { stroke: #52525b; stroke-width: 1.6; fill: none; }
+      .arrow-label { font-size: 12px; font-weight: 600; fill: #3f3f46; }
+    </style>
+    <marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#52525b"/>
+    </marker>
+  </defs>
+
+  <!-- Core layer -->
+  <rect class="layer layer-core" x="20" y="20" width="840" height="240" rx="12"/>
+  <text class="layer-label" x="40" y="48">Core layer</text>
+  <text class="layer-sub" x="148" y="48">curated · long-term · always present</text>
+
+  <!-- Core nodes: 6 in a row -->
+  <g>
+    <rect class="node node-core" x="40" y="72" width="125" height="68" rx="8"/>
+    <text class="node-name" x="102.5" y="100" text-anchor="middle">memory</text>
+    <text class="node-desc" x="102.5" y="120" text-anchor="middle">long-term records</text>
+  </g>
+  <g>
+    <rect class="node node-core" x="175" y="72" width="125" height="68" rx="8"/>
+    <text class="node-name" x="237.5" y="100" text-anchor="middle">edge</text>
+    <text class="node-desc" x="237.5" y="120" text-anchor="middle">typed graph links</text>
+  </g>
+  <g>
+    <rect class="node node-core" x="310" y="72" width="125" height="68" rx="8"/>
+    <text class="node-name" x="372.5" y="100" text-anchor="middle">entity</text>
+    <text class="node-desc" x="372.5" y="120" text-anchor="middle">files · concepts · ids</text>
+  </g>
+  <g>
+    <rect class="node node-core" x="445" y="72" width="160" height="68" rx="8"/>
+    <text class="node-name" x="525" y="100" text-anchor="middle">core_memory</text>
+    <text class="node-desc" x="525" y="120" text-anchor="middle">always-on, per project</text>
+  </g>
+  <g>
+    <rect class="node node-core" x="615" y="72" width="115" height="68" rx="8"/>
+    <text class="node-name" x="672.5" y="100" text-anchor="middle">semantic</text>
+    <text class="node-desc" x="672.5" y="120" text-anchor="middle">consolidated facts</text>
+  </g>
+  <g>
+    <rect class="node node-core" x="740" y="72" width="100" height="68" rx="8"/>
+    <text class="node-name" x="790" y="100" text-anchor="middle">procedural</text>
+    <text class="node-desc" x="790" y="120" text-anchor="middle">workflows</text>
+  </g>
+
+  <!-- Description for core -->
+  <text class="node-desc" x="40" y="180" font-size="13">Curated knowledge that survives sessions. Memories carry strength, recency, and version history; edges connect them; entities ground them in files and concepts.</text>
+  <text class="node-desc" x="40" y="200" font-size="13">core_memory holds identity, goals, invariants, and a watchlist that is always prepended to context. semantic and procedural tiers are populated by consolidation.</text>
+
+  <!-- Consolidate arrow -->
+  <path class="arrow" d="M 440 360 C 440 320, 440 290, 440 260" marker-end="url(#arrowhead)" stroke-dasharray="4 4"/>
+  <text class="arrow-label" x="450" y="318">consolidate</text>
+
+  <!-- Capture layer -->
+  <rect class="layer layer-capture" x="20" y="360" width="840" height="160" rx="12"/>
+  <text class="layer-label" x="40" y="388">Agent capture layer</text>
+  <text class="layer-sub" x="221" y="388">ephemeral · dense · optional</text>
+
+  <g>
+    <rect class="node node-capture" x="40" y="412" width="240" height="68" rx="8"/>
+    <text class="node-name" x="160" y="440" text-anchor="middle">session</text>
+    <text class="node-desc" x="160" y="460" text-anchor="middle">lifecycle: start → end</text>
+  </g>
+  <g>
+    <rect class="node node-capture" x="300" y="412" width="240" height="68" rx="8"/>
+    <text class="node-name" x="420" y="440" text-anchor="middle">run</text>
+    <text class="node-desc" x="420" y="460" text-anchor="middle">prompt → completion arc</text>
+  </g>
+  <g>
+    <rect class="node node-capture" x="560" y="412" width="280" height="68" rx="8"/>
+    <text class="node-name" x="700" y="440" text-anchor="middle">observation</text>
+    <text class="node-desc" x="700" y="460" text-anchor="middle">tool calls, edits, prompts, hooks</text>
+  </g>
+</svg>

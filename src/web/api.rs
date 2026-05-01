@@ -335,6 +335,13 @@ pub async fn run_detail(
     json_or_err(state.run_detail(&id).await)
 }
 
+pub async fn session_tree(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Json<serde_json::Value> {
+    json_or_err(state.session_tree(&id).await)
+}
+
 // -----------------------------------------------------------------------
 // Observations
 // -----------------------------------------------------------------------

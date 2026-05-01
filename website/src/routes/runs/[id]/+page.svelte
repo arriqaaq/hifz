@@ -324,7 +324,7 @@
   .fact-code {
     font-family: var(--font-mono);
     font-size: 10px;
-    background: var(--bg-alt, #F0F0EC);
+    background: var(--surface-alt);
     padding: 1px 4px;
     border-radius: 2px;
   }
@@ -338,8 +338,8 @@
   .obs-code {
     margin: 0 0 10px;
     padding: 10px 14px;
-    background: var(--bg-alt, #F0F0EC);
-    border: 1px solid var(--border-light);
+    background: var(--surface-alt);
+    border: 1px solid var(--line);
     font-family: var(--font-mono);
     font-size: 11px;
     line-height: 1.5;

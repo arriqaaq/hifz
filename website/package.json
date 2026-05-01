@@ -24,10 +24,12 @@
   },
   "dependencies": {
     "@popperjs/core": "^2.11.8",
+    "bits-ui": "^1.8.0",
     "cytoscape": "^3.33.3",
     "cytoscape-cxtmenu": "^3.5.0",
     "cytoscape-fcose": "^2.2.0",
     "cytoscape-popper": "^4.0.1",
+    "lucide-svelte": "^0.477.0",
     "tippy.js": "^6.3.7"
   }
 }

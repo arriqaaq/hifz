@@ -122,7 +122,7 @@
     gap: 6px;
     flex-wrap: wrap;
     padding: 4px 0 8px;
-    border-bottom: 1px dashed var(--border-light);
+    border-bottom: 1px dashed var(--line);
     margin-bottom: 8px;
   }
 
@@ -141,7 +141,7 @@
     font-size: 10px;
     font-family: var(--font-ui);
     background: var(--bg);
-    border: 1px solid var(--border-light);
+    border: 1px solid var(--line);
     color: var(--ink-secondary);
     cursor: pointer;
   }
@@ -157,12 +157,12 @@
   .saved-pill {
     display: inline-flex;
     align-items: center;
-    border: 1px solid var(--border-light);
+    border: 1px solid var(--line);
   }
   .pill-btn { border: none; }
   .pill-x {
     border: none;
-    border-left: 1px solid var(--border-light);
+    border-left: 1px solid var(--line);
     background: var(--bg);
     color: var(--ink-faint);
     cursor: pointer;
@@ -180,7 +180,7 @@
     padding: 3px 8px;
     font-size: 10px;
     font-family: var(--font-ui);
-    border: 1px solid var(--border);
+    border: 1px solid var(--line-strong);
     background: var(--bg);
     width: 140px;
   }

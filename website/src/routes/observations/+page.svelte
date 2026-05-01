@@ -5,6 +5,8 @@
   import type { Observation } from '$lib/types';
   import LoadingSpinner from '$lib/components/common/LoadingSpinner.svelte';
   import FilterBar from '$lib/components/filters/FilterBar.svelte';
+  import EntityChip from '$lib/components/entity/EntityChip.svelte';
+  import { extractId as extractEntityId, kindForObsType } from '$lib/components/entity/entityHelpers';
   import {
     type Filters,
     readFilters,
@@ -134,15 +136,29 @@
       {@const obsId = extractId(obs.id)}
       {@const isExpanded = expandedId === obsId}
       <div class="card obs-card" class:expanded={isExpanded}>
-        <button class="obs-header" onclick={() => toggleExpand(obsId)}>
+        <div class="obs-row-top">
           <span class="obs-time">{formatDate(obs.timestamp)} {formatTime(obs.timestamp)}</span>
-          <span class="badge badge-blue">{obs.obs_type}</span>
+          <EntityChip
+            kind={kindForObsType(obs.obs_type)}
+            id={obsId}
+            label={obs.obs_type}
+            size="sm"
+            href={null}
+          />
+          {#if obs.session_id}
+            {@const sid = extractEntityId(obs.session_id)}
+            <EntityChip kind="session" id={sid} size="sm" />
+          {:else}
+            <span class="no-session" title="No session attached">⊜ no session</span>
+          {/if}
           {#if obs.importance >= 7}
             <span class="obs-imp">&#9733; {obs.importance}</span>
           {/if}
-          <span class="expand-icon">{isExpanded ? '−' : '+'}</span>
-        </button>
-        <h4 class="obs-title">{obs.title}</h4>
+          <button class="expand-btn" onclick={() => toggleExpand(obsId)} aria-label="Toggle details">
+            {isExpanded ? '−' : '+'}
+          </button>
+        </div>
+        <button class="obs-title" onclick={() => toggleExpand(obsId)}>{obs.title}</button>
         {#if obs.subtitle}
           <p class="obs-sub">{obs.subtitle}</p>
         {/if}
@@ -194,7 +210,7 @@
   .search-row {
     display: flex;
     gap: 0;
-    border: 1px solid var(--border);
+    border: 1px solid var(--line-strong);
   }
   .search-input {
     flex: 1;
@@ -221,37 +237,62 @@
 
   .obs-card {
     padding: 12px 16px;
-    cursor: pointer;
-    transition: border-color 150ms;
+    transition: border-color 150ms, box-shadow 150ms;
   }
   .obs-card:hover { border-color: var(--ink-muted); }
   .obs-card.expanded { border-color: var(--accent); }
 
-  .obs-header {
+  .obs-row-top {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     margin-bottom: 6px;
-    width: 100%;
-    text-align: left;
-    background: none;
-    border: none;
-    padding: 0;
-    cursor: pointer;
+    flex-wrap: wrap;
   }
 
-  .obs-time { font-family: var(--font-mono); font-size: 11px; font-weight: 500; color: var(--ink-muted); }
-  .obs-imp { font-size: 11px; color: var(--yellow); }
-  .expand-icon { margin-left: auto; font-size: 16px; font-weight: bold; color: var(--ink-faint); }
+  .obs-time { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 11px; font-weight: 500; color: var(--ink-muted); }
+
+  .no-session {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--ink-faint);
+    border: 1px dashed var(--line-strong);
+    border-radius: 999px;
+    padding: 1px 8px;
+  }
+
+  .expand-btn {
+    margin-left: auto;
+    width: 22px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    color: var(--ink-faint);
+    background: transparent;
+    border: 1px solid transparent;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .expand-btn:hover { background: var(--surface-alt); color: var(--ink); }
+  .obs-imp { font-size: 11px; color: var(--c-obs); font-family: var(--font-mono); }
 
   .obs-title {
+    display: block;
     margin: 0 0 4px;
+    padding: 0;
     font-size: 13px;
-    font-weight: 700;
-    font-family: var(--font-display);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+    font-weight: 600;
+    font-family: var(--font-ui);
+    background: none;
+    border: none;
+    text-align: left;
+    color: var(--ink);
+    cursor: pointer;
+    width: 100%;
   }
+  .obs-title:hover { color: var(--accent); }
 
   .obs-sub { margin: 0 0 6px; font-size: 11px; color: var(--ink-muted); font-family: var(--font-ui); }
   .obs-narrative { margin: 0 0 10px; font-size: 12px; color: var(--ink-secondary); line-height: 1.5; }
@@ -260,8 +301,8 @@
   .obs-code {
     margin: 0 0 10px;
     padding: 10px 14px;
-    background: var(--bg-alt, #F0F0EC);
-    border: 1px solid var(--border-light);
+    background: var(--surface-alt);
+    border: 1px solid var(--line);
     font-family: var(--font-mono);
     font-size: 10px;
     line-height: 1.5;
@@ -291,7 +332,7 @@
   .fact-code {
     font-family: var(--font-mono);
     font-size: 10px;
-    background: var(--bg-alt, #F0F0EC);
+    background: var(--surface-alt);
     padding: 1px 4px;
     border-radius: 2px;
   }

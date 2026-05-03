@@ -67,7 +67,9 @@ struct LinkToNew {
 }
 
 fn default_relation() -> String {
-    "similar_to".to_string()
+    // LLM evolve produces semantic links; when unspecified, fall back to the
+    // weakest typed conceptual relation rather than a fake similarity claim.
+    "related".to_string()
 }
 fn default_score() -> f64 {
     0.5
@@ -234,11 +236,12 @@ async fn apply_updates(
             if ltn.create {
                 let score = ltn.score.clamp(0.0, 1.0);
                 let relation = if ltn.relation.is_empty() {
-                    "similar_to"
+                    "related"
                 } else {
                     &ltn.relation
                 };
-                link::upsert_edge(db, &rid, new_id, relation, "llm", score).await?;
+                let reason = format!("LLM evolve link: relation={relation}, score={score:.2}");
+                link::upsert_edge(db, &rid, new_id, relation, "llm", score, Some(&reason)).await?;
                 report.links_added += 1;
             }
         }
@@ -353,15 +356,20 @@ Output STRICT JSON (no prose, no code fences). Schema:
       "keywords_add": [str], "keywords_remove": [str],
       "tags_add": [str],     "tags_remove": [str],
       "context_rewrite": str | null,
-      "link_to_new": { "create": true, "relation": "similar_to|elaborates|contradicts|supports|depends_on|alternative_to", "score": 0.0..1.0 } | null,
+      "link_to_new": { "create": true, "relation": "related|broader|narrower|same_as|elaborates|contradicts|supports|responds_to|supersedes|closes|tests", "score": 0.0..1.0 } | null,
       "supersedes_new": false,
       "superseded_by_new": false
     }
   ]
 }
 
-For link_to_new, choose the relation: similar_to (default), elaborates, contradicts,
-supports, depends_on, alternative_to.
+For link_to_new, pick the typed relation:
+  - Conceptual:   related (default), broader, narrower, same_as
+  - Argumentative: elaborates, contradicts, supports, responds_to
+  - Lifecycle:    supersedes, closes
+  - Code-domain:  tests
+Pick the most specific honest fit. If you cannot articulate why in one sentence,
+return link_to_new: null and let the deterministic co-occurrence edges stand.
 
 Only reference ids that appeared in NEIGHBOURS. Keep keyword/tag additions short
 (3-6 items) and lower-case. A context_rewrite should be a one-line justification

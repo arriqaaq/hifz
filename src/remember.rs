@@ -1,18 +1,18 @@
 use anyhow::Result;
 use surrealdb::Surreal;
-use surrealdb::types::{RecordId, SurrealValue};
 
 use crate::db::Db;
 use crate::embed::Embedder;
-use crate::entities;
-use crate::link;
+use crate::enrich;
+use crate::models::Category;
 
-/// Save an insight, decision, or pattern as a long-term memory.
+/// Backwards-compatible thin wrapper for the deterministic insert path.
 ///
-/// Embeds richer text (title + content + keywords + files) so semantic search
-/// works against saved memories, not just raw observations. Then runs
-/// deterministic link generation (KNN + keyword + file Jaccard) to populate
-/// `edge` table with `relation='similar_to'` edges.
+/// Production callers (the Hifz facade) should call `enrich::save_enriched`
+/// directly with the LLM dependency and the full `RememberReq` field set.
+/// This wrapper exists for benchmarks and any out-of-tree callers that still
+/// pass positional args; it forces `enable_llm = false` so behavior is
+/// deterministic and reproducible (no Ollama variance in benchmark numbers).
 pub async fn save(
     db: &Surreal<Db>,
     embedder: &Embedder,
@@ -24,151 +24,25 @@ pub async fn save(
     files: &[String],
     session_id: Option<&str>,
 ) -> Result<String> {
-    let now = chrono::Utc::now().to_rfc3339();
-
-    let embed_text = build_embed_text(title, content, keywords, files);
-    let embedding = embedder.embed_single(&embed_text)?;
-
-    #[derive(Debug, SurrealValue)]
-    struct Created {
-        id: Option<RecordId>,
-    }
-
-    let mut response = db
-        .query(
-            "CREATE memory SET \
-             project = $project, \
-             category = $category, \
-             title = $title, \
-             content = $content, \
-             keywords = $keywords, \
-             files = $files, \
-             tags = [], \
-             strength = 1.0, \
-             retrieval_count = 0, \
-             last_accessed_at = $now, \
-             embedding = $embedding, \
-             version = 1, \
-             is_latest = true, \
-             created_at = $now, \
-             updated_at = $now \
-             RETURN id",
-        )
-        .bind(("project", project.to_string()))
-        .bind(("category", category.to_string()))
-        .bind(("title", title.to_string()))
-        .bind(("content", content.to_string()))
-        .bind(("keywords", keywords.to_vec()))
-        .bind(("files", files.to_vec()))
-        .bind(("embedding", embedding.clone()))
-        .bind(("now", now))
-        .await?;
-    response = response.check()?;
-    let created: Vec<Created> = response.take(0).unwrap_or_default();
-
-    // Fire deterministic link + entity generation if we recovered the new id.
-    if let Some(new_id) = created.into_iter().next().and_then(|c| c.id) {
-        // Plans use intentional edges (motivated, implemented_by) — skip KNN similarity links
-        if category != "plan" {
-            if let Err(e) =
-                link::generate_links(db, &new_id, project, &embedding, keywords, files).await
-            {
-                tracing::warn!("link generation failed for {new_id:?}: {e}");
-            }
-        }
-
-        // Entity extraction + via='entity' links.
-        let body = format!("{title}\n{content}");
-        for ent in entities::extract(files, keywords, &body) {
-            let _ = entities::upsert(db, ent.kind, &ent.name, project).await;
-        }
-        if let Err(e) = link_by_shared_entities(db, &new_id, project, keywords, files).await {
-            tracing::warn!("entity-link pass failed for {new_id:?}: {e}");
-        }
-
-        // Provenance edges: connect memory to its originating run
-        if let Some(sid) = session_id {
-            if let Ok(Some(run_id)) = crate::run::find_open(db, sid).await {
-                if let Err(e) =
-                    link::upsert_edge(db, &new_id, &run_id, "generated_by", "system", 1.0).await
-                {
-                    tracing::warn!("generated_by edge failed for {new_id:?}: {e}");
-                }
-                if let Ok(recalled) = crate::run::get_recalled_ids(db, &run_id).await {
-                    for rid in &recalled {
-                        if let Err(e) =
-                            link::upsert_edge(db, &new_id, rid, "derived_from", "system", 0.8).await
-                        {
-                            tracing::warn!("derived_from edge failed: {e}");
-                        }
-                    }
-                }
-            }
-        }
-    }
-
+    enrich::save_enriched(
+        db,
+        embedder,
+        None,
+        false,
+        project,
+        title,
+        content,
+        Category::from_str(category),
+        keywords.to_vec(),
+        files.to_vec(),
+        Vec::new(),
+        None,
+        None,
+        None,
+        session_id,
+    )
+    .await?;
     Ok(title.to_string())
-}
-
-/// Link the new memory to existing memories it shares at least one entity
-/// (file or keyword) with. `via='entity'` with score ∝ shared count.
-async fn link_by_shared_entities(
-    db: &Surreal<Db>,
-    self_id: &RecordId,
-    project: &str,
-    keywords: &[String],
-    files: &[String],
-) -> Result<()> {
-    if keywords.is_empty() && files.is_empty() {
-        return Ok(());
-    }
-
-    // Find memories in the same project that share at least one file or keyword.
-    #[derive(Debug, SurrealValue)]
-    struct Row {
-        id: Option<RecordId>,
-        keywords: Option<Vec<String>>,
-        files: Option<Vec<String>>,
-    }
-
-    let mut resp = db
-        .query(
-            "SELECT id, keywords, files FROM memory \
-             WHERE is_latest = true \
-               AND id != $self \
-               AND (project = $project OR project = 'global')",
-        )
-        .bind(("self", self_id.clone()))
-        .bind(("project", project.to_string()))
-        .await?;
-    let rows: Vec<Row> = resp.take(0).unwrap_or_default();
-
-    let self_set: std::collections::HashSet<&str> = keywords
-        .iter()
-        .chain(files.iter())
-        .map(String::as_str)
-        .collect();
-
-    for r in rows {
-        let Some(other_id) = r.id else {
-            continue;
-        };
-        let other_set: std::collections::HashSet<&str> = r
-            .keywords
-            .iter()
-            .flatten()
-            .chain(r.files.iter().flatten())
-            .map(String::as_str)
-            .collect();
-        let shared = self_set.intersection(&other_set).count();
-        if shared == 0 {
-            continue;
-        }
-        let total = self_set.union(&other_set).count().max(1);
-        let score = shared as f64 / total as f64; // Jaccard over keywords ∪ files
-        link::upsert_edge(db, self_id, &other_id, "mentions", "entity", score).await?;
-    }
-    Ok(())
 }
 
 /// Delete a memory by ID.
@@ -223,6 +97,14 @@ pub async fn search(
     }
     if let Some(ref category) = params.category {
         conditions.push(format!("category = '{}'", category.replace('\'', "")));
+    }
+    // Phase 5: time + open filters.
+    if let Some(ref since) = params.since {
+        conditions.push(format!("created_at >= '{}'", since.replace('\'', "")));
+    }
+    if params.open == Some(true) {
+        conditions
+            .push("id NOT IN (SELECT VALUE out FROM edge WHERE relation = 'closes')".to_string());
     }
     let where_clause = conditions.join(" AND ");
 

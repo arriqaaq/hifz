@@ -1,4 +1,4 @@
-.PHONY: build frontend backend server dev stop check test smoke status install
+.PHONY: build frontend backend server dev stop check test smoke status install sync-ontology check-ontology
 
 HIFZ_BIN  := ./target/debug/hifz
 DB_PATH   := ~/.hifz/data
@@ -17,6 +17,14 @@ frontend:
 check:
 	cargo check
 	cargo test --lib
+
+# Phase 9.3: regenerate the website + Pi extension TS ontology mirrors
+# from src/models.rs. CI runs `make check-ontology` which fails on drift.
+sync-ontology:
+	@node scripts/sync-ontology.mjs
+
+check-ontology:
+	@node scripts/sync-ontology.mjs --check
 
 test:
 	cargo test

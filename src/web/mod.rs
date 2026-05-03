@@ -43,6 +43,26 @@ pub async fn serve(state: Hifz, port: u16) -> Result<()> {
             "/memories/{id}/links",
             axum::routing::get(api::memory_links),
         )
+        .route(
+            "/memories/{id}/backlinks",
+            axum::routing::get(api::memory_backlinks),
+        )
+        .route(
+            "/memories/{id}/markdown",
+            axum::routing::get(api::memory_markdown_get).put(api::memory_markdown_put),
+        )
+        .route(
+            "/memories/{id}/neighbors",
+            axum::routing::get(api::memory_neighbors),
+        )
+        .route(
+            "/projects/{project}/digest",
+            axum::routing::get(api::project_digest),
+        )
+        .route(
+            "/projects/{project}/accumulators",
+            axum::routing::get(api::project_accumulators),
+        )
         .route("/trace", axum::routing::post(api::trace_graph))
         .route("/consolidate", axum::routing::post(api::consolidate))
         .route("/forget-gc", axum::routing::post(api::forget_gc))
@@ -57,6 +77,10 @@ pub async fn serve(state: Hifz, port: u16) -> Result<()> {
         .route("/sessions/end", axum::routing::post(api::session_end))
         .route("/sessions/{id}", axum::routing::get(api::session_get))
         .route("/sessions/{id}/tree", axum::routing::get(api::session_tree))
+        .route(
+            "/sessions/{id}/warmup",
+            axum::routing::post(api::session_warmup).get(api::session_warmup),
+        )
         .route("/observe", axum::routing::post(api::observe))
         .route(
             "/events",

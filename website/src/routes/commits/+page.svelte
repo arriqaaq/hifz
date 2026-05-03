@@ -66,8 +66,8 @@
   {#if loading}
     <LoadingSpinner />
   {:else if error}
-    <div class="card" style="border-color: var(--accent);">
-      <p style="color: var(--accent); margin: 0;">{error}</p>
+    <div class="card" style="border-color: var(--danger);">
+      <p style="color: var(--danger); margin: 0;">{error}</p>
     </div>
   {:else if filtered.length === 0}
     <p class="empty">{query ? 'No commits match your filter' : 'No commits recorded yet.'}</p>

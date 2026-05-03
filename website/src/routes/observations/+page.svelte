@@ -120,8 +120,8 @@
 <FilterBar {filters} {projects} onChange={onFiltersChange} />
 
 {#if error}
-  <div class="card" style="border-color: var(--accent);">
-    <p style="color: var(--accent); margin: 0;">{error}</p>
+  <div class="card" style="border-color: var(--danger);">
+    <p style="color: var(--danger); margin: 0;">{error}</p>
   </div>
 {/if}
 
@@ -240,7 +240,7 @@
     transition: border-color 150ms, box-shadow 150ms;
   }
   .obs-card:hover { border-color: var(--ink-muted); }
-  .obs-card.expanded { border-color: var(--accent); }
+  .obs-card.expanded { border-color: var(--ink); box-shadow: 4px 4px 0 var(--neon-dim); }
 
   .obs-row-top {
     display: flex;
@@ -292,7 +292,7 @@
     cursor: pointer;
     width: 100%;
   }
-  .obs-title:hover { color: var(--accent); }
+  .obs-title:hover { color: var(--ink); text-decoration: underline; text-decoration-color: var(--neon); text-decoration-thickness: 2px; text-underline-offset: 2px; }
 
   .obs-sub { margin: 0 0 6px; font-size: 11px; color: var(--ink-muted); font-family: var(--font-ui); }
   .obs-narrative { margin: 0 0 10px; font-size: 12px; color: var(--ink-secondary); line-height: 1.5; }

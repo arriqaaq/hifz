@@ -1,8 +1,43 @@
 #!/usr/bin/env node
 //#region src/hooks/session-start.ts
-const INJECT_CONTEXT = process.env["HIFZ_INJECT_CONTEXT"] === "true";
+const INJECT_CONTEXT = process.env["HIFZ_INJECT_CONTEXT"] !== "false";
 const REST_URL = process.env["HIFZ_URL"] || "http://localhost:3111";
 const HEADERS = { "Content-Type": "application/json" };
+const WARMUP_TOP_N = Number.parseInt(process.env["HIFZ_WARMUP_TOP_N"] || "15", 10);
+
+/**
+ * Format a warmup digest as a human-readable system-context block.
+ * Compact-by-design — the agent gets a "here's where you are" snapshot
+ * without burning the conversation budget.
+ */
+function formatWarmup(digest) {
+	const lines = [];
+	lines.push(`# hifz session warmup — project: ${digest.project}`);
+	lines.push("");
+	if (digest.latest_plan) {
+		lines.push("## Active plan");
+		lines.push(`- **${digest.latest_plan.title}** — ${digest.latest_plan.summary}`);
+		lines.push("");
+	}
+	const sections = [
+		["Decisions", digest.decisions],
+		["Conventions", digest.conventions],
+		["Open bugs", digest.open_bugs],
+		["Gotchas", digest.gotchas],
+		["Failure patterns", digest.failure_patterns],
+		["Recent lessons", digest.recent_lessons],
+	];
+	for (const [name, list] of sections) {
+		if (!list || list.length === 0) continue;
+		lines.push(`## ${name}`);
+		for (const e of list) {
+			lines.push(`- **${e.title}** — ${e.summary}`);
+		}
+		lines.push("");
+	}
+	return lines.join("\n");
+}
+
 async function main() {
 	let input = "";
 	for await (const chunk of process.stdin) input += chunk;
@@ -15,24 +50,40 @@ async function main() {
 	const sessionId = data.session_id || `ses_${Date.now().toString(36)}`;
 	const project = data.cwd || process.cwd();
 	try {
-		const res = await fetch(`${REST_URL}/api/v1/agent/sessions`, {
+		// Step 1: register the session (existing behavior).
+		await fetch(`${REST_URL}/api/v1/agent/sessions`, {
 			method: "POST",
 			headers: HEADERS,
-			body: JSON.stringify({
-				sessionId,
-				project,
-				cwd: project
-			}),
-			signal: AbortSignal.timeout(5e3)
+			body: JSON.stringify({ sessionId, project, cwd: project }),
+			signal: AbortSignal.timeout(5e3),
 		});
-		if (INJECT_CONTEXT && res.ok) {
-			const result = await res.json();
-			if (result.context) process.stdout.write(result.context);
+
+		// Step 2 (Phase 3.1): pull the project-scoped warmup digest and
+		// inject as system context. Failure here is silent — warmup is
+		// a nice-to-have, not a session-blocker.
+		if (INJECT_CONTEXT) {
+			const warmupRes = await fetch(
+				`${REST_URL}/api/v1/agent/sessions/${encodeURIComponent(sessionId)}/warmup?project=${encodeURIComponent(project)}&top_n=${WARMUP_TOP_N}`,
+				{
+					method: "GET",
+					headers: HEADERS,
+					signal: AbortSignal.timeout(5e3),
+				},
+			);
+			if (warmupRes.ok) {
+				const digest = await warmupRes.json();
+				if (digest && !digest.error && digest.top && digest.top.length > 0) {
+					const block = formatWarmup(digest);
+					// Claude Code hooks: stdout is injected as additional
+					// context for the upcoming model turn.
+					process.stdout.write(block);
+				}
+			}
 		}
 	} catch {}
 }
 main();
 
 //#endregion
-export {  };
+export {};
 //# sourceMappingURL=session-start.mjs.map

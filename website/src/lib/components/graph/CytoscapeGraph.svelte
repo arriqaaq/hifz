@@ -300,7 +300,7 @@
     position: relative;
     width: 100%;
     height: 100%;
-    background: #F9F9F7;
+    background: var(--bg);
   }
   .cy-container {
     position: absolute;
@@ -317,9 +317,11 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
-    background: rgba(249, 249, 247, 0.95);
-    border: 1px solid var(--line-strong);
-    padding: 8px 10px;
+    background: var(--surface);
+    border: 1.5px solid var(--ink);
+    border-radius: var(--radius-sm);
+    box-shadow: 4px 4px 0 var(--ink);
+    padding: 10px 12px;
   }
   .ctrl-group {
     display: flex;
@@ -351,7 +353,18 @@
     color: var(--bg);
     border-color: var(--ink);
   }
-  .ctrl-btn--accent { color: var(--accent); border-color: var(--accent); }
+  .ctrl-btn--accent {
+    background: var(--neon);
+    color: var(--ink);
+    border-color: var(--ink);
+    box-shadow: 2px 2px 0 var(--ink);
+    font-weight: 600;
+  }
+  .ctrl-btn--accent:hover {
+    background: var(--neon);
+    transform: translate(-1px, -1px);
+    box-shadow: 3px 3px 0 var(--ink);
+  }
 
   .hint {
     position: absolute;
@@ -359,10 +372,13 @@
     right: 12px;
     z-index: 2;
     padding: 6px 10px;
-    background: rgba(249, 249, 247, 0.85);
-    border: 1px solid var(--line);
-    font-family: var(--font-ui);
+    background: var(--surface);
+    border: 1.5px solid var(--ink);
+    border-radius: var(--radius-sm);
+    box-shadow: 2px 2px 0 var(--ink);
+    font-family: var(--font-mono);
     font-size: 10px;
-    color: var(--ink-faint);
+    color: var(--ink-muted);
+    letter-spacing: 0.04em;
   }
 </style>

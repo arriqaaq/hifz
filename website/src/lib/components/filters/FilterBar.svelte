@@ -234,7 +234,12 @@
     cursor: pointer;
   }
   .types-menu-item:hover { background: var(--surface-alt); }
-  .types-menu-item.active { color: var(--accent); font-weight: 600; }
+  .types-menu-item.active {
+    color: var(--ink);
+    background: rgba(217, 244, 0, 0.18);
+    font-weight: 600;
+    border-left: 2px solid var(--neon);
+  }
 
   .clear {
     margin-left: auto;
@@ -243,8 +248,10 @@
     cursor: pointer;
     font-family: var(--font-ui);
     font-size: 10px;
-    color: var(--accent);
-    text-decoration: underline;
+    color: var(--ink);
+    text-decoration: none;
+    border-bottom: 1px solid var(--neon);
+    padding-bottom: 1px;
   }
 
   .date-input {

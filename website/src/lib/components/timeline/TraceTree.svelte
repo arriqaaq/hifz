@@ -176,7 +176,7 @@
     background: var(--surface-alt);
   }
   .row.selected {
-    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    background: color-mix(in srgb, var(--neon) 22%, transparent);
     color: var(--ink);
   }
   .row.muted {
@@ -193,7 +193,7 @@
     cursor: default;
   }
   .row-run.selected {
-    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    background: color-mix(in srgb, var(--neon) 22%, transparent);
   }
 
   .row-body {

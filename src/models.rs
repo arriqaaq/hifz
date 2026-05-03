@@ -56,13 +56,33 @@ pub struct RawObservation {
 pub struct Memory {
     pub id: Option<surrealdb::types::RecordId>,
     pub project: String,
+    /// Typed category (see `Category` enum). Stored as snake_case string for
+    /// SurrealDB schemafullness; convert via `Category::from_str` at boundaries.
     pub category: String,
     pub title: String,
+    /// Short retrieval-friendly form (≤ ~2KB). Always populated and embedded.
     pub content: String,
+    /// Caller-supplied domain terms. NOT extracted from content (Phase 2 LLM
+    /// enrichment may add to this list when available).
     pub keywords: Vec<String>,
+    /// Caller-supplied file paths the memory references. Phase 2 deterministic
+    /// extraction adds paths regex-detected in `content` / `content_long`.
     pub files: Vec<String>,
+    /// LLM-generated coarse buckets (e.g. `auth`, `migration`). Distinct from
+    /// `keywords` which are domain terms. Empty when no LLM enrichment ran.
     pub tags: Vec<String>,
+    /// Legacy free-form context line. Deprecated in favor of `context_summary`;
+    /// retained for backward-compat with rows authored before Phase 2.
     pub context: Option<String>,
+    /// LLM-generated one-paragraph contextual placement (A-MEM's `Xᵢ`).
+    /// Null when no LLM enrichment ran.
+    pub context_summary: Option<String>,
+    /// Append-only audit log of LLM rewrites applied during bounded evolution.
+    pub evolution_history: Vec<EvolutionEntry>,
+    /// Long-form markdown body for artifact categories (Plan, Design,
+    /// CodeReview, ShipReport, ContextSlice). When set, `content` carries a
+    /// short summary derived from this. Phase 4 chunks this for retrieval.
+    pub content_long: Option<String>,
     pub strength: f64,
     pub retrieval_count: i64,
     pub last_accessed_at: String,
@@ -75,6 +95,21 @@ pub struct Memory {
     pub forget_after: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+}
+
+/// Single entry in a memory's evolution history. Captures one LLM rewrite
+/// pass — what fields changed, the model's rationale, when.
+#[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
+pub struct EvolutionEntry {
+    pub timestamp: String,
+    /// Field name that was rewritten (e.g. "context_summary", "tags").
+    pub field: String,
+    /// Prior value (stringified) so the rewrite is auditable.
+    pub previous: Option<String>,
+    /// LLM's one-line justification for the rewrite.
+    pub reason: String,
+    /// ID of the memory whose insert triggered this evolution, if any.
+    pub triggered_by: Option<String>,
 }
 
 // --- Entity ---
@@ -288,6 +323,14 @@ pub struct MemoriesReq {
     pub category: Option<String>,
     #[serde(default)]
     pub limit: Option<usize>,
+    /// Phase 5: filter by `created_at >= since` (RFC3339 timestamp).
+    /// Powers "decisions in the last 30 days" style queries.
+    #[serde(default)]
+    pub since: Option<String>,
+    /// Phase 5: open-only filter — drop memories that have an incoming
+    /// `closes` edge. Useful for `?category=bug&open=true`.
+    #[serde(default)]
+    pub open: Option<bool>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -307,12 +350,28 @@ pub struct SearchReq {
 pub struct RememberReq {
     pub title: String,
     pub content: String,
+    /// Typed category string (`Category::as_str()`). Defaults to `Note`.
     #[serde(default)]
     pub category: Option<String>,
     #[serde(default)]
     pub keywords: Option<Vec<String>>,
     #[serde(default)]
     pub files: Option<Vec<String>>,
+    /// Caller-supplied tags (LLM enrichment may add more when available).
+    #[serde(default)]
+    pub tags: Option<Vec<String>>,
+    /// Long-form markdown body. When set, `content` is treated as a summary
+    /// and `content_long` carries the full artifact.
+    #[serde(default)]
+    pub content_long: Option<String>,
+    /// Explicit lifecycle: this memory closes/resolves the named one. Writes
+    /// a `closes` edge.
+    #[serde(default)]
+    pub closes_memory_id: Option<String>,
+    /// Explicit lifecycle: this memory replaces the named one. Writes a
+    /// `supersedes` edge AND sets the old memory's `is_latest=false`.
+    #[serde(default)]
+    pub supersedes_memory_id: Option<String>,
     #[serde(default)]
     pub project: Option<String>,
     #[serde(default, rename = "sessionId", alias = "session_id")]
@@ -497,31 +556,74 @@ pub const OBS_TYPES: &[&str] = &[
 ];
 
 // --- Knowledge Graph Edge Types ---
+//
+// Canonical typed relation vocabulary, grouped by the source of the edge.
+// Grouping makes the deterministic vs. LLM split visible in the type itself.
+// See `docs/ontology.md` (Phase 2) and `link::is_allowed_relation` for
+// per-relation type-pair constraints.
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum EdgeRelation {
-    // Provenance (causal, directional)
-    DerivedFrom,
-    Informed,
-    GeneratedBy,
-    Triggered,
-    PartOf,
-    Follows,
-    // Knowledge (semantic)
-    SimilarTo,
-    Contradicts,
-    Supersedes,
-    Elaborates,
-    Supports,
+    // -- Co-occurrence (deterministic, write-time, signal-typed) --
+    /// Two memories share file paths.
+    CoOccursFiles,
+    /// Two memories share caller-supplied keywords.
+    CoOccursKeywords,
+    /// Two memories' embeddings are within cosine threshold.
+    CoOccursEmbedding,
+    /// Memory references a shared entity (file/symbol/concept/error).
     Mentions,
-    // Workflow (domain-extensible)
-    ImplementedBy,
-    Motivated,
-    ResolvedBy,
-    DependsOn,
-    AlternativeTo,
-    DeprecatedBy,
+
+    // -- Provenance (deterministic, system-set; PROV-O grounded) --
+    /// Memory was generated during a run.
+    GeneratedBy,
+    /// Memory was used as input to a run (surfaced via search).
+    InformedBy,
+    /// Memory was derived from one or more recalled memories.
+    DerivedFrom,
+    /// Memory authored by an agent / model.
+    AttributedTo,
+    /// Structural containment (chunk in memory, run in session).
+    PartOf,
+    /// Temporal sequence within a session (run after run).
+    Follows,
+
+    // -- Conceptual (LLM-set or strong heuristic; SKOS grounded) --
+    /// A is more general than B.
+    Broader,
+    /// A is more specific than B.
+    Narrower,
+    /// Symmetric conceptual link (LLM can't decompose into broader/narrower).
+    Related,
+    /// Explicit dedup pointer (SKOS exactMatch semantics; does NOT merge identities).
+    SameAs,
+
+    // -- Argumentative (LLM-set; IBIS grounded) --
+    /// A supports B's claim.
+    Supports,
+    /// A conflicts with B.
+    Contradicts,
+    /// A adds detail to B.
+    Elaborates,
+    /// A is a response to a question/issue raised in B.
+    RespondsTo,
+
+    // -- Lifecycle (deterministic when explicit, LLM otherwise) --
+    /// A replaces B (also reflected on B as `is_latest=false`).
+    Supersedes,
+    /// A closes/resolves B (e.g., a fix memory closes a bug memory).
+    Closes,
+
+    // -- Code-domain (deterministic, write-time) --
+    /// An observation touched a file referenced by a memory.
+    TouchesFile,
+    /// A `commit_made` observation is the commit for a task/bug memory.
+    CommitsFor,
+    /// A memory describes tests for code another memory describes.
+    Tests,
+
+    /// Catch-all for forward/backward compat. Validation accepts.
     #[serde(other)]
     Other,
 }
@@ -529,25 +631,60 @@ pub enum EdgeRelation {
 impl EdgeRelation {
     pub fn as_str(&self) -> &str {
         match self {
-            Self::DerivedFrom => "derived_from",
-            Self::Informed => "informed",
+            Self::CoOccursFiles => "co_occurs_files",
+            Self::CoOccursKeywords => "co_occurs_keywords",
+            Self::CoOccursEmbedding => "co_occurs_embedding",
+            Self::Mentions => "mentions",
             Self::GeneratedBy => "generated_by",
-            Self::Triggered => "triggered",
+            Self::InformedBy => "informed_by",
+            Self::DerivedFrom => "derived_from",
+            Self::AttributedTo => "attributed_to",
             Self::PartOf => "part_of",
             Self::Follows => "follows",
-            Self::SimilarTo => "similar_to",
-            Self::Contradicts => "contradicts",
-            Self::Supersedes => "supersedes",
-            Self::Elaborates => "elaborates",
+            Self::Broader => "broader",
+            Self::Narrower => "narrower",
+            Self::Related => "related",
+            Self::SameAs => "same_as",
             Self::Supports => "supports",
-            Self::Mentions => "mentions",
-            Self::ImplementedBy => "implemented_by",
-            Self::Motivated => "motivated",
-            Self::ResolvedBy => "resolved_by",
-            Self::DependsOn => "depends_on",
-            Self::AlternativeTo => "alternative_to",
-            Self::DeprecatedBy => "deprecated_by",
+            Self::Contradicts => "contradicts",
+            Self::Elaborates => "elaborates",
+            Self::RespondsTo => "responds_to",
+            Self::Supersedes => "supersedes",
+            Self::Closes => "closes",
+            Self::TouchesFile => "touches_file",
+            Self::CommitsFor => "commits_for",
+            Self::Tests => "tests",
             Self::Other => "other",
+        }
+    }
+
+    /// Parse a relation string into the typed enum. Unknown strings map to `Other`.
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            "co_occurs_files" => Self::CoOccursFiles,
+            "co_occurs_keywords" => Self::CoOccursKeywords,
+            "co_occurs_embedding" => Self::CoOccursEmbedding,
+            "mentions" => Self::Mentions,
+            "generated_by" => Self::GeneratedBy,
+            "informed_by" => Self::InformedBy,
+            "derived_from" => Self::DerivedFrom,
+            "attributed_to" => Self::AttributedTo,
+            "part_of" => Self::PartOf,
+            "follows" => Self::Follows,
+            "broader" => Self::Broader,
+            "narrower" => Self::Narrower,
+            "related" => Self::Related,
+            "same_as" => Self::SameAs,
+            "supports" => Self::Supports,
+            "contradicts" => Self::Contradicts,
+            "elaborates" => Self::Elaborates,
+            "responds_to" => Self::RespondsTo,
+            "supersedes" => Self::Supersedes,
+            "closes" => Self::Closes,
+            "touches_file" => Self::TouchesFile,
+            "commits_for" => Self::CommitsFor,
+            "tests" => Self::Tests,
+            _ => Self::Other,
         }
     }
 }
@@ -577,6 +714,132 @@ impl EdgeVia {
             Self::Llm => "llm",
             Self::Cluster => "cluster",
             Self::Other => "other",
+        }
+    }
+}
+
+// --- Memory categories (typed) ---
+//
+// Stored on `Memory.category` as snake_case strings. Use `Category::from_str`
+// at API boundaries; use `Category::is_long_form` to decide whether the row
+// owns a `content_long` body and gets chunked retrieval (Phase 4).
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum Category {
+    /// Ephemeral hook record. Rare in the memory table — most observations
+    /// stay in the `observation` table. Reserved for the few cases where an
+    /// observation gets promoted.
+    Observation,
+    /// A generalized learning extracted across one or more sessions.
+    Lesson,
+    /// An architectural or scoping choice with stated reasoning.
+    Decision,
+    /// An open problem; closed by a `Fix` memory linked via `closes`.
+    Bug,
+    /// A fix for a `Bug` memory; should carry a `closes` edge.
+    Fix,
+    /// A non-obvious behavior that surprised the agent.
+    Gotcha,
+    /// A project rule or pattern (naming, structure, etc.).
+    Convention,
+    /// A recurring failure pattern surfaced during review or kata.
+    FailurePattern,
+    /// Long-form: a plan document.
+    Plan,
+    /// Long-form: a design document.
+    Design,
+    /// Long-form: a code-review report.
+    CodeReview,
+    /// Long-form: a ship/release verdict.
+    ShipReport,
+    /// Long-form: a project-context slice (architecture, conventions, etc.).
+    ContextSlice,
+    /// Catch-all for ad-hoc memories.
+    Note,
+}
+
+impl Category {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Observation => "observation",
+            Self::Lesson => "lesson",
+            Self::Decision => "decision",
+            Self::Bug => "bug",
+            Self::Fix => "fix",
+            Self::Gotcha => "gotcha",
+            Self::Convention => "convention",
+            Self::FailurePattern => "failure_pattern",
+            Self::Plan => "plan",
+            Self::Design => "design",
+            Self::CodeReview => "code_review",
+            Self::ShipReport => "ship_report",
+            Self::ContextSlice => "context_slice",
+            Self::Note => "note",
+        }
+    }
+
+    /// Parse a string into the typed category. Unknown values map to `Note`
+    /// (lossy by design — agents should not crash on a typo'd category).
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            "observation" => Self::Observation,
+            "lesson" => Self::Lesson,
+            "decision" => Self::Decision,
+            "bug" => Self::Bug,
+            "fix" => Self::Fix,
+            "gotcha" => Self::Gotcha,
+            "convention" => Self::Convention,
+            "failure_pattern" => Self::FailurePattern,
+            "plan" => Self::Plan,
+            "design" => Self::Design,
+            "code_review" => Self::CodeReview,
+            "ship_report" => Self::ShipReport,
+            "context_slice" => Self::ContextSlice,
+            _ => Self::Note,
+        }
+    }
+
+    /// True for categories whose `content_long` body is the canonical artifact.
+    /// Long-form rows skip the deterministic co-occurrence link pass during
+    /// insert and earn chunked retrieval (Phase 4).
+    pub fn is_long_form(&self) -> bool {
+        matches!(
+            self,
+            Self::Plan | Self::Design | Self::CodeReview | Self::ShipReport | Self::ContextSlice
+        )
+    }
+}
+
+// --- Record kinds (for edge type-pair constraints) ---
+//
+// Mirrors the table names in `db::SCHEMA`. Used by `link::is_allowed_relation`
+// to reject illegal `(from_kind, relation, to_kind)` triples.
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RecordKind {
+    Memory,
+    Observation,
+    Run,
+    Session,
+    Entity,
+    SemanticMemory,
+    ProceduralMemory,
+    Other,
+}
+
+impl RecordKind {
+    /// Map a SurrealDB table name to the typed kind.
+    pub fn from_table(table: &str) -> Self {
+        match table {
+            "memory" => Self::Memory,
+            "observation" => Self::Observation,
+            "run" => Self::Run,
+            "session" => Self::Session,
+            "entity" => Self::Entity,
+            "semantic_memory" => Self::SemanticMemory,
+            "procedural_memory" => Self::ProceduralMemory,
+            _ => Self::Other,
         }
     }
 }

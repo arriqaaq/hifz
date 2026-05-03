@@ -172,7 +172,7 @@
     color: var(--ink-faint);
     font-size: 11px;
   }
-  .chip-x:hover { color: var(--accent); }
+  .chip-x:hover { color: var(--ink); background: var(--neon); border-radius: 3px; }
 
   .dropdown {
     position: absolute;

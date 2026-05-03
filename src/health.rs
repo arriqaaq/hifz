@@ -29,6 +29,22 @@ pub async fn report(
     )
     .await;
 
+    // Phase 9: report the active mode so adapters and the website can
+    // surface it. Two-flag derivation:
+    //   - `ollama_enabled` reflects whether the OllamaClient was constructed
+    //     (i.e. OLLAMA_URL is set in config). Reachability is not probed
+    //     here to keep the health endpoint fast.
+    //   - `llm_evolve` (HIFZ_LLM_EVOLVE) gates whether `enrich::save_enriched`
+    //     actually invokes the LLM at insert time.
+    let llm_evolve = std::env::var("HIFZ_LLM_EVOLVE")
+        .map(|v| matches!(v.to_lowercase().as_str(), "true" | "1" | "yes"))
+        .unwrap_or(false);
+    let mode = if ollama_enabled && llm_evolve {
+        "llm_augmented"
+    } else {
+        "deterministic"
+    };
+
     Ok(serde_json::json!({
         "status": "healthy",
         "version": env!("CARGO_PKG_VERSION"),
@@ -41,6 +57,8 @@ pub async fn report(
         "embedding_provider": "fastembed",
         "embedding_dimensions": embedder.dimension(),
         "ollama": ollama_enabled,
+        "llm_evolve": llm_evolve,
+        "mode": mode,
         "git_available": git_path.is_some(),
         "git_path": git_path.map(|p| p.display().to_string()),
     }))

@@ -55,6 +55,9 @@ dashmap = "6"
 # Streaming
 futures = "0.3"
 
+# URL encoding for MCP tool arg → REST query string
+urlencoding = "2"
+
 # Progress bars (for benchmark)
 indicatif = "0.17"
 

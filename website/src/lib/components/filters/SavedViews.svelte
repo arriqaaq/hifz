@@ -169,7 +169,7 @@
     padding: 3px 6px;
     font-size: 10px;
   }
-  .pill-x:hover { color: var(--accent); }
+  .pill-x:hover { color: var(--ink); background: var(--neon); border-radius: 3px; }
 
   .save-form {
     display: inline-flex;

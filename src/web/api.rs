@@ -80,6 +80,21 @@ pub async fn session_get(
     json_or_err(state.session_get(&id).await)
 }
 
+/// Phase 3.1: project-scoped warmup digest at session start.
+/// `?project=foo&top_n=15` query params override session-row's project.
+pub async fn session_warmup(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Json<serde_json::Value> {
+    let project = params.get("project").map(String::as_str);
+    let top_n = params
+        .get("top_n")
+        .or_else(|| params.get("limit"))
+        .and_then(|v| v.parse::<usize>().ok());
+    json_or_err(state.session_warmup(&id, project, top_n).await)
+}
+
 pub async fn sessions_list(
     State(state): State<AppState>,
     Query(params): Query<std::collections::HashMap<String, String>>,
@@ -183,8 +198,15 @@ pub async fn search_agentic(
                 let mem_ids: Vec<_> = mem_hits.iter().map(|(id, _)| id.clone()).collect();
                 let _ = crate::run::append_recalled(&state.db, &run_id, &mem_ids).await;
                 for (mid, score) in &mem_hits {
+                    let reason = format!("recalled by search rank {score:.3}");
                     let _ = crate::link::upsert_edge(
-                        &state.db, mid, &run_id, "informed", "system", *score,
+                        &state.db,
+                        mid,
+                        &run_id,
+                        "informed_by",
+                        "system",
+                        *score,
+                        Some(&reason),
                     )
                     .await;
                 }
@@ -300,6 +322,90 @@ pub async fn memory_links(
     Path(id): Path<String>,
 ) -> Json<serde_json::Value> {
     json_or_err(state.memory_links(&id).await)
+}
+
+/// Phase 5: typed graph walk from a memory. Query params:
+/// `?relations=related,elaborates&max_hops=2`.
+pub async fn memory_neighbors(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Json<serde_json::Value> {
+    let relations = params.get("relations").map(|s| {
+        s.split(',')
+            .map(|p| p.trim().to_string())
+            .filter(|p| !p.is_empty())
+            .collect::<Vec<_>>()
+    });
+    let max_hops = params.get("max_hops").and_then(|v| v.parse::<usize>().ok());
+    json_or_err(state.memory_neighbors(&id, relations, max_hops).await)
+}
+
+/// Phase 5: chronological digest of recent activity for a project, grouped
+/// by category. `?days=N` (default 30).
+pub async fn project_digest(
+    State(state): State<AppState>,
+    Path(project): Path<String>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Json<serde_json::Value> {
+    let days = params.get("days").and_then(|v| v.parse::<i64>().ok());
+    json_or_err(state.project_digest(&project, days).await)
+}
+
+/// Phase 5: project accumulator rollup (latest plan, decisions, conventions,
+/// open bugs, gotchas, failure patterns, recent lessons).
+pub async fn project_accumulators(
+    State(state): State<AppState>,
+    Path(project): Path<String>,
+) -> Json<serde_json::Value> {
+    json_or_err(state.project_accumulators(&project).await)
+}
+
+/// Phase 4.5: incoming edges for a memory. `?relation=foo` to filter.
+pub async fn memory_backlinks(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Json<serde_json::Value> {
+    let relation = params.get("relation").map(String::as_str);
+    json_or_err(state.memory_backlinks(&id, relation).await)
+}
+
+/// Phase 4.4: render a memory as frontmatter-rich markdown.
+/// Returns `text/markdown` with the rendered body — NOT JSON-wrapped, so
+/// callers can pipe this directly to a file or `$EDITOR`.
+pub async fn memory_markdown_get(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> axum::response::Response {
+    use axum::http::StatusCode;
+    use axum::response::IntoResponse;
+    match state.memory_markdown_get(&id).await {
+        Ok(s) => (
+            StatusCode::OK,
+            [(
+                axum::http::header::CONTENT_TYPE,
+                "text/markdown; charset=utf-8",
+            )],
+            s,
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
+/// Phase 4.4: parse an edited markdown blob and write a NEW memory version
+/// that supersedes the old one. Body is plain text (the markdown), not JSON.
+pub async fn memory_markdown_put(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    body: String,
+) -> Json<serde_json::Value> {
+    json_or_err(state.memory_markdown_put(&id, &body).await)
 }
 
 pub async fn evolve_by_id(

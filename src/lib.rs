@@ -7,6 +7,7 @@ use dashmap::DashMap;
 use surrealdb::Surreal;
 use surrealdb::types::SurrealValue;
 
+pub mod chunk;
 pub mod commits;
 pub mod compress;
 pub mod config;
@@ -17,6 +18,7 @@ pub mod db;
 pub mod dedup;
 pub mod digest;
 pub mod embed;
+pub mod enrich;
 pub mod entities;
 pub mod event;
 pub mod evolve;
@@ -26,6 +28,7 @@ pub mod ground;
 pub mod health;
 pub mod link;
 pub mod llm_rerank;
+pub mod markdown;
 pub mod mcp;
 pub mod models;
 pub mod observe;
@@ -41,6 +44,7 @@ pub mod search;
 pub mod session;
 pub mod timeline;
 pub mod trace;
+pub mod warmup;
 pub mod web;
 
 use crate::db::Db;
@@ -147,8 +151,71 @@ impl Hifz {
         crate::session::start(&self.db, &self.embedder, self.token_budget, req).await
     }
     pub async fn session_end(&self, session_id: &str) -> Result<serde_json::Value> {
-        crate::session::end(&self.db, session_id).await
+        let result = crate::session::end(&self.db, session_id).await?;
+
+        // Phase 3.2: kick off consolidation in the background. Time-bounded
+        // by the consolidator itself; spawned so the SessionEnd hook returns
+        // immediately and the agent's shutdown isn't blocked by LLM calls.
+        if let Some(ollama) = self.ollama.clone() {
+            let db = self.db.clone();
+            tokio::spawn(async move {
+                if let Err(e) =
+                    crate::consolidate::run_consolidation(&db, Some(ollama.as_ref())).await
+                {
+                    tracing::warn!("session-end consolidation failed: {e}");
+                }
+            });
+        } else {
+            tracing::debug!(
+                "session-end consolidation skipped: Ollama not configured (deterministic decay still ran)"
+            );
+        }
+
+        Ok(result)
     }
+
+    /// Phase 3.1: build a project-scoped warmup digest at session start.
+    /// Returns the typed `WarmupDigest` (latest_plan, decisions, conventions,
+    /// open_bugs, gotchas, failure_patterns, recent_lessons, plus a flat top-N).
+    /// Hook callers should inject `top` as a system-context block.
+    pub async fn session_warmup(
+        &self,
+        session_id: &str,
+        project: Option<&str>,
+        top_n: Option<usize>,
+    ) -> Result<serde_json::Value> {
+        // Resolve project from explicit param OR by looking up the session row.
+        let project_resolved = match project {
+            Some(p) if !p.is_empty() => p.to_string(),
+            _ => {
+                #[derive(Debug, surrealdb::types::SurrealValue)]
+                struct Row {
+                    project: Option<String>,
+                }
+                let sid = if session_id.starts_with("session:") {
+                    session_id.to_string()
+                } else {
+                    format!("session:{session_id}")
+                };
+                let mut resp = self
+                    .db
+                    .query("SELECT project FROM type::record($id)")
+                    .bind(("id", sid))
+                    .await?;
+                let rows: Vec<Row> = resp.take(0).unwrap_or_default();
+                rows.into_iter()
+                    .next()
+                    .and_then(|r| r.project)
+                    .unwrap_or_else(|| "global".to_string())
+            }
+        };
+
+        let digest =
+            crate::warmup::build_warmup(&self.db, &project_resolved, Some(session_id), top_n)
+                .await?;
+        Ok(serde_json::to_value(digest).unwrap_or_default())
+    }
+
     pub async fn session_get(&self, id: &str) -> Result<serde_json::Value> {
         crate::session::get(&self.db, id).await
     }
@@ -248,23 +315,37 @@ impl Hifz {
 
     // --- Memory ---
     pub async fn remember(&self, req: crate::models::RememberReq) -> Result<serde_json::Value> {
-        let category = req.category.as_deref().unwrap_or("fact");
+        // Default category is `Note` (catch-all for ad-hoc memories) — see
+        // `models::Category`. Unknown category strings also fall through to Note.
+        let category = req
+            .category
+            .as_deref()
+            .map(crate::models::Category::from_str)
+            .unwrap_or(crate::models::Category::Note);
         let keywords = req.keywords.unwrap_or_default();
         let files = req.files.unwrap_or_default();
+        let tags = req.tags.unwrap_or_default();
         let project = req.project.as_deref().unwrap_or("global");
-        let title = crate::remember::save(
+
+        let id = crate::enrich::save_enriched(
             &self.db,
             &self.embedder,
+            self.ollama.as_deref(),
+            self.llm_evolve,
             project,
-            category,
             &req.title,
             &req.content,
-            &keywords,
-            &files,
+            category,
+            keywords,
+            files,
+            tags,
+            req.content_long.clone(),
+            req.closes_memory_id.as_deref(),
+            req.supersedes_memory_id.as_deref(),
             req.session_id.as_deref(),
         )
         .await?;
-        Ok(serde_json::json!({"status": "ok", "title": title}))
+        Ok(serde_json::json!({"status": "ok", "id": id, "title": req.title}))
     }
     pub async fn memories_search(
         &self,
@@ -304,6 +385,269 @@ impl Hifz {
     }
     pub async fn memory_links(&self, id: &str) -> Result<serde_json::Value> {
         crate::link::list_for(&self.db, id).await
+    }
+
+    /// Phase 5: typed graph walk from a memory. `relations` filters which
+    /// edge labels are traversed; `max_hops` defaults to 1 (immediate
+    /// neighbors). Returns the neighbor memory rows annotated with the
+    /// edge that pulled them in (relation, score, via, reason).
+    pub async fn memory_neighbors(
+        &self,
+        id: &str,
+        relations: Option<Vec<String>>,
+        max_hops: Option<usize>,
+    ) -> Result<serde_json::Value> {
+        let normalized = if id.starts_with("memory:") {
+            id.to_string()
+        } else {
+            format!("memory:{id}")
+        };
+        #[derive(Debug, surrealdb::types::SurrealValue)]
+        struct Row {
+            id: Option<surrealdb::types::RecordId>,
+        }
+        let mut resp = self
+            .db
+            .query("SELECT id FROM type::record($id)")
+            .bind(("id", normalized))
+            .await?;
+        let rows: Vec<Row> = resp.take(0).unwrap_or_default();
+        let Some(rid) = rows.into_iter().next().and_then(|r| r.id) else {
+            return Err(anyhow::anyhow!("memory not found: {id}"));
+        };
+
+        let cfg = crate::link::GraphExpandConfig {
+            max_hops: max_hops.unwrap_or(1).clamp(1, 4),
+            relations,
+            min_score: 0.0,
+            dampening: 0.5,
+            max_results: 50,
+            direction: crate::link::Direction::Outgoing,
+        };
+        let edges = crate::link::expand_graph(&self.db, &[rid], &cfg).await?;
+
+        // Hydrate the neighbor memory rows for nicer presentation.
+        let neighbor_ids: Vec<surrealdb::types::RecordId> =
+            edges.iter().map(|e| e.to.clone()).collect();
+        let mut neighbor_titles: std::collections::HashMap<String, serde_json::Value> =
+            std::collections::HashMap::new();
+        if !neighbor_ids.is_empty() {
+            #[derive(Debug, surrealdb::types::SurrealValue)]
+            struct N {
+                id: Option<surrealdb::types::RecordId>,
+                title: Option<String>,
+                category: Option<String>,
+                context_summary: Option<String>,
+            }
+            let mut resp = self
+                .db
+                .query("SELECT id, title, category, context_summary FROM memory WHERE id IN $ids")
+                .bind(("ids", neighbor_ids))
+                .await?;
+            let ns: Vec<N> = resp.take(0).unwrap_or_default();
+            for n in ns {
+                if let Some(rid) = n.id {
+                    neighbor_titles.insert(
+                        format!("{rid:?}"),
+                        serde_json::json!({
+                            "title": n.title,
+                            "category": n.category,
+                            "context_summary": n.context_summary,
+                        }),
+                    );
+                }
+            }
+        }
+
+        let neighbors: Vec<serde_json::Value> = edges
+            .into_iter()
+            .map(|e| {
+                let to_str = format!("{:?}", e.to);
+                let meta = neighbor_titles.get(&to_str).cloned().unwrap_or_default();
+                serde_json::json!({
+                    "id": to_str,
+                    "relation": e.relation,
+                    "via": e.via,
+                    "score": e.score,
+                    "reason": e.reason,
+                    "title": meta.get("title"),
+                    "category": meta.get("category"),
+                    "context_summary": meta.get("context_summary"),
+                })
+            })
+            .collect();
+        let count = neighbors.len();
+        Ok(serde_json::json!({"neighbors": neighbors, "count": count}))
+    }
+
+    /// Phase 5: chronological digest of recent memories for a project.
+    /// Groups the last `days` (default 30) of activity by category.
+    pub async fn project_digest(
+        &self,
+        project: &str,
+        days: Option<i64>,
+    ) -> Result<serde_json::Value> {
+        let days = days.unwrap_or(30).max(1);
+        let since = (chrono::Utc::now() - chrono::Duration::days(days)).to_rfc3339();
+
+        #[derive(Debug, surrealdb::types::SurrealValue)]
+        struct Row {
+            id: Option<surrealdb::types::RecordId>,
+            category: Option<String>,
+            title: Option<String>,
+            context_summary: Option<String>,
+            content: Option<String>,
+            created_at: Option<String>,
+        }
+        let mut resp = self
+            .db
+            .query(
+                "SELECT id, category, title, context_summary, content, created_at \
+                 FROM memory \
+                 WHERE is_latest = true \
+                   AND (project = $project OR project = 'global') \
+                   AND created_at >= $since \
+                 ORDER BY created_at DESC \
+                 LIMIT 100",
+            )
+            .bind(("project", project.to_string()))
+            .bind(("since", since.clone()))
+            .await?;
+        let rows: Vec<Row> = resp.take(0).unwrap_or_default();
+
+        // Group by category preserving the chronological order within each bucket.
+        let mut by_cat: std::collections::BTreeMap<String, Vec<serde_json::Value>> =
+            std::collections::BTreeMap::new();
+        for r in rows {
+            let cat = r.category.unwrap_or_else(|| "note".to_string());
+            let summary = r.context_summary.unwrap_or_else(|| {
+                let c = r.content.unwrap_or_default();
+                if c.len() > 200 {
+                    format!("{}…", &c[..200])
+                } else {
+                    c
+                }
+            });
+            by_cat.entry(cat).or_default().push(serde_json::json!({
+                "id": r.id.map(|x| format!("{x:?}")),
+                "title": r.title,
+                "summary": summary,
+                "created_at": r.created_at,
+            }));
+        }
+        Ok(serde_json::json!({
+            "project": project,
+            "days": days,
+            "since": since,
+            "by_category": by_cat,
+        }))
+    }
+
+    /// Phase 5: project accumulator rollup. Mirrors the warmup digest in
+    /// shape (latest plan, decisions, conventions, open bugs, gotchas,
+    /// failure patterns, recent lessons) but is project-only — no
+    /// session_id concept and no flat top-N.
+    pub async fn project_accumulators(&self, project: &str) -> Result<serde_json::Value> {
+        let digest = crate::warmup::build_warmup(&self.db, project, None, Some(50)).await?;
+        Ok(serde_json::to_value(digest).unwrap_or_default())
+    }
+
+    /// Phase 4.5: list incoming edges for a memory ("backlinks" — every
+    /// memory or observation that references this one). Optional relation
+    /// filter narrows to a single typed edge.
+    pub async fn memory_backlinks(
+        &self,
+        id: &str,
+        relation: Option<&str>,
+    ) -> Result<serde_json::Value> {
+        let normalized = if id.starts_with("memory:") {
+            id.to_string()
+        } else {
+            format!("memory:{id}")
+        };
+
+        let mut sql = String::from(
+            "SELECT in.id AS id, in.title AS title, in.category AS category, \
+             relation, score, via, reason FROM edge \
+             WHERE out = type::record($id)",
+        );
+        if relation.is_some() {
+            sql.push_str(" AND relation = $rel");
+        }
+        let mut q = self.db.query(&sql).bind(("id", normalized));
+        if let Some(r) = relation {
+            q = q.bind(("rel", r.to_string()));
+        }
+        let mut resp = q.await?;
+        let backlinks: Vec<serde_json::Value> = resp.take(0).unwrap_or_default();
+        let count = backlinks.len();
+        Ok(serde_json::json!({"backlinks": backlinks, "count": count}))
+    }
+
+    /// Phase 4.4: render a memory as a frontmatter-rich markdown document.
+    pub async fn memory_markdown_get(&self, id: &str) -> Result<String> {
+        crate::markdown::render(&self.db, id).await
+    }
+
+    /// Phase 4.4: parse an edited markdown document and write it as a NEW
+    /// memory version that supersedes the old one. Old memory's
+    /// `is_latest` is flipped via the supersedes lifecycle path in
+    /// `enrich::save_enriched`.
+    pub async fn memory_markdown_put(&self, id: &str, body: &str) -> Result<serde_json::Value> {
+        let doc = crate::markdown::parse(body)?;
+        let project = doc
+            .frontmatter
+            .project
+            .clone()
+            .unwrap_or_else(|| "global".to_string());
+        let category = doc
+            .frontmatter
+            .category
+            .as_deref()
+            .map(crate::models::Category::from_str)
+            .unwrap_or(crate::models::Category::Note);
+        let title = doc
+            .frontmatter
+            .title
+            .clone()
+            .unwrap_or_else(|| "Untitled".to_string());
+
+        // The body is the full document. For long-form categories, store
+        // the body as `content_long` and derive a summary `content` from
+        // the first ~300 chars; for short categories, body is the content.
+        let (content, content_long): (String, Option<String>) = if category.is_long_form() {
+            let summary: String = doc.body.chars().take(300).collect();
+            (summary, Some(doc.body.clone()))
+        } else {
+            (doc.body.clone(), None)
+        };
+
+        // Phase 4 deletes the old chunks before the new version is written
+        // so a re-PUT doesn't accumulate stale chunks.
+        if let Some(old_rid) = resolve_memory_record_id(&self.db, id).await {
+            let _ = crate::chunk::delete_chunks_for(&self.db, &old_rid).await;
+        }
+
+        let new_id = crate::enrich::save_enriched(
+            &self.db,
+            &self.embedder,
+            self.ollama.as_deref(),
+            self.llm_evolve,
+            &project,
+            &title,
+            &content,
+            category,
+            doc.frontmatter.keywords.clone(),
+            doc.frontmatter.files.clone(),
+            doc.frontmatter.tags.clone(),
+            content_long,
+            None,
+            Some(id),
+            None,
+        )
+        .await?;
+
+        Ok(serde_json::json!({"status": "ok", "id": new_id, "supersedes": id}))
     }
 
     // --- Search & context ---
@@ -498,6 +842,31 @@ impl Hifz {
             git_repo_cache: Arc::new(DashMap::new()),
         })
     }
+}
+
+/// Resolve a `"memory:abc"` / `"abc"` string to a SurrealDB `RecordId`.
+/// Returns `None` if the row doesn't exist. Used by `Hifz::memory_markdown_put`
+/// to clear stale chunks before writing the new version.
+async fn resolve_memory_record_id(
+    db: &Surreal<Db>,
+    id: &str,
+) -> Option<surrealdb::types::RecordId> {
+    let normalized = if id.starts_with("memory:") {
+        id.to_string()
+    } else {
+        format!("memory:{id}")
+    };
+    #[derive(Debug, SurrealValue)]
+    struct Row {
+        id: Option<surrealdb::types::RecordId>,
+    }
+    let mut resp = db
+        .query("SELECT id FROM type::record($id)")
+        .bind(("id", normalized))
+        .await
+        .ok()?;
+    let rows: Vec<Row> = resp.take(0).ok()?;
+    rows.into_iter().next().and_then(|r| r.id)
 }
 
 /// Truncate a string at the largest char boundary `<= max_bytes`.

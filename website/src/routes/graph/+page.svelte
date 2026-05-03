@@ -276,8 +276,8 @@
       {#if loading}
         <LoadingSpinner />
       {:else if error}
-        <div class="card" style="border-color: var(--accent);">
-          <p style="color: var(--accent); margin: 0;">{error}</p>
+        <div class="card" style="border-color: var(--danger);">
+          <p style="color: var(--danger); margin: 0;">{error}</p>
         </div>
       {:else if nodes.length === 0}
         <p class="empty">No data to visualize. Try clearing filters or check the server is running.</p>
@@ -422,7 +422,7 @@
     gap: 2px;
   }
   .obs-list-item.selected .obs-list-row {
-    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    background: color-mix(in srgb, var(--neon) 22%, transparent);
   }
   .obs-list-row {
     display: flex;

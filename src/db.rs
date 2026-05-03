@@ -87,13 +87,20 @@ DEFINE INDEX IF NOT EXISTS obs_type         ON TABLE observation FIELDS obs_type
 
 DEFINE TABLE IF NOT EXISTS memory SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS project          ON memory TYPE string DEFAULT 'global';
-DEFINE FIELD IF NOT EXISTS category         ON memory TYPE string;
+DEFINE FIELD IF NOT EXISTS category         ON memory TYPE string DEFAULT 'note';
 DEFINE FIELD IF NOT EXISTS title            ON memory TYPE string;
 DEFINE FIELD IF NOT EXISTS content          ON memory TYPE string;
+DEFINE FIELD IF NOT EXISTS content_long     ON memory TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS keywords         ON memory TYPE array<string>;
 DEFINE FIELD IF NOT EXISTS files            ON memory TYPE array<string>;
 DEFINE FIELD IF NOT EXISTS tags             ON memory TYPE array<string> DEFAULT [];
 DEFINE FIELD IF NOT EXISTS context          ON memory TYPE option<string>;
+-- Phase 2: A-MEM-style insert pipeline adds these.
+-- context_summary is the LLM-generated paragraph placing this memory in
+-- the broader work. evolution_history is an append-only audit trail of
+-- LLM rewrites applied during bounded neighbor evolution.
+DEFINE FIELD IF NOT EXISTS context_summary  ON memory TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS evolution_history ON memory TYPE array<object> DEFAULT [];
 DEFINE FIELD IF NOT EXISTS strength         ON memory TYPE float;
 DEFINE FIELD IF NOT EXISTS retrieval_count  ON memory TYPE int DEFAULT 0;
 DEFINE FIELD IF NOT EXISTS last_accessed_at ON memory TYPE string DEFAULT time::now();
@@ -114,6 +121,26 @@ DEFINE INDEX IF NOT EXISTS mem_vec          ON TABLE memory
   FIELDS embedding HNSW DIMENSION 384 DIST COSINE;
 DEFINE INDEX IF NOT EXISTS mem_project      ON TABLE memory FIELDS project;
 DEFINE INDEX IF NOT EXISTS mem_latest       ON TABLE memory FIELDS is_latest;
+
+-- === MEMORY CHUNKS (Phase 4: long-form artifact retrieval) ===
+-- For long-form categories (Plan, Design, CodeReview, ShipReport,
+-- ContextSlice), `Memory.content_long` is split into ~500-token chunks with
+-- 100-token overlap. Each chunk is its own row with its own embedding so
+-- search can retrieve the relevant section of a 50KB document. Chunks link
+-- back to the parent via the `edge` table (`relation='part_of'`).
+DEFINE TABLE IF NOT EXISTS memory_chunk SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS parent_id   ON memory_chunk TYPE record<memory>;
+DEFINE FIELD IF NOT EXISTS project     ON memory_chunk TYPE string;
+DEFINE FIELD IF NOT EXISTS chunk_index ON memory_chunk TYPE int;
+DEFINE FIELD IF NOT EXISTS content     ON memory_chunk TYPE string;
+DEFINE FIELD IF NOT EXISTS embedding   ON memory_chunk TYPE option<array<float>>;
+DEFINE FIELD IF NOT EXISTS created_at  ON memory_chunk TYPE string;
+DEFINE INDEX IF NOT EXISTS chunk_parent  ON TABLE memory_chunk FIELDS parent_id;
+DEFINE INDEX IF NOT EXISTS chunk_project ON TABLE memory_chunk FIELDS project;
+DEFINE INDEX IF NOT EXISTS chunk_content_ft ON TABLE memory_chunk
+  FIELDS content FULLTEXT ANALYZER obs_analyzer BM25 CONCURRENTLY;
+DEFINE INDEX IF NOT EXISTS chunk_vec      ON TABLE memory_chunk
+  FIELDS embedding HNSW DIMENSION 384 DIST COSINE;
 
 -- === CONSOLIDATION TIERS ===
 
@@ -171,12 +198,18 @@ DEFINE INDEX IF NOT EXISTS run_lesson_ft ON TABLE run
 
 -- === KNOWLEDGE GRAPH EDGES ===
 -- Generic relation table: any record type can be an endpoint.
--- Relation types (derived_from, informed, similar_to, etc.) are prescribed
--- by application-level enums, with unknown strings accepted for extensibility.
+-- Relation types are prescribed by `models::EdgeRelation` (typed groups:
+-- co-occurrence / provenance / conceptual / argumentative / lifecycle /
+-- code-domain). Per-relation type-pair constraints enforced at write time
+-- in `link::is_allowed_relation`.
+-- `reason` is a first-class one-line justification: deterministic edges
+-- record the channel + score (e.g. "keyword overlap: jwt, auth (2/5)"),
+-- LLM-set edges record the model's one-sentence rationale.
 DEFINE TABLE IF NOT EXISTS edge SCHEMAFULL TYPE RELATION;
 DEFINE FIELD IF NOT EXISTS relation   ON edge TYPE string;
 DEFINE FIELD IF NOT EXISTS via        ON edge TYPE string;
 DEFINE FIELD IF NOT EXISTS score      ON edge TYPE float DEFAULT 1.0;
+DEFINE FIELD IF NOT EXISTS reason     ON edge TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS metadata   ON edge TYPE option<object>;
 DEFINE FIELD IF NOT EXISTS created_at ON edge TYPE string;
 DEFINE INDEX IF NOT EXISTS edge_relation ON TABLE edge FIELDS relation;

@@ -342,11 +342,20 @@ fn build_edges(
     }
 
     // DISTILLED_FROM : memory -> memory derived from `edge` table rows whose
-    // `relation` is one of the provenance/similarity kinds. Only edges where
-    // both endpoints belong to the `memory` table are surfaced.
+    // `relation` is one of the provenance/co-occurrence kinds. Only edges
+    // where both endpoints belong to the `memory` table are surfaced.
     for e in edge_rows {
         let rel = e.get("relation").and_then(|v| v.as_str()).unwrap_or("");
-        if !matches!(rel, "similar_to" | "derived_from" | "generated_by") {
+        if !matches!(
+            rel,
+            "co_occurs_embedding"
+                | "co_occurs_keywords"
+                | "co_occurs_files"
+                | "derived_from"
+                | "generated_by"
+                | "related"
+                | "elaborates"
+        ) {
             continue;
         }
         let src = match e.get("in").and_then(record_str) {

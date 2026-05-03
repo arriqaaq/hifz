@@ -39,16 +39,31 @@ export interface Observation {
   metadata?: Record<string, unknown> | null;
 }
 
+export interface EvolutionEntry {
+  timestamp: string;
+  field: string;
+  previous: string | null;
+  reason: string;
+  triggered_by: string | null;
+}
+
 export interface Memory {
   id: string;
   project: string;
   category: string;
   title: string;
   content: string;
+  /** Phase 4: long-form markdown body for Plan/Design/CodeReview/ShipReport/ContextSlice. */
+  content_long?: string | null;
   keywords: string[];
   files: string[];
   tags: string[];
+  /** Legacy free-form context line (Phase 1 schema). */
   context: string | null;
+  /** Phase 2: A-MEM context_summary — LLM-generated paragraph. */
+  context_summary?: string | null;
+  /** Phase 2: append-only audit log of LLM rewrites. */
+  evolution_history?: EvolutionEntry[];
   strength: number;
   retrieval_count: number;
   last_accessed_at: string;
@@ -60,6 +75,57 @@ export interface Memory {
   forget_after: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface MemoryEdge {
+  id?: string;
+  title?: string;
+  category?: string;
+  context_summary?: string | null;
+  relation: string;
+  via: string;
+  score: number;
+  reason?: string | null;
+}
+
+export interface NeighborsResponse {
+  neighbors: MemoryEdge[];
+  count: number;
+}
+
+export interface BacklinksResponse {
+  backlinks: MemoryEdge[];
+  count: number;
+}
+
+export interface WarmupEntry {
+  id: string;
+  category: string;
+  title: string;
+  summary: string;
+  strength: number;
+  retrieval_count: number;
+  last_accessed_at: string;
+}
+
+export interface WarmupDigest {
+  project: string;
+  session_id: string | null;
+  latest_plan: WarmupEntry | null;
+  decisions: WarmupEntry[];
+  conventions: WarmupEntry[];
+  open_bugs: WarmupEntry[];
+  gotchas: WarmupEntry[];
+  failure_patterns: WarmupEntry[];
+  recent_lessons: WarmupEntry[];
+  top: WarmupEntry[];
+}
+
+export interface ProjectDigestByCategory {
+  project: string;
+  days: number;
+  since: string;
+  by_category: Record<string, Array<{ id: string; title: string; summary: string; created_at: string }>>;
 }
 
 export interface CoreMemory {
@@ -143,6 +209,10 @@ export interface RememberRequest {
   category?: string;
   keywords?: string[];
   files?: string[];
+  tags?: string[];
+  content_long?: string | null;
+  closes_memory_id?: string;
+  supersedes_memory_id?: string;
   project?: string;
   session_id?: string;
 }

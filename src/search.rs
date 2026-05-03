@@ -169,6 +169,16 @@ pub async fn search_hybrid_with_config(
         search_memories_with_config(db, query_vec_for_mem, query, limit, project, cfg).await?;
     results.extend(mem_results);
 
+    // Phase 5.3: long-form chunk retrieval. Hits the `memory_chunk` table
+    // via vector + BM25, dedups by parent memory, and emits SearchResults
+    // pointing at the parent (so graph expansion + dedup downstream still
+    // work). Skipped when vector branch is disabled — chunks are
+    // long-form-specific and would dominate the BM25 path.
+    if !cfg.skip_vector {
+        let chunk_results = search_memory_chunks(db, &query_vec, query, limit, project).await?;
+        results.extend(chunk_results);
+    }
+
     // Run search (BM25 on lesson + prompt, score dampened by 0.7)
     let run_results = search_runs_for_context(db, query, limit / 2, project).await?;
     results.extend(run_results);
@@ -197,7 +207,15 @@ pub async fn search_hybrid_with_config(
 
 /// Graph expansion in-place. Seeds are existing memory results; edges pull in
 /// neighbours that may not have hit the vector or BM25 branches directly.
+///
+/// Phase 6: also runs an observation→memory bridge pass — observation
+/// results expand outgoing on `touches_file` and `commits_for` to surface
+/// memories about files the agent recently worked with. Bridge edges get a
+/// 0.3 dampening (vs. 0.5 for memory→memory) so observations don't flood.
 async fn expand_from_graph(db: &Surreal<Db>, results: &mut Vec<SearchResult>, limit: usize) {
+    // Phase 6: observation→memory bridging via `touches_file` + `commits_for`.
+    expand_from_observations(db, results).await;
+
     let seed_by_id: HashMap<surrealdb::types::RecordId, f64> = results
         .iter()
         .filter(|r| r.obs_type.starts_with("memory:"))
@@ -208,9 +226,21 @@ async fn expand_from_graph(db: &Surreal<Db>, results: &mut Vec<SearchResult>, li
     }
 
     let seed_ids: Vec<_> = seed_by_id.keys().cloned().collect();
+    // Walk co-occurrence + the strongest semantic relations during retrieval
+    // expansion. Provenance and lifecycle are intentionally omitted here —
+    // they're useful for audit, not for finding "more like this."
     let config = link::GraphExpandConfig {
         max_hops: 2,
-        relations: Some(vec!["similar_to".into(), "elaborates".into()]),
+        relations: Some(vec![
+            "co_occurs_embedding".into(),
+            "co_occurs_keywords".into(),
+            "co_occurs_files".into(),
+            "mentions".into(),
+            "related".into(),
+            "elaborates".into(),
+            "broader".into(),
+            "narrower".into(),
+        ]),
         dampening: 0.5,
         direction: link::Direction::Outgoing,
         ..Default::default()
@@ -323,6 +353,119 @@ async fn expand_from_graph(db: &Surreal<Db>, results: &mut Vec<SearchResult>, li
             .unwrap_or(std::cmp::Ordering::Equal)
     });
     results.truncate(limit);
+}
+
+/// Phase 6: observation→memory bridge. For every observation in `results`,
+/// walk outgoing on the bridge relations (`touches_file`, `commits_for`)
+/// and bring in any memories it touches that weren't already in the
+/// result set. Dampening 0.3 keeps observation-derived hits from
+/// outranking direct BM25/vector matches.
+async fn expand_from_observations(db: &Surreal<Db>, results: &mut Vec<SearchResult>) {
+    // Observations have obs_type like "file_read"/"command_run"/etc. — anything
+    // that ISN'T prefixed with "memory:", "run:", "session:" is an observation.
+    let obs_seeds: Vec<(surrealdb::types::RecordId, f64)> = results
+        .iter()
+        .filter(|r| {
+            let t = &r.obs_type;
+            !t.starts_with("memory:") && !t.starts_with("run:") && !t.starts_with("session:")
+        })
+        .filter_map(|r| Some((r.id.clone()?, r.score.unwrap_or(0.0))))
+        .collect();
+    if obs_seeds.is_empty() {
+        return;
+    }
+
+    let seed_ids: Vec<_> = obs_seeds.iter().map(|(id, _)| id.clone()).collect();
+    let cfg = link::GraphExpandConfig {
+        max_hops: 1,
+        relations: Some(vec!["touches_file".into(), "commits_for".into()]),
+        min_score: 0.0,
+        dampening: 0.3,
+        max_results: 30,
+        direction: link::Direction::Outgoing,
+    };
+    let edges = match link::expand_graph(db, &seed_ids, &cfg).await {
+        Ok(e) => e,
+        Err(err) => {
+            tracing::debug!("observation bridge expansion failed: {err}");
+            return;
+        }
+    };
+    if edges.is_empty() {
+        return;
+    }
+
+    #[allow(clippy::mutable_key_type)]
+    let already: std::collections::HashSet<_> =
+        results.iter().filter_map(|r| r.id.clone()).collect();
+    let neighbour_ids: Vec<_> = edges
+        .iter()
+        .filter(|e| !already.contains(&e.to))
+        .map(|e| e.to.clone())
+        .collect();
+    if neighbour_ids.is_empty() {
+        return;
+    }
+
+    #[derive(Debug, SurrealValue)]
+    struct NRow {
+        id: Option<surrealdb::types::RecordId>,
+        title: Option<String>,
+        content: Option<String>,
+        category: Option<String>,
+        created_at: Option<String>,
+        strength: Option<f64>,
+    }
+    let mut resp = match db
+        .query(
+            "SELECT id, title, content, category, created_at, strength \
+             FROM memory \
+             WHERE id IN $ids AND is_latest = true",
+        )
+        .bind(("ids", neighbour_ids))
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!("observation bridge neighbour fetch failed: {e}");
+            return;
+        }
+    };
+    let rows: Vec<NRow> = resp.take(0).unwrap_or_default();
+
+    let seed_score_map: HashMap<&surrealdb::types::RecordId, f64> =
+        obs_seeds.iter().map(|(id, s)| (id, *s)).collect();
+
+    for row in rows {
+        let Some(rid) = row.id.clone() else { continue };
+        // Find the strongest edge that pulled this neighbor in.
+        let best = edges
+            .iter()
+            .filter(|e| e.to == rid)
+            .filter_map(|e| {
+                let seed_s = seed_score_map.get(&e.from).copied().unwrap_or(0.0);
+                Some((e, seed_s * 0.3 * e.score))
+            })
+            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        let Some((edge, score)) = best else { continue };
+        let strength = row.strength.unwrap_or(1.0);
+        results.push(SearchResult {
+            id: row.id.clone(),
+            session_id: None,
+            title: row.title.clone().unwrap_or_default(),
+            obs_type: format!(
+                "memory:{}@{}:{}",
+                row.category.clone().unwrap_or_default(),
+                edge.relation,
+                edge.via,
+            ),
+            narrative: row.content.clone().unwrap_or_default(),
+            timestamp: row.created_at.clone().unwrap_or_default(),
+            importance: (strength * 5.0) as i64,
+            score: Some(score * strength),
+            is_neighbor: Some(true),
+        });
+    }
 }
 
 /// Hybrid search across the `memory` (long-term memory) table (default config).
@@ -548,6 +691,150 @@ async fn bump_memory_access(db: &Surreal<Db>, results: &[SearchResult]) {
     if let Err(e) = db.query(q).bind(("ids", mem_ids)).await {
         tracing::warn!("access bump failed: {e}");
     }
+}
+
+/// Phase 5.3: long-form chunk retrieval. Vector + BM25 over `memory_chunk`,
+/// then group hits by parent memory (max 1 result per parent — the highest
+/// chunk score wins) and emit SearchResults pointing at the *parent*
+/// memory id. The chunk's content becomes the result's narrative so
+/// retrieval surfaces the relevant section, not just the document title.
+pub async fn search_memory_chunks(
+    db: &Surreal<Db>,
+    query_vec: &[f32],
+    query: &str,
+    limit: usize,
+    project: Option<&str>,
+) -> Result<Vec<SearchResult>> {
+    #[derive(Debug, SurrealValue)]
+    struct ChunkHit {
+        id: Option<surrealdb::types::RecordId>,
+        parent_id: Option<surrealdb::types::RecordId>,
+        content: Option<String>,
+        chunk_index: Option<i64>,
+        distance: Option<f64>,
+        ft_score: Option<f64>,
+    }
+
+    let project_filter = if project.is_some() {
+        " AND (project = $project OR project = 'global')"
+    } else {
+        ""
+    };
+
+    // Vector branch
+    let vec_sql = format!(
+        "SELECT id, parent_id, content, chunk_index, \
+                vector::distance::knn() AS distance \
+         FROM memory_chunk \
+         WHERE embedding <|{limit},80|> $query_vec{project_filter}"
+    );
+    let mut vec_q = db.query(&vec_sql).bind(("query_vec", query_vec.to_vec()));
+    if let Some(p) = project {
+        vec_q = vec_q.bind(("project", p.to_string()));
+    }
+    let mut vec_resp = vec_q.await?;
+    let vec_hits: Vec<ChunkHit> = vec_resp.take(0).unwrap_or_default();
+
+    // BM25 branch
+    let ft_sql = format!(
+        "SELECT id, parent_id, content, chunk_index, \
+                search::score(1) AS ft_score \
+         FROM memory_chunk \
+         WHERE content @1@ $q{project_filter} \
+         ORDER BY ft_score DESC LIMIT {limit}"
+    );
+    let mut ft_q = db.query(&ft_sql).bind(("q", query.to_string()));
+    if let Some(p) = project {
+        ft_q = ft_q.bind(("project", p.to_string()));
+    }
+    let mut ft_resp = ft_q.await?;
+    let ft_hits: Vec<ChunkHit> = ft_resp.take(0).unwrap_or_default();
+
+    // Merge; convert distance -> similarity (1 - cos_dist) for vector hits.
+    // Score = max(vector_sim, bm25_score / 4.0) — BM25 raw scores have
+    // unbounded scale so the divisor brings them into ~[0, 1] range.
+    let mut by_parent: HashMap<String, (surrealdb::types::RecordId, f64, String, i64)> =
+        HashMap::new();
+    for h in vec_hits.into_iter().chain(ft_hits.into_iter()) {
+        let Some(parent) = h.parent_id else { continue };
+        let pkey = format!("{parent:?}");
+        let score = h
+            .distance
+            .map(|d| (1.0 - d).clamp(0.0, 1.0))
+            .or_else(|| h.ft_score.map(|s| (s / 4.0).clamp(0.0, 1.0)))
+            .unwrap_or(0.0);
+        let content = h.content.unwrap_or_default();
+        let idx = h.chunk_index.unwrap_or(0);
+        by_parent
+            .entry(pkey)
+            .and_modify(|(_, prior_score, prior_content, prior_idx)| {
+                if score > *prior_score {
+                    *prior_score = score;
+                    *prior_content = content.clone();
+                    *prior_idx = idx;
+                }
+            })
+            .or_insert((parent, score, content, idx));
+    }
+
+    // Hydrate each parent memory's title.
+    let parent_ids: Vec<surrealdb::types::RecordId> =
+        by_parent.values().map(|(p, _, _, _)| p.clone()).collect();
+    if parent_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut presp = db
+        .query("SELECT id, title, category, created_at FROM memory WHERE id IN $ids")
+        .bind(("ids", parent_ids))
+        .await?;
+    let parents: Vec<ChunkParentRow> = presp.take(0).unwrap_or_default();
+    let parent_meta: HashMap<String, ChunkParentRow> = parents
+        .into_iter()
+        .filter_map(|p| p.id.as_ref().map(|r| (format!("{r:?}"), p.clone())))
+        .collect();
+
+    let mut out: Vec<SearchResult> = by_parent
+        .into_values()
+        .filter_map(|(parent, score, content, idx)| {
+            let key = format!("{parent:?}");
+            let meta = parent_meta.get(&key)?;
+            Some(SearchResult {
+                id: meta.id.clone(),
+                session_id: None,
+                title: meta.title.clone().unwrap_or_default(),
+                obs_type: format!(
+                    "memory:{}#chunk-{}",
+                    meta.category.clone().unwrap_or_default(),
+                    idx
+                ),
+                narrative: content,
+                timestamp: meta.created_at.clone().unwrap_or_default(),
+                importance: 0,
+                score: Some(score),
+                is_neighbor: None,
+            })
+        })
+        .collect();
+    out.sort_by(|a, b| {
+        b.score
+            .unwrap_or(0.0)
+            .partial_cmp(&a.score.unwrap_or(0.0))
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    out.truncate(limit);
+    Ok(out)
+}
+
+/// Helper row shape for `search_memory_chunks` parent hydration. Defined at
+/// file scope (not inside the function) so the type is `Clone` and can sit
+/// in a `HashMap` value.
+#[derive(Debug, Clone, SurrealValue)]
+struct ChunkParentRow {
+    id: Option<surrealdb::types::RecordId>,
+    title: Option<String>,
+    category: Option<String>,
+    created_at: Option<String>,
 }
 
 /// Search closed runs with lessons for context integration.

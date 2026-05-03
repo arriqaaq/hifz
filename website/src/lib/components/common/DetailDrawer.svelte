@@ -208,7 +208,7 @@
     font-size: 14px;
     padding: 4px 8px;
   }
-  .close:hover { color: var(--accent); }
+  .close:hover { color: var(--ink); background: var(--neon); border-radius: 4px; }
 
   .title {
     margin: 8px 0 12px;
@@ -240,12 +240,14 @@
     background: none;
     border: none;
     cursor: pointer;
-    color: var(--accent);
+    color: var(--ink);
     font-size: 10px;
     padding: 0 0 0 8px;
-    text-decoration: underline;
+    text-decoration: none;
+    border-bottom: 1px solid var(--neon);
     font-family: var(--font-ui);
   }
+  .link-btn:hover { background: rgba(217, 244, 0, 0.18); }
 
   .subtitle {
     margin: 0 0 12px;

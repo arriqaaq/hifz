@@ -132,8 +132,8 @@
   }
 
   .rail-btn.active {
-    background: var(--surface-alt);
-    color: var(--accent);
+    background: var(--neon);
+    color: var(--ink);
   }
 
   .rail-btn.active::before {
@@ -144,6 +144,6 @@
     bottom: 6px;
     width: 2px;
     border-radius: 2px;
-    background: var(--accent);
+    background: var(--ink);
   }
 </style>

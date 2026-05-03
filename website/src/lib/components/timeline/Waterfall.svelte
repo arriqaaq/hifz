@@ -182,7 +182,7 @@
           r={isSel ? r + 2 : r}
           fill={colorFor(obs.obs_type)}
           fill-opacity={isSel ? 1 : 0.85}
-          stroke={isSel ? '#111111' : 'none'}
+          stroke={isSel ? '#1a1a1a' : 'none'}
           stroke-width="1.5"
           class="obs-dot"
           onclick={() => handleClick(obs)}
@@ -274,7 +274,7 @@
   }
   .obs-dot:hover {
     fill-opacity: 1 !important;
-    stroke: #111;
+    stroke: var(--ink);
     stroke-width: 1;
   }
 

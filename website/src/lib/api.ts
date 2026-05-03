@@ -11,6 +11,10 @@ import type {
   Commit,
   RememberRequest,
   Memory,
+  NeighborsResponse,
+  BacklinksResponse,
+  WarmupDigest,
+  ProjectDigestByCategory,
 } from './types';
 
 const CORE = '/api/v1';
@@ -88,13 +92,78 @@ export function searchMemories(
   limit = 50,
   project?: string,
   category?: string,
+  opts?: { since?: string; open?: boolean },
 ): Promise<{ memories: Memory[]; count: number }> {
   const params = new URLSearchParams();
   if (query) params.set('query', query);
   if (project) params.set('project', project);
   if (category) params.set('category', category);
+  if (opts?.since) params.set('since', opts.since);
+  if (opts?.open) params.set('open', 'true');
   params.set('limit', String(limit));
   return get(`${CORE}/memories?${params}`);
+}
+
+// --- Phase 4-6 endpoints (typed graph + markdown round-trip + warmup) ---
+
+export function getMemoryNeighbors(
+  id: string,
+  opts: { relations?: string[]; maxHops?: number } = {},
+): Promise<NeighborsResponse> {
+  const params = new URLSearchParams();
+  if (opts.relations?.length) params.set('relations', opts.relations.join(','));
+  if (opts.maxHops) params.set('max_hops', String(opts.maxHops));
+  const qs = params.toString();
+  return get(`${CORE}/memories/${encodeURIComponent(id)}/neighbors${qs ? `?${qs}` : ''}`);
+}
+
+export function getMemoryBacklinks(id: string, relation?: string): Promise<BacklinksResponse> {
+  const qs = relation ? `?relation=${encodeURIComponent(relation)}` : '';
+  return get(`${CORE}/memories/${encodeURIComponent(id)}/backlinks${qs}`);
+}
+
+export function getMemoryLinks(id: string): Promise<BacklinksResponse> {
+  // Note: shape matches BacklinksResponse — `links` field rather than
+  // `backlinks`. Use a permissive cast since callers handle both.
+  return get(`${CORE}/memories/${encodeURIComponent(id)}/links`) as Promise<BacklinksResponse>;
+}
+
+export async function getMemoryMarkdown(id: string): Promise<string> {
+  const res = await fetch(`${CORE}/memories/${encodeURIComponent(id)}/markdown`);
+  if (!res.ok) throw new Error(`GET markdown ${id}: ${res.status}`);
+  return res.text();
+}
+
+export async function putMemoryMarkdown(
+  id: string,
+  body: string,
+): Promise<{ status: string; id: string; supersedes: string }> {
+  const res = await fetch(`${CORE}/memories/${encodeURIComponent(id)}/markdown`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'text/markdown' },
+    body,
+  });
+  if (!res.ok) throw new Error(`PUT markdown ${id}: ${res.status}`);
+  return res.json();
+}
+
+export function getProjectDigest(project: string, days = 30): Promise<ProjectDigestByCategory> {
+  return get(`${CORE}/projects/${encodeURIComponent(project)}/digest?days=${days}`);
+}
+
+export function getProjectAccumulators(project: string): Promise<WarmupDigest> {
+  return get(`${CORE}/projects/${encodeURIComponent(project)}/accumulators`);
+}
+
+export function getSessionWarmup(
+  sessionId: string,
+  project?: string,
+  topN = 15,
+): Promise<WarmupDigest> {
+  const params = new URLSearchParams();
+  if (project) params.set('project', project);
+  params.set('top_n', String(topN));
+  return get(`${AGENT}/sessions/${encodeURIComponent(sessionId)}/warmup?${params}`);
 }
 
 export function getContext(

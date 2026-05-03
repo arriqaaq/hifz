@@ -99,8 +99,8 @@
 {#if loading}
   <LoadingSpinner />
 {:else if error}
-  <div class="card" style="border-color: var(--accent);">
-    <p style="color: var(--accent); margin: 0;">{error}</p>
+  <div class="card" style="border-color: var(--danger);">
+    <p style="color: var(--danger); margin: 0;">{error}</p>
   </div>
 {:else if commit}
   <div class="commit-header">
@@ -172,7 +172,7 @@
     margin-bottom: 16px;
     transition: color 150ms;
   }
-  .back-link:hover { color: var(--accent); }
+  .back-link:hover { color: var(--ink); text-decoration: underline; text-decoration-color: var(--neon); text-decoration-thickness: 2px; text-underline-offset: 2px; }
 
   .commit-header { margin-bottom: 24px; }
 
@@ -237,7 +237,7 @@
   }
 
   .ins { color: #2D6A4F; font-family: var(--font-mono); font-size: 13px; margin-right: 8px; }
-  .del { color: var(--accent); font-family: var(--font-mono); font-size: 13px; }
+  .del { color: var(--danger); font-family: var(--font-mono); font-size: 13px; }
 
   .session-link {
     font-family: var(--font-mono);
@@ -245,7 +245,7 @@
     font-weight: 600;
     color: var(--ink);
   }
-  .session-link:hover { color: var(--accent); }
+  .session-link:hover { color: var(--ink); text-decoration: underline; text-decoration-color: var(--neon); text-decoration-thickness: 2px; text-underline-offset: 2px; }
 
   .file-list { list-style: none; padding: 0; margin: 0; }
   .file-item {

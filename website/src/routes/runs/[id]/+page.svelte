@@ -60,8 +60,8 @@
 {#if loading}
   <LoadingSpinner />
 {:else if error}
-  <div class="card" style="border-color: var(--accent);">
-    <p style="color: var(--accent); margin: 0;">{error}</p>
+  <div class="card" style="border-color: var(--danger);">
+    <p style="color: var(--danger); margin: 0;">{error}</p>
   </div>
 {:else if run}
   <div class="run-header">
@@ -163,7 +163,7 @@
     margin-bottom: 16px;
     transition: color 150ms;
   }
-  .back-link:hover { color: var(--accent); }
+  .back-link:hover { color: var(--ink); text-decoration: underline; text-decoration-color: var(--neon); text-decoration-thickness: 2px; text-underline-offset: 2px; }
 
   .run-header {
     margin-bottom: 20px;
@@ -190,7 +190,7 @@
     color: var(--ink-muted);
     margin-left: auto;
   }
-  .meta-link:hover { color: var(--accent); }
+  .meta-link:hover { color: var(--ink); text-decoration: underline; text-decoration-color: var(--neon); text-decoration-thickness: 2px; text-underline-offset: 2px; }
 
   .section {
     margin-bottom: 24px;

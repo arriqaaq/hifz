@@ -1,13 +1,25 @@
 import type { StylesheetJson } from 'cytoscape';
 
-// Colors per *content* type (memory category, obs_type) — used for fill.
+// Colors per *content* type (memory category + obs_type). Phase 1+2 typed
+// categories are mirrored from website/src/lib/ontology.ts. obs_type values
+// stay as-is (they're free-form hook names).
 export const TYPE_COLORS: Record<string, string> = {
-  architecture: '#B45309',
-  pattern: '#2563EB',
-  fact: '#15803D',
-  workflow: '#1D4E89',
-  bug: '#B91C1C',
-  preference: '#6B3FA0',
+  // typed memory categories (Phase 2 Category enum)
+  observation: '#9ca3af',
+  lesson: '#eab308',
+  decision: '#9b59b6',
+  bug: '#e74c3c',
+  fix: '#22c55e',
+  gotcha: '#f59e0b',
+  convention: '#64748b',
+  failure_pattern: '#f43f5e',
+  plan: '#3b82f6',
+  design: '#06b6d4',
+  code_review: '#14b8a6',
+  ship_report: '#10b981',
+  context_slice: '#6366f1',
+  note: '#737373',
+  // observation types
   command_run: '#0E7490',
   file_edit: '#C2410C',
   file_read: '#15803D',
@@ -15,7 +27,7 @@ export const TYPE_COLORS: Record<string, string> = {
   conversation: '#6B3FA0',
   search: '#2563EB',
   commit_made: '#C2410C',
-  other: '#6B6B6B',
+  other: '#6a6a63',
 };
 
 // Colors per *entity kind* — used for shape & border tint.
@@ -28,11 +40,11 @@ export const KIND_COLORS: Record<string, string> = {
 };
 
 export function colorFor(type: string): string {
-  return TYPE_COLORS[type] ?? '#6B6B6B';
+  return TYPE_COLORS[type] ?? '#6a6a63';
 }
 
 export function kindColor(kind: string): string {
-  return KIND_COLORS[kind] ?? '#6B6B6B';
+  return KIND_COLORS[kind] ?? '#6a6a63';
 }
 
 export const stylesheet: StylesheetJson = [
@@ -40,13 +52,14 @@ export const stylesheet: StylesheetJson = [
     selector: 'node',
     style: {
       'background-color': 'data(color)',
-      'border-color': 'data(color)',
-      'border-opacity': 0.7,
-      'border-width': 1,
+      'border-color': '#1a1a1a',
+      'border-opacity': 0.85,
+      'border-width': 1.5,
       label: 'data(label)',
       'font-size': 10,
       'font-family': 'Inter, sans-serif',
-      color: '#1A1A1A',
+      'font-weight': 500,
+      color: '#1a1a1a',
       'text-valign': 'bottom',
       'text-margin-y': 6,
       'text-max-width': '140px',
@@ -58,7 +71,7 @@ export const stylesheet: StylesheetJson = [
       'transition-duration': 200,
     },
   },
-  // Per-kind shapes — Resolve.ai pattern: each entity has a distinct silhouette.
+  // Per-kind shapes — each entity has a distinct silhouette.
   {
     selector: 'node[kind = "session"]',
     style: { shape: 'round-rectangle', 'border-width': 2 },
@@ -80,14 +93,16 @@ export const stylesheet: StylesheetJson = [
     style: { shape: 'tag', 'border-width': 2 },
   },
 
-  // Selection / interaction states
+  // Selection / interaction states — neon ring on selection
   {
     selector: 'node:selected',
     style: {
-      'border-color': '#1A1A1A',
+      'background-color': '#d9f400',
+      'border-color': '#1a1a1a',
       'border-width': 3,
       'text-opacity': 1,
-      'font-weight': 600,
+      'font-weight': 700,
+      color: '#1a1a1a',
     },
   },
   {
@@ -111,18 +126,18 @@ export const stylesheet: StylesheetJson = [
     selector: 'edge',
     style: {
       width: 1,
-      'line-color': '#C4C4BE',
+      'line-color': '#9a9a91',
       'line-opacity': 0.55,
       'curve-style': 'bezier',
       'target-arrow-shape': 'none',
       label: 'data(rel)',
       'font-size': 8,
-      'font-family': 'Inter, sans-serif',
-      'font-weight': 600,
-      color: '#9B9B9B',
+      'font-family': 'JetBrains Mono, monospace',
+      'font-weight': 500,
+      color: '#6a6a63',
       'text-rotation': 'autorotate',
-      'text-background-color': '#FAFAF9',
-      'text-background-opacity': 0.85,
+      'text-background-color': '#f2f1eb',
+      'text-background-opacity': 0.9,
       'text-background-padding': '2px',
       'text-margin-y': -2,
       'text-opacity': 0,
@@ -194,6 +209,49 @@ export const stylesheet: StylesheetJson = [
       'line-opacity': 0.6,
     },
   },
+
+  // ---------------------------------------------------------------------
+  // Phase 8.6: typed relation groups (Co-occurrence / Provenance /
+  // Conceptual / Argumentative / Lifecycle / Code-domain). Per-group
+  // color + style. `contradicts` overrides to red. Kept compatible with
+  // the legacy IN_SESSION etc. selectors above which the export endpoint
+  // still emits.
+  // ---------------------------------------------------------------------
+
+  // Co-occurrence — thin gray dashed
+  { selector: 'edge[rel = "co_occurs_files"]',     style: { 'line-color': '#94a3b8', 'line-style': 'dashed', width: 1, 'line-opacity': 0.55 } },
+  { selector: 'edge[rel = "co_occurs_keywords"]',  style: { 'line-color': '#94a3b8', 'line-style': 'dashed', width: 1, 'line-opacity': 0.55 } },
+  { selector: 'edge[rel = "co_occurs_embedding"]', style: { 'line-color': '#94a3b8', 'line-style': 'dashed', width: 1, 'line-opacity': 0.55 } },
+  { selector: 'edge[rel = "mentions"]',            style: { 'line-color': '#94a3b8', 'line-style': 'dashed', width: 1, 'line-opacity': 0.55 } },
+
+  // Provenance — thin blue solid w/ arrow
+  { selector: 'edge[rel = "generated_by"]',  style: { 'line-color': '#3b82f6', 'line-style': 'solid', width: 1.5, 'line-opacity': 0.6, 'target-arrow-shape': 'triangle', 'target-arrow-color': '#3b82f6' } },
+  { selector: 'edge[rel = "informed_by"]',   style: { 'line-color': '#3b82f6', 'line-style': 'solid', width: 1.5, 'line-opacity': 0.6, 'target-arrow-shape': 'triangle', 'target-arrow-color': '#3b82f6' } },
+  { selector: 'edge[rel = "derived_from"]',  style: { 'line-color': '#3b82f6', 'line-style': 'solid', width: 1.5, 'line-opacity': 0.6, 'target-arrow-shape': 'triangle', 'target-arrow-color': '#3b82f6' } },
+  { selector: 'edge[rel = "attributed_to"]', style: { 'line-color': '#3b82f6', 'line-style': 'solid', width: 1.5, 'line-opacity': 0.6, 'target-arrow-shape': 'triangle', 'target-arrow-color': '#3b82f6' } },
+  { selector: 'edge[rel = "part_of"]',       style: { 'line-color': '#3b82f6', 'line-style': 'solid', width: 1.5, 'line-opacity': 0.6, 'target-arrow-shape': 'triangle', 'target-arrow-color': '#3b82f6' } },
+  { selector: 'edge[rel = "follows"]',       style: { 'line-color': '#3b82f6', 'line-style': 'solid', width: 1.5, 'line-opacity': 0.6, 'target-arrow-shape': 'triangle', 'target-arrow-color': '#3b82f6' } },
+
+  // Conceptual — medium green solid
+  { selector: 'edge[rel = "broader"]',  style: { 'line-color': '#22c55e', 'line-style': 'solid', width: 2, 'line-opacity': 0.7 } },
+  { selector: 'edge[rel = "narrower"]', style: { 'line-color': '#22c55e', 'line-style': 'solid', width: 2, 'line-opacity': 0.7 } },
+  { selector: 'edge[rel = "related"]',  style: { 'line-color': '#22c55e', 'line-style': 'solid', width: 2, 'line-opacity': 0.7 } },
+  { selector: 'edge[rel = "same_as"]',  style: { 'line-color': '#22c55e', 'line-style': 'solid', width: 2, 'line-opacity': 0.7 } },
+
+  // Argumentative — medium orange solid; `contradicts` distinct red
+  { selector: 'edge[rel = "supports"]',     style: { 'line-color': '#f97316', 'line-style': 'solid', width: 2, 'line-opacity': 0.7 } },
+  { selector: 'edge[rel = "contradicts"]',  style: { 'line-color': '#ef4444', 'line-style': 'solid', width: 2.5, 'line-opacity': 0.85 } },
+  { selector: 'edge[rel = "elaborates"]',   style: { 'line-color': '#f97316', 'line-style': 'solid', width: 2, 'line-opacity': 0.7 } },
+  { selector: 'edge[rel = "responds_to"]',  style: { 'line-color': '#f97316', 'line-style': 'solid', width: 2, 'line-opacity': 0.7 } },
+
+  // Lifecycle — medium purple
+  { selector: 'edge[rel = "supersedes"]', style: { 'line-color': '#a855f7', 'line-style': 'solid', width: 2, 'line-opacity': 0.75, 'target-arrow-shape': 'triangle', 'target-arrow-color': '#a855f7' } },
+  { selector: 'edge[rel = "closes"]',     style: { 'line-color': '#a855f7', 'line-style': 'solid', width: 2, 'line-opacity': 0.75, 'target-arrow-shape': 'triangle', 'target-arrow-color': '#a855f7' } },
+
+  // Code-domain — medium yellow
+  { selector: 'edge[rel = "touches_file"]', style: { 'line-color': '#eab308', 'line-style': 'solid', width: 1.5, 'line-opacity': 0.6 } },
+  { selector: 'edge[rel = "commits_for"]',  style: { 'line-color': '#eab308', 'line-style': 'solid', width: 2, 'line-opacity': 0.7, 'target-arrow-shape': 'triangle', 'target-arrow-color': '#eab308' } },
+  { selector: 'edge[rel = "tests"]',        style: { 'line-color': '#eab308', 'line-style': 'solid', width: 1.5, 'line-opacity': 0.6 } },
 
   // Legacy classes (still emitted by causality.ts on the timeline mini-graph)
   {

@@ -42,6 +42,14 @@ export interface MemoryRequest {
   category?: string;
   files?: string[];
   keywords?: string[];
+  /** Phase 2: optional LLM-set / caller-provided coarse buckets. */
+  tags?: string[];
+  /** Phase 4: long-form markdown body for Plan/Design/CodeReview/etc. */
+  content_long?: string;
+  /** Phase 2 lifecycle: this memory closes/resolves the named one. */
+  closes_memory_id?: string;
+  /** Phase 2 lifecycle: this memory replaces the named one. */
+  supersedes_memory_id?: string;
   project?: string;
   sessionId?: string;
 }

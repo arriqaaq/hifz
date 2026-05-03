@@ -80,8 +80,8 @@
 {#if loading}
   <LoadingSpinner />
 {:else if error}
-  <div class="card" style="border-color: var(--accent);">
-    <p style="color: var(--accent); margin: 0;">{error}</p>
+  <div class="card" style="border-color: var(--danger);">
+    <p style="color: var(--danger); margin: 0;">{error}</p>
   </div>
 {:else if filteredSessions().length === 0}
   <p class="empty">{searchQuery ? 'No sessions match your filter' : 'No sessions found'}</p>

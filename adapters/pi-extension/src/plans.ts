@@ -53,25 +53,31 @@ export function detectPlan(
 
   if (!content) return null;
 
-  const truncated = content.length > 8 * 1024 ? content.slice(0, 8 * 1024) + "…[truncated]" : content;
+  // Phase 9: route plan files through `content_long` so Phase 4's chunker
+  // splits them for retrieval. The `content` field gets a short summary
+  // (first ~300 chars) so embedded BM25/vec search still works against it.
+  const fullBody = content; // keep entire plan body as content_long
+  const summary =
+    fullBody.length > 300 ? fullBody.slice(0, 300) + "…" : fullBody;
 
-  const title = (truncated.match(TITLE_RE)?.[1] ?? path.split("/").pop() ?? "plan").trim();
-  const sections = [...truncated.matchAll(SECTION_RE)]
+  const title = (fullBody.match(TITLE_RE)?.[1] ?? path.split("/").pop() ?? "plan").trim();
+  const sections = [...fullBody.matchAll(SECTION_RE)]
     .map((m) => (m[1] ?? "").trim())
     .filter((s) => s.length > 0)
     .slice(0, 16);
   const files = [...new Set(
-    [...truncated.matchAll(FILE_REF_RE)]
+    [...fullBody.matchAll(FILE_REF_RE)]
       .map((m) => m[1])
       .filter((f): f is string => typeof f === "string"),
   )].slice(0, 32);
-  const keywords = (truncated.match(KEYWORD_RE) ?? [])
+  const keywords = (fullBody.match(KEYWORD_RE) ?? [])
     .filter((w) => w.length >= 4)
     .slice(0, 32);
 
   return {
     title,
-    content: truncated,
+    content: summary,
+    content_long: fullBody,
     category: "plan",
     files,
     keywords: [...keywords, ...sections.slice(0, 4)],

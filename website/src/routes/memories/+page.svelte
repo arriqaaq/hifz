@@ -2,6 +2,12 @@
   import { onMount } from 'svelte';
   import { searchMemories, forget } from '$lib/api';
   import type { Memory } from '$lib/types';
+  import {
+    CATEGORIES,
+    categoryColor,
+    categoryLabel,
+    isLongForm,
+  } from '$lib/ontology';
   import LoadingSpinner from '$lib/components/common/LoadingSpinner.svelte';
 
   let memories = $state<Memory[]>([]);
@@ -10,11 +16,28 @@
   let error = $state('');
   let expandedId = $state<string | null>(null);
 
+  // Phase 8.3: typed filters (category, project, time, open-only) and sorts.
+  let filterCategory = $state<string>('');
+  let filterProject = $state<string>('');
+  let filterOpenOnly = $state(false);
+  let filterSinceDays = $state<string>(''); // e.g. "30"
+  let sortBy = $state<'strength' | 'recent' | 'access'>('strength');
+  let groupByCategory = $state(false);
+
   async function doSearch() {
     loading = true;
     error = '';
     try {
-      const res = await searchMemories(query || undefined, 50);
+      const sinceIso = filterSinceDays
+        ? new Date(Date.now() - Number(filterSinceDays) * 86400_000).toISOString()
+        : undefined;
+      const res = await searchMemories(
+        query || undefined,
+        50,
+        filterProject || undefined,
+        filterCategory || undefined,
+        { since: sinceIso, open: filterOpenOnly || undefined },
+      );
       memories = res.memories;
     } catch (e) {
       error = e instanceof Error ? e.message : 'Search failed';
@@ -59,16 +82,36 @@
     expandedId = expandedId === id ? null : id;
   }
 
-  function typeColor(category: string): string {
-    switch (category) {
-      case 'pattern': return 'badge-purple';
-      case 'preference': return 'badge-cyan';
-      case 'architecture': return 'badge-blue';
-      case 'bug': return 'badge-red';
-      case 'workflow': return 'badge-yellow';
-      default: return 'badge-green';
+  // Sort and optionally group the result set in-memory.
+  let sortedMemories = $derived.by(() => {
+    const list = [...memories];
+    list.sort((a, b) => {
+      switch (sortBy) {
+        case 'recent':
+          return (b.last_accessed_at ?? '').localeCompare(a.last_accessed_at ?? '');
+        case 'access':
+          return (b.retrieval_count ?? 0) - (a.retrieval_count ?? 0);
+        case 'strength':
+        default: {
+          const sa = (a.strength ?? 1) * Math.log((a.retrieval_count ?? 0) + 2);
+          const sb = (b.strength ?? 1) * Math.log((b.retrieval_count ?? 0) + 2);
+          return sb - sa;
+        }
+      }
+    });
+    return list;
+  });
+
+  let groupedMemories = $derived.by(() => {
+    if (!groupByCategory) return null;
+    const groups = new Map<string, Memory[]>();
+    for (const m of sortedMemories) {
+      const k = m.category ?? 'note';
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k)!.push(m);
     }
-  }
+    return groups;
+  });
 </script>
 
 <div class="search-form">
@@ -76,66 +119,130 @@
     <input type="text" placeholder="Search memories..." bind:value={query} class="search-input" />
     <button type="submit" class="btn btn--accent btn--small">Search</button>
   </form>
+  <div class="filters">
+    <select bind:value={filterCategory} onchange={doSearch} title="Filter by typed category">
+      <option value="">All categories</option>
+      {#each CATEGORIES as c}
+        <option value={c}>{categoryLabel(c)}</option>
+      {/each}
+    </select>
+    <input
+      type="text"
+      placeholder="Project"
+      bind:value={filterProject}
+      onchange={doSearch}
+      class="filter-input"
+    />
+    <select bind:value={filterSinceDays} onchange={doSearch} title="Limit to recent activity">
+      <option value="">Any time</option>
+      <option value="1">Last 24h</option>
+      <option value="7">Last 7d</option>
+      <option value="30">Last 30d</option>
+      <option value="90">Last 90d</option>
+    </select>
+    <label class="check-label" title="For Bug rows: hide ones closed by a Fix">
+      <input type="checkbox" bind:checked={filterOpenOnly} onchange={doSearch} />
+      Open only
+    </label>
+    <select bind:value={sortBy} title="Sort order">
+      <option value="strength">Strength × access</option>
+      <option value="recent">Most recent</option>
+      <option value="access">Most accessed</option>
+    </select>
+    <label class="check-label">
+      <input type="checkbox" bind:checked={groupByCategory} />
+      Group by category
+    </label>
+  </div>
 </div>
 
 {#if error}
-  <div class="card" style="border-color: var(--accent);">
-    <p style="color: var(--accent); margin: 0;">{error}</p>
+  <div class="card" style="border-color: var(--danger);">
+    <p style="color: var(--danger); margin: 0;">{error}</p>
   </div>
 {/if}
 
+{#snippet memCard(mem: Memory)}
+  {@const memId = extractId(mem.id)}
+  {@const isExpanded = expandedId === memId}
+  <div class="card mem-card" class:expanded={isExpanded} class:long-form={isLongForm(mem.category)}>
+    <button class="mem-header" onclick={() => toggleExpand(memId)}>
+      <span class="badge {categoryColor(mem.category)}">{categoryLabel(mem.category)}</span>
+      {#if isLongForm(mem.category)}
+        <span class="doc-icon" title="Long-form artifact (chunked for retrieval)">📄</span>
+      {/if}
+      <span class="mem-title">{mem.title}</span>
+      <span class="mem-stats">
+        <span title="Strength">● {(mem.strength ?? 1).toFixed(2)}</span>
+        <span title="Retrieval count">👁 {mem.retrieval_count ?? 0}</span>
+      </span>
+      <a class="open-btn" href={`/memories/${encodeURIComponent(memId)}`} onclick={(e) => e.stopPropagation()} title="Open detail page">↗</a>
+      <span class="expand-icon">{isExpanded ? '−' : '+'}</span>
+    </button>
+
+    {#if !isExpanded}
+      <p class="mem-preview">
+        {mem.context_summary || mem.content?.slice(0, 120) || ''}{!mem.context_summary && (mem.content?.length ?? 0) > 120 ? '…' : ''}
+      </p>
+    {/if}
+
+    {#if isExpanded}
+      <div class="mem-content">
+        {#if mem.context_summary}
+          <blockquote class="ctx-summary">{mem.context_summary}</blockquote>
+        {/if}
+        <pre class="content-text">{mem.content}</pre>
+      </div>
+
+      {#if (mem.keywords?.length || mem.tags?.length || mem.files?.length)}
+        <div class="mem-tags">
+          {#each mem.tags || [] as t}
+            <span class="badge badge-purple" title="LLM-generated tag">#{t}</span>
+          {/each}
+          {#each mem.keywords || [] as k}
+            <span class="badge badge-yellow">{k}</span>
+          {/each}
+          {#each mem.files || [] as f}
+            <span class="badge badge-cyan" style="font-family: var(--font-mono); font-size: 9px">{f.split('/').pop()}</span>
+          {/each}
+        </div>
+      {/if}
+
+      <div class="mem-meta">
+        <span>Created: {formatDate(mem.created_at)}</span>
+        <span>Project: {mem.project}</span>
+        {#if mem.version > 1}
+          <span>Version: {mem.version}</span>
+        {/if}
+        <a class="open-btn-text" href={`/memories/${encodeURIComponent(memId)}`}>Open ↗</a>
+        <button class="del-btn" onclick={() => handleDelete(memId)} title="Delete memory">× Delete</button>
+      </div>
+    {/if}
+  </div>
+{/snippet}
+
 {#if loading}
   <LoadingSpinner />
-{:else if memories.length === 0}
-  <p class="empty">No memories found. Use hifz_save to store patterns, preferences, and knowledge.</p>
+{:else if sortedMemories.length === 0}
+  <p class="empty">No memories found. Use hifz_save to store lessons, decisions, plans, and more.</p>
 {:else}
-  <p class="result-meta">{memories.length} memories</p>
+  <p class="result-meta">{sortedMemories.length} memories</p>
   <div class="memories-list">
-    {#each memories as mem (extractId(mem.id))}
-      {@const memId = extractId(mem.id)}
-      {@const isExpanded = expandedId === memId}
-      <div class="card mem-card" class:expanded={isExpanded}>
-        <button class="mem-header" onclick={() => toggleExpand(memId)}>
-          <span class="badge {typeColor(mem.category)}">{mem.category}</span>
-          <span class="mem-title">{mem.title}</span>
-          <span class="mem-stats">
-            <span title="Strength">&#9679; {(mem.strength ?? 1).toFixed(2)}</span>
-            <span title="Retrieval count">&#128065; {mem.retrieval_count ?? 0}</span>
-          </span>
-          <span class="expand-icon">{isExpanded ? '−' : '+'}</span>
-        </button>
-        
-        {#if !isExpanded}
-          <p class="mem-preview">{mem.content?.slice(0, 120)}{(mem.content?.length ?? 0) > 120 ? '...' : ''}</p>
-        {/if}
-
-        {#if isExpanded}
-          <div class="mem-content">
-            <pre class="content-text">{mem.content}</pre>
-          </div>
-
-          {#if (mem.keywords && mem.keywords.length > 0) || (mem.files && mem.files.length > 0)}
-            <div class="mem-tags">
-              {#each mem.keywords || [] as c}
-                <span class="badge badge-yellow">{c}</span>
-              {/each}
-              {#each mem.files || [] as f}
-                <span class="badge badge-cyan" style="font-family: var(--font-mono); font-size: 9px">{f.split('/').pop()}</span>
-              {/each}
-            </div>
-          {/if}
-
-          <div class="mem-meta">
-            <span>Created: {formatDate(mem.created_at)}</span>
-            <span>Project: {mem.project}</span>
-            {#if mem.version > 1}
-              <span>Version: {mem.version}</span>
-            {/if}
-            <button class="del-btn" onclick={() => handleDelete(memId)} title="Delete memory">&times; Delete</button>
-          </div>
-        {/if}
-      </div>
-    {/each}
+    {#if groupedMemories}
+      {#each [...groupedMemories.entries()] as [cat, group]}
+        <h3 class="cat-header">
+          <span class="badge {categoryColor(cat)}">{categoryLabel(cat)}</span>
+          <span class="cat-count">{group.length}</span>
+        </h3>
+        {#each group as mem (extractId(mem.id))}
+          {@render memCard(mem)}
+        {/each}
+      {/each}
+    {:else}
+      {#each sortedMemories as mem (extractId(mem.id))}
+        {@render memCard(mem)}
+      {/each}
+    {/if}
   </div>
 {/if}
 
@@ -178,7 +285,8 @@
     border-color: var(--ink-muted);
   }
   .mem-card.expanded {
-    border-color: var(--accent);
+    border-color: var(--ink);
+    box-shadow: 4px 4px 0 var(--neon-dim);
     cursor: default;
   }
 
@@ -274,7 +382,7 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
-  .del-btn:hover { color: var(--accent); }
+  .del-btn:hover { color: var(--ink); text-decoration: underline; text-decoration-color: var(--neon); text-decoration-thickness: 2px; text-underline-offset: 2px; }
 
   .empty {
     text-align: center;
@@ -284,12 +392,76 @@
     font-size: 13px;
   }
 
-  .badge-purple {
-    background: #9B59B6;
-    color: white;
+
+  .filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-top: 8px;
+    font-family: var(--font-ui);
+    font-size: 11px;
   }
-  .badge-red {
-    background: #E74C3C;
-    color: white;
+  .filters select,
+  .filters .filter-input {
+    border: 1px solid var(--line-strong);
+    background: var(--surface);
+    padding: 6px 8px;
+    font-size: 11px;
+    font-family: inherit;
+  }
+  .check-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+  }
+
+  .doc-icon { font-size: 12px; }
+  .open-btn {
+    text-decoration: none;
+    color: var(--ink-faint);
+    font-size: 14px;
+    padding: 0 6px;
+  }
+  .open-btn:hover { color: var(--ink); text-decoration: underline; text-decoration-color: var(--neon); text-decoration-thickness: 2px; text-underline-offset: 2px; }
+  .open-btn-text {
+    margin-left: auto;
+    text-decoration: none;
+    color: var(--ink-faint);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .open-btn-text:hover { color: var(--ink); text-decoration: underline; text-decoration-color: var(--neon); text-decoration-thickness: 2px; text-underline-offset: 2px; }
+
+  .mem-card.long-form {
+    border-left: 4px solid var(--neon);
+  }
+
+  .ctx-summary {
+    margin: 0 0 8px 0;
+    padding: 8px 12px;
+    border-left: 3px solid var(--ink-muted);
+    background: var(--surface-alt);
+    color: var(--ink-muted);
+    font-size: 12px;
+    font-style: italic;
+  }
+
+  .cat-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 16px 0 4px;
+    font-size: 12px;
+    font-family: var(--font-ui);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .cat-count {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--ink-faint);
   }
 </style>

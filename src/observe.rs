@@ -181,6 +181,15 @@ pub async fn observe(
                 tracing::warn!("run::find_open lookup failed: {e}");
             }
         }
+
+        // Phase 6: bridge observations into the memory graph via shared
+        // file paths. Cheap deterministic edge — the agent's behavioral
+        // trail (which files it touched) becomes visible to memory
+        // retrieval. Skipped when the observation has no files.
+        if !compressed.files.is_empty() {
+            link_observation_files_to_memories(db, obs_id, &payload.project, &compressed.files)
+                .await;
+        }
     }
 
     // Increment session observation count
@@ -188,17 +197,190 @@ pub async fn observe(
         .bind(("sid", format!("session:{}", payload.session_id)))
         .await?;
 
-    // When adapter sends a commit_made observation, trigger grounding and causal edge
+    // When adapter sends a commit_made observation, trigger grounding and
+    // a few causal edges:
+    //   - obs --generated_by--> run  (PROV-O: this commit was produced by
+    //     the activity that is the run)
+    //   - obs --commits_for--> memory  (Phase 3.3: when the commit message
+    //     BM25-matches an open Bug/Plan/Decision, the commit closes the loop
+    //     for that memory)
     if compressed.obs_type == "commit_made" {
         let _ = ground::on_commit_observation(db, &payload.project, &compressed.files).await;
         if let Some(obs_id) = new_obs_id.as_ref() {
             if let Ok(Some(run_id)) = run::find_open(db, &payload.session_id).await {
-                let _ = link::upsert_edge(db, obs_id, &run_id, "generated_by", "system", 1.0).await;
+                let _ = link::upsert_edge(
+                    db,
+                    obs_id,
+                    &run_id,
+                    "generated_by",
+                    "system",
+                    1.0,
+                    Some("commit observation produced during this run"),
+                )
+                .await;
             }
+            let commit_msg = compressed
+                .narrative
+                .lines()
+                .next()
+                .unwrap_or(&compressed.title)
+                .to_string();
+            link_commit_to_open_memories(db, obs_id, &payload.project, &commit_msg).await;
         }
     }
 
     Ok(Some(compressed.title))
+}
+
+/// Phase 3.3: when a `commit_made` observation arrives, BM25-search open
+/// Bug/Plan/Decision memories for the commit message and write a
+/// `commits_for` edge from the observation to each match. Capped at the
+/// top-3 matches so a generic commit message ("fix bug") doesn't link to
+/// every open bug. The score is the BM25 sum (higher = better).
+async fn link_commit_to_open_memories(
+    db: &Surreal<Db>,
+    obs_id: &RecordId,
+    project: &str,
+    commit_msg: &str,
+) {
+    if commit_msg.trim().is_empty() {
+        return;
+    }
+
+    #[derive(Debug, SurrealValue)]
+    struct Hit {
+        id: Option<RecordId>,
+        title: Option<String>,
+        category: Option<String>,
+        #[surreal(rename = "_score")]
+        score: Option<f64>,
+    }
+
+    // Open Bug/Plan/Decision = is_latest && no incoming `closes` edge.
+    // Score by BM25 over title + content; require a positive score so empty
+    // matches drop out.
+    let sql = "SELECT id, title, category, \
+                      search::score(1) + search::score(2) AS _score \
+               FROM memory \
+               WHERE is_latest = true \
+                 AND category IN ['bug', 'plan', 'decision'] \
+                 AND (project = $project OR project = 'global') \
+                 AND id NOT IN (SELECT VALUE out FROM edge WHERE relation = 'closes') \
+                 AND (title @1@ $q OR content @2@ $q) \
+               ORDER BY _score DESC \
+               LIMIT 3";
+
+    let resp = db
+        .query(sql)
+        .bind(("project", project.to_string()))
+        .bind(("q", commit_msg.to_string()))
+        .await;
+    let mut resp = match resp {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::debug!("commits_for search failed: {e}");
+            return;
+        }
+    };
+    let hits: Vec<Hit> = resp.take(0).unwrap_or_default();
+
+    for h in hits {
+        let Some(mid) = h.id else { continue };
+        let title = h.title.unwrap_or_default();
+        let category = h.category.unwrap_or_default();
+        let score = h.score.unwrap_or(0.0);
+        if score <= 0.0 {
+            continue;
+        }
+        // Normalize BM25 to ~0-1 by clamping; raw BM25 has unbounded scale.
+        let normalized = (score / 4.0).clamp(0.0, 1.0);
+        let reason = format!(
+            "commit message BM25-matched open {category} \"{}\" (raw score {score:.2})",
+            title.chars().take(60).collect::<String>()
+        );
+        let _ = link::upsert_edge(
+            db,
+            obs_id,
+            &mid,
+            "commits_for",
+            "system",
+            normalized,
+            Some(&reason),
+        )
+        .await;
+    }
+}
+
+/// Phase 6: emit `obs --touches_file--> memory` edges for every file
+/// shared between the observation and an existing memory. Per-file cap
+/// of 20 memories so a hot file (e.g. `Cargo.toml`) doesn't link to
+/// every memory in the project. Score is `1.0 / matched_count` so each
+/// individual edge gets a small contribution and downstream retrieval
+/// dampening (Phase 6's 0.3 multiplier) keeps observations from flooding
+/// search results.
+async fn link_observation_files_to_memories(
+    db: &Surreal<Db>,
+    obs_id: &RecordId,
+    project: &str,
+    files: &[String],
+) {
+    if files.is_empty() {
+        return;
+    }
+
+    #[derive(Debug, SurrealValue)]
+    struct Hit {
+        id: Option<RecordId>,
+    }
+
+    // One query per file; per-file cap of 20.
+    for f in files {
+        let trimmed = f.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let resp = db
+            .query(
+                "SELECT id FROM memory \
+                 WHERE is_latest = true \
+                   AND (project = $project OR project = 'global') \
+                   AND $file IN files \
+                 LIMIT 20",
+            )
+            .bind(("project", project.to_string()))
+            .bind(("file", trimmed.to_string()))
+            .await;
+        let mut resp = match resp {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::debug!("touches_file query failed for '{trimmed}': {e}");
+                continue;
+            }
+        };
+        let hits: Vec<Hit> = resp.take(0).unwrap_or_default();
+        if hits.is_empty() {
+            continue;
+        }
+        let n = hits.len() as f64;
+        let score = (1.0 / n).clamp(0.05, 1.0);
+        for h in hits {
+            let Some(mid) = h.id else { continue };
+            let reason = format!(
+                "observation touched '{trimmed}' (1 of {} memories)",
+                n as usize
+            );
+            let _ = link::upsert_edge(
+                db,
+                obs_id,
+                &mid,
+                "touches_file",
+                "file",
+                score,
+                Some(&reason),
+            )
+            .await;
+        }
+    }
 }
 
 /// Ensure the session record exists, create if not.

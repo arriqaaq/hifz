@@ -58,8 +58,8 @@
 {#if loading}
   <LoadingSpinner />
 {:else if error}
-  <div class="card" style="border-color: var(--accent);">
-    <div class="card-title" style="color: var(--accent);">Connection Error</div>
+  <div class="card" style="border-color: var(--danger);">
+    <div class="card-title" style="color: var(--danger);">Connection Error</div>
     <p>{error}</p>
     <p style="font-size: 12px; color: var(--ink-faint); font-family: var(--font-mono);">
       Make sure the hifz server is running on port 3111
@@ -219,8 +219,9 @@
     font-family: var(--font-ui);
   }
   .welcome-tile:hover {
-    border-color: var(--accent);
-    box-shadow: var(--shadow-md);
+    border-color: var(--ink);
+    transform: translateY(-2px);
+    box-shadow: 4px 4px 0 var(--ink);
   }
   .welcome-tile h4 {
     margin: 0;
@@ -235,7 +236,11 @@
     line-height: 1.5;
   }
   .welcome-tile :global(svg) {
-    color: var(--accent);
+    color: var(--ink);
+    background: var(--neon);
+    border-radius: 6px;
+    padding: 4px;
+    box-sizing: content-box;
   }
 
   .status-grid {

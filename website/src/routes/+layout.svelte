@@ -140,7 +140,7 @@
     gap: 12px;
     padding: 0 16px;
     background: var(--bg);
-    border-bottom: 1px solid var(--line);
+    border-bottom: 1px solid var(--ink);
     position: sticky;
     top: 0;
     z-index: 5;

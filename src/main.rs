@@ -1,7 +1,9 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use surrealdb::types::SurrealValue;
 
 use hifz::Hifz;
 
@@ -52,6 +54,35 @@ enum Command {
         /// Reindex memories (hifz table): embeddings + project backfill
         #[arg(long)]
         memories: bool,
+    },
+    /// Phase 4.6: dump every memory in a project to a directory of
+    /// frontmatter-rich markdown files. The directory layout is flat:
+    /// `<out>/<id>.md`. Open the directory in Obsidian or any editor;
+    /// hand-edits round-trip via `hifz import`.
+    Export {
+        /// SurrealDB data directory
+        #[arg(long, default_value = "db_data")]
+        db_path: String,
+        /// Project name to export. Use `--all` for every project.
+        #[arg(long, conflicts_with = "all")]
+        project: Option<String>,
+        /// Export all memories regardless of project.
+        #[arg(long, conflicts_with = "project")]
+        all: bool,
+        /// Output directory. Created if missing.
+        #[arg(long)]
+        out: PathBuf,
+    },
+    /// Phase 4.6: ingest a directory of edited markdown files. Each file
+    /// must have an `id:` frontmatter field referring to a memory; the
+    /// import writes a NEW version that supersedes the old.
+    Import {
+        /// SurrealDB data directory
+        #[arg(long, default_value = "db_data")]
+        db_path: String,
+        /// Input directory. Every `*.md` file (non-recursive) is imported.
+        #[arg(long)]
+        from: PathBuf,
     },
 }
 
@@ -144,6 +175,89 @@ async fn async_main(cli: Cli) -> Result<()> {
                 "memories: embedded={}, project_backfilled={}, skipped={}",
                 report.embedded, report.project_backfilled, report.skipped
             );
+        }
+
+        Command::Export {
+            db_path,
+            project,
+            all,
+            out,
+        } => {
+            tracing::info!("hifz export — SurrealKV ({db_path}) → {}", out.display());
+            std::fs::create_dir_all(&out)?;
+            let hifz = Hifz::open_persistent(&db_path).await?;
+
+            #[derive(Debug, surrealdb::types::SurrealValue)]
+            struct IdRow {
+                id: Option<surrealdb::types::RecordId>,
+            }
+            let sql = if all {
+                "SELECT id FROM memory WHERE is_latest = true".to_string()
+            } else {
+                let p = project.clone().unwrap_or_else(|| "global".to_string());
+                format!(
+                    "SELECT id FROM memory WHERE is_latest = true AND (project = '{}' OR project = 'global')",
+                    p.replace('\'', "")
+                )
+            };
+            let mut resp = hifz.db.query(&sql).await?;
+            let rows: Vec<IdRow> = resp.take(0).unwrap_or_default();
+
+            let mut written = 0usize;
+            for r in rows {
+                let Some(rid) = r.id else { continue };
+                let id_str = format!("{rid:?}");
+                match hifz.memory_markdown_get(&id_str).await {
+                    Ok(md) => {
+                        let safe_name = id_str.replace([':', '/', '\\'], "_");
+                        let path = out.join(format!("{safe_name}.md"));
+                        std::fs::write(&path, md)?;
+                        written += 1;
+                    }
+                    Err(e) => tracing::warn!("export skipped {id_str}: {e}"),
+                }
+            }
+            println!("exported {written} memories to {}", out.display());
+        }
+
+        Command::Import { db_path, from } => {
+            tracing::info!("hifz import — SurrealKV ({db_path}) ← {}", from.display());
+            let hifz = Hifz::open_persistent(&db_path).await?;
+
+            let mut imported = 0usize;
+            let mut skipped = 0usize;
+            for entry in std::fs::read_dir(&from)? {
+                let entry = entry?;
+                let path = entry.path();
+                if path.extension().and_then(|s| s.to_str()) != Some("md") {
+                    continue;
+                }
+                let body = std::fs::read_to_string(&path)?;
+                let doc = match hifz::markdown::parse(&body) {
+                    Ok(d) => d,
+                    Err(e) => {
+                        tracing::warn!("parse skipped {}: {e}", path.display());
+                        skipped += 1;
+                        continue;
+                    }
+                };
+                let Some(id) = doc.frontmatter.id.clone() else {
+                    tracing::warn!(
+                        "skipped {}: no `id:` in frontmatter (use `hifz export` to seed)",
+                        path.display()
+                    );
+                    skipped += 1;
+                    continue;
+                };
+                match hifz.memory_markdown_put(&id, &body).await {
+                    Ok(_) => imported += 1,
+                    Err(e) => {
+                        tracing::warn!("import failed {}: {e}", path.display());
+                        skipped += 1;
+                    }
+                }
+            }
+            println!("imported {imported} memories ({skipped} skipped)");
         }
 
         Command::Status => {

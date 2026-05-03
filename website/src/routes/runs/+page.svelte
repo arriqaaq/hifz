@@ -86,8 +86,8 @@
 </div>
 
 {#if error}
-  <div class="card" style="border-color: var(--accent);">
-    <p style="color: var(--accent); margin: 0;">{error}</p>
+  <div class="card" style="border-color: var(--danger);">
+    <p style="color: var(--danger); margin: 0;">{error}</p>
   </div>
 {/if}
 
@@ -173,7 +173,11 @@
     transition: color 150ms;
   }
   .prompt-link:hover {
-    color: var(--accent);
+    color: var(--ink);
+    text-decoration: underline;
+    text-decoration-color: var(--neon);
+    text-decoration-thickness: 2px;
+    text-underline-offset: 2px;
   }
 
   .lesson-cell {
@@ -193,7 +197,7 @@
     letter-spacing: 0.08em;
     color: var(--ink-muted);
   }
-  .row-link:hover { color: var(--accent); }
+  .row-link:hover { color: var(--ink); text-decoration: underline; text-decoration-color: var(--neon); text-decoration-thickness: 2px; text-underline-offset: 2px; }
   .mono { font-family: var(--font-mono); font-size: 12px; }
   .faint { color: var(--ink-faint); }
   .empty {

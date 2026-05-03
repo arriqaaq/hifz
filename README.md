@@ -63,15 +63,43 @@ Recency decays. Access reinforces. Grounding-derived strength anchors.
 
 Edges are typed and segmented by source so retrieval can weight them differently:
 
-| Vocabulary | Edge types |
+| Group | Edge types |
 |---|---|
-| **Knowledge** | `similar_to`, `elaborates`, `contradicts`, `supports`, `depends_on`, `alternative_to`, `derived_from` |
-| **Provenance** | `generated_by`, `informed`, `motivated`, `implemented_by`, `part_of`, `follows` |
-| **Link source** | `embedding`, `concept`, `file`, `entity` (deterministic), `semantic` (LLM-proposed) |
+| **Co-occurrence** (deterministic, signal-typed) | `co_occurs_files`, `co_occurs_keywords`, `co_occurs_embedding`, `mentions` |
+| **Provenance** (PROV-O, system-set) | `generated_by`, `informed_by`, `derived_from`, `attributed_to`, `part_of`, `follows` |
+| **Conceptual** (SKOS, LLM-set) | `broader`, `narrower`, `related`, `same_as` |
+| **Argumentative** (IBIS, LLM-set) | `supports`, `contradicts`, `elaborates`, `responds_to` |
+| **Lifecycle** | `supersedes`, `closes` |
+| **Code-domain** | `touches_file`, `commits_for`, `tests` |
+| **`via` channel** | `embedding`, `keyword`, `file`, `entity`, `system`, `cluster`, `llm` |
+
+Every edge carries a `reason` field — for deterministic edges it records the channel + score (e.g. `keyword overlap 2 shared (score 1.00): jwt, auth`), for LLM-set edges it records the model's one-sentence rationale.
 
 <p align="center"><img src="docs/img/knowledge-graph.svg" alt="Example knowledge graph with typed edges" width="100%"></p>
 
 Traverse from any seed with `POST /trace` (or `hifz_trace`): forward, backward, or both, with RRF over multi-hop expansions.
+
+Full vocabulary, type-pair constraints, and category tables: [`docs/ontology.md`](docs/ontology.md).
+
+---
+
+## Modes
+
+hifz operates in one of two modes per insert. Both modes are valid; the difference is what the runtime can derive without an external service.
+
+| | Deterministic mode | LLM-augmented mode |
+|---|---|---|
+| **Trigger** | No Ollama, or `HIFZ_LLM_EVOLVE=false` (default) | Ollama reachable AND `HIFZ_LLM_EVOLVE=true` |
+| **Edges** | `co_occurs_*`, `mentions`, `generated_by`, `informed_by`, `derived_from`, `part_of`, `follows`, `touches_file`, `commits_for`, `closes` / `supersedes` (when explicit) | All deterministic edges PLUS `broader`, `narrower`, `related`, `same_as`, `supports`, `contradicts`, `elaborates`, `responds_to`, `tests` |
+| **`context_summary`** | Null | LLM-generated paragraph |
+| **`tags`** | Default `[category]` | LLM-extended |
+| **`evolution_history`** | Empty | Append-only audit of LLM neighbor rewrites |
+| **Cost** | One embedding call per insert | One embedding + one Ollama call per insert (>80 chars salience floor) |
+| **Quality bound** | Caller's keyword/file discipline + embedding model | Above + LLM judgment quality |
+
+Same code path runs both ways. A row written in one mode reads fine in the other.
+
+Configuration: see [`docs/ontology.md#configuration`](docs/ontology.md#configuration).
 
 ---
 
@@ -83,7 +111,7 @@ Traverse from any seed with `POST /trace` (or `hifz_trace`): forward, backward, 
 | **Contradiction detection** | Two memories with content Jaccard ≥ 0.9 → older is marked `is_latest = false`. |
 | **Grounding** | When the adapter posts a `commit_made` observation, memories referencing the committed files get `strength += 15%` (clamped to 1.0). |
 | **Uncommitted decay** | A session that edits files but never commits sets `forget_after = now + 60 days` on the related memories. Abandoned work fades. |
-| **Evolution** | Opt-in: after a save, an LLM examines up to five neighbors and can refine, link, or supersede. Retrieval works fully without it. |
+| **Evolution** | When `HIFZ_LLM_EVOLVE=true` and Ollama is reachable, the insert pipeline runs A-MEM-style enrichment: a single LLM call generates `context_summary` / `tags`, proposes typed conceptual / argumentative edges with reasons, and may refine up to ~10 neighbors' metadata (recorded in `evolution_history`). The deterministic path produces co-occurrence + provenance edges either way. See [`docs/ontology.md#mode-matrix`](docs/ontology.md#mode-matrix). |
 
 ---
 

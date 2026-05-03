@@ -101,11 +101,12 @@ async fn library_round_trip_event_session_observe_memory() {
         .remember(RememberReq {
             title: "Library API works".into(),
             content: "Verified by tests/library_api.rs.".into(),
-            category: Some("insight".into()),
+            category: Some("lesson".into()),
             keywords: Some(vec!["library".into(), "api".into()]),
             files: None,
             project: Some("/tmp/test".into()),
             session_id: None,
+            ..Default::default()
         })
         .await
         .expect("remember");

@@ -10,6 +10,7 @@ import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-age
 import { Client } from "./src/client.js";
 import { detectCommit } from "./src/git.js";
 import { hashEvent } from "./src/hash.js";
+import { CATEGORIES } from "./src/ontology.js";
 import { detectPlan } from "./src/plans.js";
 import { promote } from "./src/promote.js";
 import { redact } from "./src/redact.js";
@@ -204,23 +205,39 @@ export default async function (pi: ExtensionAPI): Promise<void> {
   // ----- User-facing slash commands -----
 
   pi.registerCommand("hifz-remember", {
-    description: "Save the rest of the line as a Hifz memory. Format: <title> :: <content>",
+    description:
+      "Save the rest of the line as a Hifz memory. Format: [--category=<typed>] <title> :: <content>",
     handler: async (args: string, ctx: ExtensionContext) => {
-      const [titleRaw, ...rest] = (args ?? "").split("::");
+      // Parse optional `--category=foo` / `--cat=foo` prefix.
+      let rest = (args ?? "").trim();
+      let category = "note"; // Phase 9: typed default (was "insight" — not in Category enum)
+      const catMatch = rest.match(/^--(?:category|cat)=([a-z_]+)\s+/);
+      if (catMatch?.[1]) {
+        category = catMatch[1];
+        rest = rest.slice(catMatch[0].length);
+      }
+      if (!(CATEGORIES as readonly string[]).includes(category)) {
+        if (ctx.hasUI)
+          ctx.ui.notify(
+            `Unknown category "${category}". Valid: ${CATEGORIES.join(", ")}`,
+            "error",
+          );
+        return;
+      }
+      const [titleRaw, ...contentParts] = rest.split("::");
       const title = (titleRaw ?? "").trim();
-      const content = rest.join("::").trim();
+      const content = contentParts.join("::").trim();
       if (!title || !content) {
-        if (ctx.hasUI) ctx.ui.notify("Usage: /hifz-remember <title> :: <content>", "error");
+        if (ctx.hasUI)
+          ctx.ui.notify(
+            "Usage: /hifz-remember [--category=<lesson|decision|bug|fix|note|...>] <title> :: <content>",
+            "error",
+          );
         return;
       }
       try {
-        await client.sendMemory({
-          title,
-          content,
-          category: "insight",
-          project: ctx.cwd,
-        });
-        if (ctx.hasUI) ctx.ui.notify(`Saved memory: ${title}`, "info");
+        await client.sendMemory({ title, content, category, project: ctx.cwd });
+        if (ctx.hasUI) ctx.ui.notify(`Saved ${category}: ${title}`, "info");
       } catch (err) {
         if (ctx.hasUI) ctx.ui.notify(`hifz-remember failed: ${err}`, "error");
       }

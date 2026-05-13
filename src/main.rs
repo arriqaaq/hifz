@@ -84,6 +84,40 @@ enum Command {
         #[arg(long)]
         from: PathBuf,
     },
+    /// Index a code repo into the persistent store (M2+).
+    /// Walks the root, chunks every supported file, embeds the chunks, and
+    /// extracts named symbols. Idempotent — unchanged files are skipped.
+    #[cfg(feature = "code")]
+    Index {
+        /// SurrealDB data directory
+        #[arg(long, default_value = "db_data")]
+        db_path: String,
+        /// Project name (memories scope by this).
+        #[arg(long)]
+        project: String,
+        /// Repo root (absolute path).
+        #[arg(long)]
+        root: PathBuf,
+        /// Cap individual file size in bytes (default 2 MiB).
+        #[arg(long, default_value = "2097152")]
+        max_file_bytes: u64,
+    },
+    /// Reconcile the code-index against the filesystem (M5+).
+    /// Drops chunks/symbols/edges for files no longer on disk and (optionally)
+    /// decays cold chunks.
+    #[cfg(feature = "code")]
+    CodeGc {
+        #[arg(long, default_value = "db_data")]
+        db_path: String,
+        #[arg(long)]
+        project: String,
+        #[arg(long)]
+        root: PathBuf,
+        #[arg(long)]
+        dry_run: bool,
+        #[arg(long)]
+        force_decay: bool,
+    },
 }
 
 fn main() -> Result<()> {
@@ -146,6 +180,36 @@ async fn async_main(cli: Cli) -> Result<()> {
                     "git binary not found on PATH — commit enrichment \
                      (files_changed, insertions, deletions) will be unavailable"
                 );
+            }
+
+            #[cfg(feature = "code")]
+            {
+                if std::env::var("HIFZ_CODE_WATCH").as_deref() == Ok("1") {
+                    if let Ok(roots) = std::env::var("HIFZ_CODE_WATCH_ROOTS") {
+                        for (project, root) in hifz::code::watcher::parse_watch_roots(&roots) {
+                            match hifz::code::watcher::start_watcher(
+                                hifz.clone(),
+                                project.clone(),
+                                root.clone(),
+                            ) {
+                                Ok(_handle) => {
+                                    tracing::info!(
+                                        "code watcher started: project={project} root={}",
+                                        root.display()
+                                    );
+                                    // _handle dropped at end of scope — task lives on the runtime.
+                                    std::mem::forget(_handle);
+                                }
+                                Err(e) => tracing::warn!("watcher start failed: {e}"),
+                            }
+                        }
+                    } else {
+                        tracing::warn!(
+                            "HIFZ_CODE_WATCH=1 but HIFZ_CODE_WATCH_ROOTS unset; \
+                             expected `project=path,project2=path2` form"
+                        );
+                    }
+                }
             }
 
             hifz::web::serve(hifz, port).await?;
@@ -276,6 +340,51 @@ async fn async_main(cli: Cli) -> Result<()> {
                     std::process::exit(1);
                 }
             }
+        }
+
+        #[cfg(feature = "code")]
+        Command::Index {
+            db_path,
+            project,
+            root,
+            max_file_bytes,
+        } => {
+            tracing::info!(
+                "hifz index — project={project} root={} db={db_path}",
+                root.display()
+            );
+            let hifz = Hifz::open_persistent(&db_path).await?;
+            let req = hifz::models::CodeIndexReq {
+                project,
+                root: root.to_string_lossy().to_string(),
+                follow_symlinks: Some(false),
+                max_file_bytes: Some(max_file_bytes),
+            };
+            let report = hifz.code_index(req).await?;
+            println!("{}", serde_json::to_string_pretty(&report)?);
+        }
+
+        #[cfg(feature = "code")]
+        Command::CodeGc {
+            db_path,
+            project,
+            root,
+            dry_run,
+            force_decay,
+        } => {
+            tracing::info!(
+                "hifz code-gc — project={project} root={} dry_run={dry_run} force_decay={force_decay}",
+                root.display()
+            );
+            let hifz = Hifz::open_persistent(&db_path).await?;
+            let req = hifz::models::CodeGcReq {
+                project,
+                root: root.to_string_lossy().to_string(),
+                dry_run: Some(dry_run),
+                force_decay: Some(force_decay),
+            };
+            let report = hifz.code_gc(req).await?;
+            println!("{}", serde_json::to_string_pretty(&report)?);
         }
     }
 

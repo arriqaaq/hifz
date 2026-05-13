@@ -52,6 +52,33 @@ pub async fn run_forget(db: &Surreal<Db>, dry_run: bool) -> Result<ForgetResult>
         }
     }
 
+    // 5. (M5) Orphan code-reference edges + tombstoned code_file sweep.
+    //    `code/gc.rs::reconcile_deletions` is the heavyweight pass that needs
+    //    a project root path; this lighter pass works without one.
+    #[cfg(feature = "code")]
+    if !dry_run {
+        // Drop references / references_symbol edges whose target row no
+        // longer exists (the writer should have done this, but stragglers
+        // accumulate over time).
+        let _ = db
+            .query(
+                "DELETE edge WHERE relation IN ['references','references_symbol'] \
+                 AND out NOT IN (SELECT VALUE id FROM code_chunk \
+                                 UNION SELECT VALUE id FROM code_symbol \
+                                 UNION SELECT VALUE id FROM code_file)",
+            )
+            .await;
+
+        // Sweep tombstoned code_file rows older than 30 days.
+        let cutoff = (chrono::Utc::now() - chrono::Duration::days(30)).to_rfc3339();
+        let _ = db
+            .query(
+                "DELETE code_file WHERE deleted_at IS NOT NONE AND deleted_at < $cutoff",
+            )
+            .bind(("cutoff", cutoff))
+            .await;
+    }
+
     Ok(result)
 }
 

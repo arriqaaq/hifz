@@ -470,6 +470,72 @@ pub struct ContextReq {
     pub query: Option<String>,
 }
 
+// --- Code-indexing DTOs (M2+) ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodeIndexReq {
+    pub project: String,
+    pub root: String,
+    #[serde(default)]
+    pub follow_symlinks: Option<bool>,
+    #[serde(default)]
+    pub max_file_bytes: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodeSearchReq {
+    pub query: String,
+    #[serde(default)]
+    pub project: Option<String>,
+    #[serde(default)]
+    pub language: Option<String>,
+    /// Substring match against `code_chunk.path`. Glob-style wildcards are
+    /// not supported in v1 — use plain substring.
+    #[serde(default)]
+    pub path: Option<String>,
+    #[serde(default)]
+    pub limit: Option<usize>,
+    #[serde(default)]
+    pub group_by_file: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodeLinkReq {
+    pub memory_id: String,
+    #[serde(default)]
+    pub project: Option<String>,
+    pub file: String,
+    pub start_line: usize,
+    #[serde(default)]
+    pub end_line: Option<usize>,
+    #[serde(default)]
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodeLinkSymReq {
+    pub memory_id: String,
+    #[serde(default)]
+    pub project: Option<String>,
+    pub name: String,
+    #[serde(default)]
+    pub kind: Option<String>,
+    #[serde(default)]
+    pub file: Option<String>,
+    #[serde(default)]
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodeGcReq {
+    pub project: String,
+    pub root: String,
+    #[serde(default)]
+    pub dry_run: Option<bool>,
+    #[serde(default)]
+    pub force_decay: Option<bool>,
+}
+
 // --- Hook payload from agent harness ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -622,6 +688,14 @@ pub enum EdgeRelation {
     CommitsFor,
     /// A memory describes tests for code another memory describes.
     Tests,
+    /// A memory references a precise location (line range) in source code,
+    /// stored as a `code_chunk` row. Edge `metadata` records the original
+    /// `(ref_path, ref_start, ref_end)` so re-anchoring on file change can
+    /// remap the edge to a new chunk that overlaps the same line range.
+    References,
+    /// A memory references a named symbol (function/struct/class/...), stored
+    /// as a `code_symbol` row. Survives chunk re-splitting and reformatting.
+    ReferencesSymbol,
 
     /// Catch-all for forward/backward compat. Validation accepts.
     #[serde(other)]
@@ -654,6 +728,8 @@ impl EdgeRelation {
             Self::TouchesFile => "touches_file",
             Self::CommitsFor => "commits_for",
             Self::Tests => "tests",
+            Self::References => "references",
+            Self::ReferencesSymbol => "references_symbol",
             Self::Other => "other",
         }
     }
@@ -684,6 +760,8 @@ impl EdgeRelation {
             "touches_file" => Self::TouchesFile,
             "commits_for" => Self::CommitsFor,
             "tests" => Self::Tests,
+            "references" => Self::References,
+            "references_symbol" => Self::ReferencesSymbol,
             _ => Self::Other,
         }
     }
@@ -825,6 +903,14 @@ pub enum RecordKind {
     Entity,
     SemanticMemory,
     ProceduralMemory,
+    /// Long-form artifact chunk (parent of a `Memory` row).
+    MemoryChunk,
+    /// Indexed source file (root of the code dimension).
+    CodeFile,
+    /// One chunk of a `CodeFile`.
+    CodeChunk,
+    /// Named symbol (function/struct/etc) extracted from a `CodeFile`.
+    CodeSymbol,
     Other,
 }
 
@@ -839,6 +925,10 @@ impl RecordKind {
             "entity" => Self::Entity,
             "semantic_memory" => Self::SemanticMemory,
             "procedural_memory" => Self::ProceduralMemory,
+            "memory_chunk" => Self::MemoryChunk,
+            "code_file" => Self::CodeFile,
+            "code_chunk" => Self::CodeChunk,
+            "code_symbol" => Self::CodeSymbol,
             _ => Self::Other,
         }
     }

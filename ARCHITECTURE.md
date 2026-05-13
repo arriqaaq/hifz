@@ -309,8 +309,80 @@ The MCP proxy (`hifz mcp`) exposes a curated subset of the REST API as MCP tools
 | | `hifz_export` | `GET /export` |
 | **Graph** | `hifz_trace` | `POST /trace` |
 | **Provenance** | `hifz_commits` | `GET /commits` |
+| **Code** *(opt-in `code` feature)* | `hifz_code_index` | `POST /code/index` |
+| | `hifz_code_search` | `POST /code/search` |
+| | `hifz_link_code` | `POST /code/link` |
+| | `hifz_link_symbol` | `POST /code/link/symbol` |
+| | `hifz_code_gc` | `POST /code/gc` |
 
 The proxy is intentionally thin: schema validation, JSON ↔ MCP conversion, and HTTP forwarding only. All real logic stays in the server, so REST clients and MCP clients see the same behavior.
+
+---
+
+## Code dimension
+
+Memory is one half of the story. The other is **code itself, indexed and addressable**, so a memory can reference a precise location and the location is a first-class searchable row.
+
+`src/code/` is a native-Rust port of [cocoindex-code](https://github.com/cocoindex-io/cocoindex-code)'s chunk + index pipeline. It's gated behind the default-on `code` Cargo feature; `cargo build --no-default-features` produces a slim hifz binary without the tree-sitter grammars (~5–10 MB savings).
+
+### Tables
+
+| Table | Purpose |
+|-------|---------|
+| `code_file` | One row per indexed file. `(project, path)` UNIQUE; carries `mtime_ns` + `content_hash` for idempotent re-indexing and a 30-day `deleted_at` tombstone for audit |
+| `code_chunk` | One row per chunk. Vector + BM25 indexed (separate `code_analyzer` — no Snowball, identifiers like `getUserId` survive). Each chunk also lists its defined `symbols[]` |
+| `code_symbol` | One row per named function/struct/enum/trait/method/etc, extracted via tree-sitter Query. Embedded for symbol-level search; tied to its `primary_chunk` |
+
+### New edges
+
+| Edge | Domain | Purpose |
+|------|--------|---------|
+| `references` | Memory → CodeChunk \| CodeFile | Memory points at a precise line range |
+| `references_symbol` | Memory → CodeSymbol | Memory points at a named symbol (survives chunk re-splitting) |
+| `part_of` *(extended)* | CodeChunk → CodeFile, CodeSymbol → CodeFile | Structural containment |
+
+### Pipeline
+
+```
+hifz_code_index(project, root)
+  → walker (gitignore-honest, 2 MiB cap, NUL-byte binary heuristic)
+  → for each path: stat (mtime, sha256) → skip if unchanged
+       → splitter (text-splitter::CodeSplitter for known langs;
+                   fallback to chunk::split for the rest)
+       → tree-sitter Query → symbol manifest
+       → embedder.embed_batch (existing fastembed AllMiniLM, 384 dims)
+       → snapshot inbound `references` edges (re-anchor metadata)
+       → DELETE old chunks/symbols → CREATE new ones
+       → re-anchor archived edges to whichever new chunk overlaps
+         the original (ref_path, ref_start, ref_end)
+```
+
+### Re-anchoring across edits
+
+Edge `metadata` records the original `(ref_path, ref_start, ref_end, anchor_version)`. When a file is re-indexed, `re_anchor_references` re-resolves that line range against the new chunks and rewrites the edge's `out` endpoint. If the lines vanished entirely, the edge is dropped with `dropped_reason='lines_deleted'`. Symbol edges get the same treatment keyed on `matched_symbol`. This is the load-bearing piece that makes "memory points at a precise point in code" durable across edits.
+
+### Auto-extraction (conservative)
+
+`enrich::save_enriched` calls `code::link::auto_link_memory` after `apply_llm_links`. Three regexes:
+
+- `FILE_LINE_RE` — `path/to/file.ext:NN[-MM]` → chunk-level edges
+- `FILE_PERMALINK_RE` — GitHub `…/blob/<sha>/…#L42-L58` → chunk-level
+- `QUALIFIED_SYMBOL_RE` — `module::name` or `Type::method` → symbol-level
+
+By design (G9 in the implementation plan), bareword identifiers DO NOT auto-link. False-positive symbol links would degrade graph quality faster than missed links degrade recall.
+
+### GC + decay
+
+`hifz_code_gc { project, root }` runs two passes:
+
+1. **Reconcile deletions** — diff disk state against `code_file` rows. Files missing from disk get inbound code edges dropped (with audit metadata), chunks/symbols deleted, and a 30-day tombstone set. Tombstones are swept by `forget::run_forget`.
+2. **Cold decay** *(opt-in `force_decay=true`)* — chunks with no inbound refs AND `last_committed_at < now - 60d` AND `created_at < now - 30d` lose 5 % strength per pass. Strength < 0.1 → delete.
+
+`ground::on_commit_observation` extension bumps `code_chunk.strength` by 10 % and updates `last_committed_at` for chunks whose path matches a committed file.
+
+### Optional file watcher
+
+`HIFZ_CODE_WATCH=1 HIFZ_CODE_WATCH_ROOTS=hifz=/path/to/hifz,docs=/path/to/docs` starts a debounced (500 ms) `notify` watcher per pair, coalescing bursts to one re-index per file.
 
 ---
 

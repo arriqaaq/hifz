@@ -343,6 +343,22 @@ pub async fn save_enriched(
     // LLM-proposed typed edges (synchronous — they're the immediate value).
     apply_llm_links(db, &new_id, &llm_output.links, &neighbors).await;
 
+    // ---- Step 6.5: code cross-linking (M3+) ------------------------------
+    // Auto-extract `path:line[-line]` and qualified-symbol patterns from the
+    // memory text and create `references` / `references_symbol` edges to
+    // already-indexed code chunks/symbols. Failure is logged + swallowed so
+    // a code-link bug never blocks memory persistence.
+    #[cfg(feature = "code")]
+    {
+        let long_text = content_long.as_deref().unwrap_or("");
+        let texts: [&str; 3] = [title, content, long_text];
+        if let Err(e) =
+            crate::code::link::auto_link_memory(db, &new_id, project, &texts).await
+        {
+            tracing::warn!("code auto-link failed for {new_id:?}: {e}");
+        }
+    }
+
     // ---- Step 7: provenance edges ----------------------------------------
     if let Some(sid) = session_id {
         if let Ok(Some(run_id)) = crate::run::find_open(db, sid).await {

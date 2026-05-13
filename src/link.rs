@@ -251,6 +251,13 @@ pub fn is_allowed_relation(rel: EdgeRelation, from: RecordKind, to: RecordKind) 
             (from == K::Run && to == K::Session)
                 || (from == K::Memory && to == K::Memory)
                 || (from == K::Observation && to == K::Run)
+                // Code dimension structural containment.
+                || (from == K::CodeChunk && to == K::CodeFile)
+                || (from == K::CodeSymbol && to == K::CodeFile)
+                // Resolves the existing TODO at chunk.rs:239 — make MemoryChunk
+                // → Memory containment a first-class allowed edge instead of
+                // relying on the `Other`-passthrough.
+                || (from == K::MemoryChunk && to == K::Memory)
         }
         R::Follows => from == K::Run && to == K::Run,
 
@@ -269,6 +276,12 @@ pub fn is_allowed_relation(rel: EdgeRelation, from: RecordKind, to: RecordKind) 
         R::TouchesFile => from == K::Observation && to == K::Memory,
         R::CommitsFor => from == K::Observation && to == K::Memory,
         R::Tests => from == K::Memory && to == K::Memory,
+
+        // Memory points at a precise location/symbol in code.
+        R::References => {
+            from == K::Memory && (to == K::CodeChunk || to == K::CodeFile)
+        }
+        R::ReferencesSymbol => from == K::Memory && to == K::CodeSymbol,
 
         R::Other => true,
     }

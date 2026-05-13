@@ -68,6 +68,17 @@ pub async fn serve(state: Hifz, port: u16) -> Result<()> {
         .route("/forget-gc", axum::routing::post(api::forget_gc))
         .route("/export", axum::routing::get(api::export));
 
+    #[cfg(feature = "code")]
+    let core_api = core_api
+        .route("/code/index", axum::routing::post(api::code_index))
+        .route("/code/search", axum::routing::post(api::code_search))
+        .route("/code/link", axum::routing::post(api::code_link))
+        .route(
+            "/code/link/symbol",
+            axum::routing::post(api::code_link_symbol),
+        )
+        .route("/code/gc", axum::routing::post(api::code_gc));
+
     // --- Agent Pipeline API (sessions, observations, runs, git, plans) ---
     let agent_api = Router::new()
         .route(

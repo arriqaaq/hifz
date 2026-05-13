@@ -8,6 +8,8 @@ use surrealdb::Surreal;
 use surrealdb::types::SurrealValue;
 
 pub mod chunk;
+#[cfg(feature = "code")]
+pub mod code;
 pub mod commits;
 pub mod compress;
 pub mod config;
@@ -687,6 +689,133 @@ impl Hifz {
                 .await?;
         let count = results.len();
         Ok(serde_json::json!({"results": results, "count": count}))
+    }
+
+    // --- Code dimension (M2+) ---
+
+    #[cfg(feature = "code")]
+    pub async fn code_index(
+        &self,
+        req: crate::models::CodeIndexReq,
+    ) -> Result<serde_json::Value> {
+        let opts = crate::code::index::IndexOpts {
+            follow_symlinks: req.follow_symlinks.unwrap_or(false),
+            max_file_bytes: req.max_file_bytes.unwrap_or(2 * 1024 * 1024),
+            ..Default::default()
+        };
+        let report = crate::code::index::index_repo(
+            &self.db,
+            &self.embedder,
+            &req.project,
+            std::path::Path::new(&req.root),
+            &opts,
+        )
+        .await?;
+        Ok(serde_json::to_value(&report)?)
+    }
+
+    #[cfg(feature = "code")]
+    pub async fn code_search(
+        &self,
+        req: crate::models::CodeSearchReq,
+    ) -> Result<serde_json::Value> {
+        let opts = crate::code::search::CodeSearchOpts {
+            limit: req.limit.unwrap_or(10),
+            project: req.project,
+            language: req.language,
+            path: req.path,
+            group_by_file: req.group_by_file.unwrap_or(false),
+        };
+        let results =
+            crate::code::search::search_code(&self.db, &self.embedder, &req.query, &opts).await?;
+        let count = results.len();
+        Ok(serde_json::json!({ "results": results, "count": count }))
+    }
+
+    #[cfg(feature = "code")]
+    pub async fn code_link(
+        &self,
+        req: crate::models::CodeLinkReq,
+    ) -> Result<serde_json::Value> {
+        let mid = if req.memory_id.starts_with("memory:") {
+            req.memory_id.clone()
+        } else {
+            format!("memory:{}", req.memory_id)
+        };
+        let memory_id = surrealdb::types::RecordId::new(
+            "memory".to_string(),
+            mid.trim_start_matches("memory:").to_string(),
+        );
+        let project = req.project.as_deref().unwrap_or("global");
+        let linked = crate::code::link::link_memory_to_lines(
+            &self.db,
+            &memory_id,
+            project,
+            &req.file,
+            req.start_line,
+            req.end_line,
+            req.reason.as_deref(),
+        )
+        .await?;
+        Ok(serde_json::json!({
+            "memory_id": mid,
+            "linked_chunks": linked
+                .iter()
+                .map(|r| format!("{r:?}"))
+                .collect::<Vec<_>>(),
+            "via": "reference",
+        }))
+    }
+
+    #[cfg(feature = "code")]
+    pub async fn code_link_symbol(
+        &self,
+        req: crate::models::CodeLinkSymReq,
+    ) -> Result<serde_json::Value> {
+        let mid = if req.memory_id.starts_with("memory:") {
+            req.memory_id.clone()
+        } else {
+            format!("memory:{}", req.memory_id)
+        };
+        let memory_id = surrealdb::types::RecordId::new(
+            "memory".to_string(),
+            mid.trim_start_matches("memory:").to_string(),
+        );
+        let project = req.project.as_deref().unwrap_or("global");
+        let linked = crate::code::link::link_memory_to_symbol(
+            &self.db,
+            &memory_id,
+            project,
+            &req.name,
+            req.kind.as_deref(),
+            req.file.as_deref(),
+            req.reason.as_deref(),
+        )
+        .await?;
+        Ok(serde_json::json!({
+            "memory_id": mid,
+            "linked_symbols": linked
+                .iter()
+                .map(|r| format!("{r:?}"))
+                .collect::<Vec<_>>(),
+            "via": "reference",
+        }))
+    }
+
+    #[cfg(feature = "code")]
+    pub async fn code_gc(
+        &self,
+        req: crate::models::CodeGcReq,
+    ) -> Result<serde_json::Value> {
+        let report = crate::code::gc::run_gc(
+            &self.db,
+            &req.project,
+            std::path::Path::new(&req.root),
+            req.dry_run.unwrap_or(false),
+            req.force_decay.unwrap_or(false),
+        )
+        .await?;
+        Ok(serde_json::to_value(&report)?)
     }
     pub async fn context(&self, req: crate::models::ContextReq) -> Result<String> {
         let token_budget = req.token_budget.unwrap_or(self.token_budget);

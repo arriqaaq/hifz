@@ -21,10 +21,23 @@ pub async fn connect_mem() -> Result<Surreal<Db>> {
 /// Initialize the database schema.
 pub async fn init_schema(db: &Surreal<Db>, embed_dim: usize) -> Result<()> {
     let schema = SCHEMA.replace("DIMENSION 384", &format!("DIMENSION {embed_dim}"));
-    for (i, stmt) in schema
+    // Strip line-comments (`-- ...`) before splitting by `;`. The trailing
+    // inline-comment idiom (`DEFINE FIELD foo ON x TYPE string; -- denorm`)
+    // would otherwise cause split-by-`;` to produce a chunk that *starts*
+    // with `--`, and the empty-string filter below would silently drop the
+    // following statement.
+    let stripped: String = schema
+        .lines()
+        .map(|line| match line.find("--") {
+            Some(idx) => &line[..idx],
+            None => line,
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    for (i, stmt) in stripped
         .split(';')
         .map(|s| s.trim())
-        .filter(|s| !s.is_empty() && !s.starts_with("--"))
+        .filter(|s| !s.is_empty())
         .enumerate()
     {
         let sql = format!("{stmt};");
@@ -244,5 +257,92 @@ DEFINE INDEX IF NOT EXISTS event_session     ON TABLE event FIELDS session_id;
 DEFINE INDEX IF NOT EXISTS event_run         ON TABLE event FIELDS run_id;
 DEFINE INDEX IF NOT EXISTS event_hash        ON TABLE event FIELDS payload_hash UNIQUE;
 DEFINE INDEX IF NOT EXISTS event_session_seq ON TABLE event FIELDS source, session_id, sequence;
+
+-- === CODE INDEX TABLES (M1+) ===
+-- Native-Rust port of cocoindex-code's chunk + index pipeline. Files are walked
+-- (gitignore-honest), chunked language-aware via tree-sitter, embedded, and
+-- searched via HNSW + BM25. Memories cross-link to chunks via the `references`
+-- edge and to named symbols via `references_symbol`.
+--
+-- Re-indexing is idempotent: `code_file.mtime_ns` + `content_hash` short-circuit
+-- unchanged files. When a file changes, `re_anchor_references` rewrites edges
+-- from old chunks to new chunks that overlap the same line range — making the
+-- "memory references a precise point in code" graph durable across edits.
+
+DEFINE TABLE IF NOT EXISTS code_file SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS project            ON code_file TYPE string;
+DEFINE FIELD IF NOT EXISTS path               ON code_file TYPE string;            -- repo-relative POSIX
+DEFINE FIELD IF NOT EXISTS abs_path           ON code_file TYPE string;
+DEFINE FIELD IF NOT EXISTS language           ON code_file TYPE string;
+DEFINE FIELD IF NOT EXISTS size_bytes         ON code_file TYPE int;
+DEFINE FIELD IF NOT EXISTS mtime_ns           ON code_file TYPE int;
+DEFINE FIELD IF NOT EXISTS content_hash       ON code_file TYPE string;            -- sha256 hex
+DEFINE FIELD IF NOT EXISTS chunk_count        ON code_file TYPE int DEFAULT 0;
+DEFINE FIELD IF NOT EXISTS last_referenced_at ON code_file TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS last_committed_at  ON code_file TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS deleted_at         ON code_file TYPE option<string>;    -- tombstone, swept after 30d
+DEFINE FIELD IF NOT EXISTS indexed_at         ON code_file TYPE string;
+DEFINE INDEX IF NOT EXISTS code_file_unique ON TABLE code_file FIELDS project, path UNIQUE;
+DEFINE INDEX IF NOT EXISTS code_file_lang   ON TABLE code_file FIELDS language;
+
+DEFINE TABLE IF NOT EXISTS code_chunk SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS file               ON code_chunk TYPE record<code_file>;
+DEFINE FIELD IF NOT EXISTS project            ON code_chunk TYPE string;
+DEFINE FIELD IF NOT EXISTS path               ON code_chunk TYPE string;            -- denorm for filtering
+DEFINE FIELD IF NOT EXISTS language           ON code_chunk TYPE string;
+DEFINE FIELD IF NOT EXISTS chunk_index        ON code_chunk TYPE int;
+DEFINE FIELD IF NOT EXISTS content            ON code_chunk TYPE string;
+DEFINE FIELD IF NOT EXISTS start_line         ON code_chunk TYPE int;                -- 1-indexed inclusive
+DEFINE FIELD IF NOT EXISTS end_line           ON code_chunk TYPE int;                -- 1-indexed inclusive
+DEFINE FIELD IF NOT EXISTS start_byte         ON code_chunk TYPE int;
+DEFINE FIELD IF NOT EXISTS end_byte           ON code_chunk TYPE int;
+DEFINE FIELD IF NOT EXISTS content_hash       ON code_chunk TYPE string;
+DEFINE FIELD IF NOT EXISTS embedding          ON code_chunk TYPE option<array<float>>;
+DEFINE FIELD IF NOT EXISTS symbols            ON code_chunk TYPE array<string> DEFAULT [];  -- qualified names defined here
+DEFINE FIELD IF NOT EXISTS strength           ON code_chunk TYPE float DEFAULT 1.0;
+DEFINE FIELD IF NOT EXISTS last_referenced_at ON code_chunk TYPE string DEFAULT time::now();
+DEFINE FIELD IF NOT EXISTS created_at         ON code_chunk TYPE string;
+DEFINE INDEX IF NOT EXISTS code_chunk_file    ON TABLE code_chunk FIELDS file;
+DEFINE INDEX IF NOT EXISTS code_chunk_project ON TABLE code_chunk FIELDS project;
+DEFINE INDEX IF NOT EXISTS code_chunk_path    ON TABLE code_chunk FIELDS path;
+DEFINE INDEX IF NOT EXISTS code_chunk_lang    ON TABLE code_chunk FIELDS language;
+DEFINE INDEX IF NOT EXISTS code_chunk_lines   ON TABLE code_chunk FIELDS path, start_line;
+
+-- Code analyzer: NO snowball stemming — identifiers like getUserId must not be
+-- reduced to "getuserid". Memory text continues to use obs_analyzer.
+DEFINE ANALYZER IF NOT EXISTS code_analyzer TOKENIZERS blank, class FILTERS lowercase;
+DEFINE INDEX IF NOT EXISTS code_chunk_content_ft ON TABLE code_chunk
+  FIELDS content FULLTEXT ANALYZER code_analyzer BM25 CONCURRENTLY;
+DEFINE INDEX IF NOT EXISTS code_chunk_vec ON TABLE code_chunk
+  FIELDS embedding HNSW DIMENSION 384 DIST COSINE;
+
+-- Symbol-level cross-linking: a memory like "the parse_chunk function" survives
+-- chunk re-splitting and reformatting because it points at the named symbol,
+-- not a line range. Auto-linked from prose only for qualified patterns
+-- (module::name) — bareword identifiers don't auto-link by design.
+DEFINE TABLE IF NOT EXISTS code_symbol SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS project            ON code_symbol TYPE string;
+DEFINE FIELD IF NOT EXISTS name               ON code_symbol TYPE string;
+DEFINE FIELD IF NOT EXISTS qualified          ON code_symbol TYPE string;            -- "chunk::parse_chunk"
+DEFINE FIELD IF NOT EXISTS kind               ON code_symbol TYPE string;            -- function|struct|enum|trait|method|const|module|class|interface
+DEFINE FIELD IF NOT EXISTS language           ON code_symbol TYPE string;
+DEFINE FIELD IF NOT EXISTS file               ON code_symbol TYPE record<code_file>;
+DEFINE FIELD IF NOT EXISTS path               ON code_symbol TYPE string;            -- denorm
+DEFINE FIELD IF NOT EXISTS primary_chunk      ON code_symbol TYPE option<record<code_chunk>>;
+DEFINE FIELD IF NOT EXISTS start_line         ON code_symbol TYPE int;
+DEFINE FIELD IF NOT EXISTS end_line           ON code_symbol TYPE int;
+DEFINE FIELD IF NOT EXISTS signature          ON code_symbol TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS doc                ON code_symbol TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS embedding          ON code_symbol TYPE option<array<float>>;
+DEFINE FIELD IF NOT EXISTS last_referenced_at ON code_symbol TYPE string DEFAULT time::now();
+DEFINE FIELD IF NOT EXISTS created_at         ON code_symbol TYPE string;
+-- Not UNIQUE: re-indexing wipes all symbols for a file before re-creating them,
+-- so duplicates are prevented by the indexer, not the DB. Two free functions
+-- with the same name in different `mod` blocks are legitimate.
+DEFINE INDEX IF NOT EXISTS code_symbol_lookup ON TABLE code_symbol FIELDS project, qualified, file;
+DEFINE INDEX IF NOT EXISTS code_symbol_name   ON TABLE code_symbol FIELDS project, name;
+DEFINE INDEX IF NOT EXISTS code_symbol_kind   ON TABLE code_symbol FIELDS project, kind;
+DEFINE INDEX IF NOT EXISTS code_symbol_vec    ON TABLE code_symbol
+  FIELDS embedding HNSW DIMENSION 384 DIST COSINE;
 
 "#;

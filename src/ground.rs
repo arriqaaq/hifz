@@ -54,6 +54,34 @@ pub async fn on_commit_observation(
         tracing::info!("ground::on_commit_observation: strengthened {strengthened} memories");
     }
 
+    // Code dimension (M5+, G8): bump strength + last_committed_at for chunks
+    // whose `path` matches the committed file set. This keeps cold-decay GC
+    // from sweeping chunks that just got real-world reinforcement.
+    #[cfg(feature = "code")]
+    {
+        let now = chrono::Utc::now().to_rfc3339();
+        let _ = db
+            .query(
+                "UPDATE code_chunk SET \
+                   strength = math::min(strength * 1.10, 1.0), \
+                   last_committed_at = $now \
+                 WHERE project = $project AND path IN $files",
+            )
+            .bind(("project", project.to_string()))
+            .bind(("files", files_changed.to_vec()))
+            .bind(("now", now.clone()))
+            .await;
+        let _ = db
+            .query(
+                "UPDATE code_file SET last_committed_at = $now \
+                 WHERE project = $project AND path IN $files",
+            )
+            .bind(("project", project.to_string()))
+            .bind(("files", files_changed.to_vec()))
+            .bind(("now", now))
+            .await;
+    }
+
     Ok(strengthened)
 }
 

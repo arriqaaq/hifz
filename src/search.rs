@@ -240,6 +240,10 @@ async fn expand_from_graph(db: &Surreal<Db>, results: &mut Vec<SearchResult>, li
             "elaborates".into(),
             "broader".into(),
             "narrower".into(),
+            // Code dimension: surface chunks/symbols that the seed memory
+            // explicitly references during 1-hop expansion.
+            "references".into(),
+            "references_symbol".into(),
         ]),
         dampening: 0.5,
         direction: link::Direction::Outgoing,

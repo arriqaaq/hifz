@@ -70,20 +70,23 @@ DEFINE INDEX IF NOT EXISTS session_project   ON TABLE session FIELDS project;
 DEFINE INDEX IF NOT EXISTS session_status    ON TABLE session FIELDS status;
 
 DEFINE TABLE IF NOT EXISTS observation SCHEMAFULL;
-DEFINE FIELD IF NOT EXISTS session_id   ON observation TYPE record<session>;
-DEFINE FIELD IF NOT EXISTS timestamp    ON observation TYPE string;
-DEFINE FIELD IF NOT EXISTS obs_type     ON observation TYPE string;
-DEFINE FIELD IF NOT EXISTS title        ON observation TYPE string;
-DEFINE FIELD IF NOT EXISTS subtitle     ON observation TYPE option<string>;
-DEFINE FIELD IF NOT EXISTS facts        ON observation TYPE array<string>;
-DEFINE FIELD IF NOT EXISTS facts_text   ON observation TYPE option<string>;
-DEFINE FIELD IF NOT EXISTS narrative    ON observation TYPE string;
-DEFINE FIELD IF NOT EXISTS keywords     ON observation TYPE array<string>;
-DEFINE FIELD IF NOT EXISTS files        ON observation TYPE array<string>;
-DEFINE FIELD IF NOT EXISTS importance   ON observation TYPE int;
-DEFINE FIELD IF NOT EXISTS confidence   ON observation TYPE option<float>;
-DEFINE FIELD IF NOT EXISTS embedding    ON observation TYPE option<array<float>>;
-DEFINE FIELD IF NOT EXISTS metadata     ON observation TYPE option<object>;
+DEFINE FIELD IF NOT EXISTS session_id    ON observation TYPE record<session>;
+DEFINE FIELD IF NOT EXISTS ord           ON observation TYPE int;
+DEFINE FIELD IF NOT EXISTS parent_obs_id ON observation TYPE option<record<observation>>;
+DEFINE FIELD IF NOT EXISTS source        ON observation TYPE string DEFAULT 'hook';
+DEFINE FIELD IF NOT EXISTS timestamp     ON observation TYPE string;
+DEFINE FIELD IF NOT EXISTS obs_type      ON observation TYPE string;
+DEFINE FIELD IF NOT EXISTS title         ON observation TYPE string;
+DEFINE FIELD IF NOT EXISTS subtitle      ON observation TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS facts         ON observation TYPE array<string>;
+DEFINE FIELD IF NOT EXISTS facts_text    ON observation TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS narrative     ON observation TYPE string;
+DEFINE FIELD IF NOT EXISTS keywords      ON observation TYPE array<string>;
+DEFINE FIELD IF NOT EXISTS files         ON observation TYPE array<string>;
+DEFINE FIELD IF NOT EXISTS importance    ON observation TYPE int;
+DEFINE FIELD IF NOT EXISTS confidence    ON observation TYPE option<float>;
+DEFINE FIELD IF NOT EXISTS embedding     ON observation TYPE option<array<float>>;
+DEFINE FIELD IF NOT EXISTS metadata      ON observation TYPE option<object>;
 
 DEFINE ANALYZER IF NOT EXISTS obs_analyzer TOKENIZERS blank, class
   FILTERS lowercase, snowball(english);
@@ -97,6 +100,9 @@ DEFINE INDEX IF NOT EXISTS obs_vec          ON TABLE observation
   FIELDS embedding HNSW DIMENSION 384 DIST COSINE;
 DEFINE INDEX IF NOT EXISTS obs_session      ON TABLE observation FIELDS session_id;
 DEFINE INDEX IF NOT EXISTS obs_type         ON TABLE observation FIELDS obs_type;
+DEFINE INDEX IF NOT EXISTS obs_session_ord  ON TABLE observation FIELDS session_id, ord UNIQUE;
+DEFINE INDEX IF NOT EXISTS obs_parent       ON TABLE observation FIELDS parent_obs_id;
+DEFINE INDEX IF NOT EXISTS obs_source       ON TABLE observation FIELDS source;
 
 DEFINE TABLE IF NOT EXISTS memory SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS project          ON memory TYPE string DEFAULT 'global';
@@ -155,18 +161,6 @@ DEFINE INDEX IF NOT EXISTS chunk_content_ft ON TABLE memory_chunk
 DEFINE INDEX IF NOT EXISTS chunk_vec      ON TABLE memory_chunk
   FIELDS embedding HNSW DIMENSION 384 DIST COSINE;
 
--- === CONSOLIDATION TIERS ===
-
-DEFINE TABLE IF NOT EXISTS semantic_memory SCHEMAFULL;
-DEFINE FIELD IF NOT EXISTS fact              ON semantic_memory TYPE string;
-DEFINE FIELD IF NOT EXISTS confidence        ON semantic_memory TYPE float;
-DEFINE FIELD IF NOT EXISTS source_sessions   ON semantic_memory TYPE array<record<session>>;
-DEFINE FIELD IF NOT EXISTS retrieval_count   ON semantic_memory TYPE int DEFAULT 0;
-DEFINE FIELD IF NOT EXISTS strength          ON semantic_memory TYPE float DEFAULT 1.0;
-DEFINE FIELD IF NOT EXISTS last_accessed_at  ON semantic_memory TYPE string;
-DEFINE FIELD IF NOT EXISTS created_at        ON semantic_memory TYPE string;
-DEFINE FIELD IF NOT EXISTS updated_at        ON semantic_memory TYPE string;
-
 -- === CORE MEMORY (MemGPT-style always-on block) ===
 -- Per-project singleton.
 DEFINE TABLE IF NOT EXISTS core_memory SCHEMAFULL;
@@ -177,16 +171,6 @@ DEFINE FIELD IF NOT EXISTS invariants  ON core_memory TYPE array<string> DEFAULT
 DEFINE FIELD IF NOT EXISTS watchlist   ON core_memory TYPE array<string> DEFAULT [];
 DEFINE FIELD IF NOT EXISTS updated_at  ON core_memory TYPE string;
 DEFINE INDEX IF NOT EXISTS core_project ON TABLE core_memory FIELDS project UNIQUE;
-
--- === ENTITIES ===
-DEFINE TABLE IF NOT EXISTS entity SCHEMAFULL;
-DEFINE FIELD IF NOT EXISTS kind       ON entity TYPE string;
-DEFINE FIELD IF NOT EXISTS name       ON entity TYPE string;
-DEFINE FIELD IF NOT EXISTS project    ON entity TYPE string;
-DEFINE FIELD IF NOT EXISTS first_seen ON entity TYPE string;
-DEFINE FIELD IF NOT EXISTS last_seen  ON entity TYPE string;
-DEFINE FIELD IF NOT EXISTS count      ON entity TYPE int DEFAULT 1;
-DEFINE INDEX IF NOT EXISTS entity_unique ON TABLE entity FIELDS kind, name, project UNIQUE;
 
 -- === RUNS ===
 DEFINE TABLE IF NOT EXISTS run SCHEMAFULL;
@@ -229,34 +213,6 @@ DEFINE INDEX IF NOT EXISTS edge_relation ON TABLE edge FIELDS relation;
 DEFINE INDEX IF NOT EXISTS edge_via      ON TABLE edge FIELDS via;
 DEFINE INDEX IF NOT EXISTS edge_in       ON TABLE edge FIELDS in;
 DEFINE INDEX IF NOT EXISTS edge_out      ON TABLE edge FIELDS out;
-
-DEFINE TABLE IF NOT EXISTS procedural_memory SCHEMAFULL;
-DEFINE FIELD IF NOT EXISTS name              ON procedural_memory TYPE string;
-DEFINE FIELD IF NOT EXISTS steps             ON procedural_memory TYPE array<string>;
-DEFINE FIELD IF NOT EXISTS trigger_condition ON procedural_memory TYPE string;
-DEFINE FIELD IF NOT EXISTS frequency         ON procedural_memory TYPE int DEFAULT 1;
-DEFINE FIELD IF NOT EXISTS strength          ON procedural_memory TYPE float DEFAULT 1.0;
-DEFINE FIELD IF NOT EXISTS source_sessions   ON procedural_memory TYPE array<record<session>>;
-DEFINE FIELD IF NOT EXISTS created_at        ON procedural_memory TYPE string;
-DEFINE FIELD IF NOT EXISTS updated_at        ON procedural_memory TYPE string;
-
-DEFINE TABLE IF NOT EXISTS event SCHEMAFULL;
-DEFINE FIELD IF NOT EXISTS source          ON event TYPE string;
-DEFINE FIELD IF NOT EXISTS event_type      ON event TYPE string;
-DEFINE FIELD IF NOT EXISTS session_id      ON event TYPE option<record<session>>;
-DEFINE FIELD IF NOT EXISTS run_id          ON event TYPE option<record<run>>;
-DEFINE FIELD IF NOT EXISTS sequence        ON event TYPE option<int>;
-DEFINE FIELD IF NOT EXISTS timestamp       ON event TYPE string;
-DEFINE FIELD IF NOT EXISTS parent_event_id ON event TYPE option<record<event>>;
-DEFINE FIELD IF NOT EXISTS payload_hash    ON event TYPE string;
-DEFINE FIELD IF NOT EXISTS payload         ON event TYPE option<object> FLEXIBLE;
-DEFINE FIELD IF NOT EXISTS metadata        ON event TYPE option<object> FLEXIBLE;
-DEFINE INDEX IF NOT EXISTS event_source      ON TABLE event FIELDS source;
-DEFINE INDEX IF NOT EXISTS event_type        ON TABLE event FIELDS event_type;
-DEFINE INDEX IF NOT EXISTS event_session     ON TABLE event FIELDS session_id;
-DEFINE INDEX IF NOT EXISTS event_run         ON TABLE event FIELDS run_id;
-DEFINE INDEX IF NOT EXISTS event_hash        ON TABLE event FIELDS payload_hash UNIQUE;
-DEFINE INDEX IF NOT EXISTS event_session_seq ON TABLE event FIELDS source, session_id, sequence;
 
 -- === CODE INDEX TABLES (M1+) ===
 -- Native-Rust port of cocoindex-code's chunk + index pipeline. Files are walked

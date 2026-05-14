@@ -6,8 +6,7 @@
 
 use hifz::Hifz;
 use hifz::models::{
-    EventRequest, EventsListReq, HookPayload, MemoriesReq, ObservationsReq, RememberReq, SearchReq,
-    SessionStartReq, TimelineReq,
+    HookPayload, MemoriesReq, ObservationsReq, RememberReq, SearchReq, SessionStartReq, TimelineReq,
 };
 
 fn now() -> String {
@@ -40,40 +39,10 @@ async fn library_round_trip_event_session_observe_memory() {
         .unwrap_or(0);
     assert!(count >= 1, "sessions_list should include the new session");
 
-    // --- Events ---
-    let ev = EventRequest {
-        source: "library_test".into(),
-        event_type: "ping".into(),
-        session_id: Some("s_lib_test".into()),
-        run_id: None,
-        sequence: Some(1),
-        timestamp: now(),
-        parent_event_id: None,
-        payload_hash: "hash-lib-1".into(),
-        payload: Some(serde_json::json!({"hi": 1})),
-        metadata: None,
-    };
-    let r = h.event_ingest(ev.clone()).await.expect("event_ingest");
-    assert_eq!(r.get("status").and_then(|v| v.as_str()), Some("ok"));
-
-    // Idempotent retry
-    let r2 = h.event_ingest(ev).await.expect("event_ingest retry");
-    assert_eq!(r2.get("status").and_then(|v| v.as_str()), Some("duplicate"));
-
-    let listed = h
-        .events_list(EventsListReq {
-            source: Some("library_test".into()),
-            ..Default::default()
-        })
-        .await
-        .expect("events_list");
-    let evs = listed.get("count").and_then(|v| v.as_u64()).unwrap_or(0);
-    assert_eq!(
-        evs, 1,
-        "should have exactly one event after idempotent retry"
-    );
-
     // --- Observations via /observe ---
+    // After the schema trim, `observation` is the single ordered log per
+    // session (with monotonic `ord` and optional `parent_obs_id`). The old
+    // event ledger is gone — no separate event_ingest test path.
     let payload = HookPayload {
         hook_type: "UserPromptSubmit".into(),
         session_id: "s_lib_test".into(),
@@ -82,9 +51,29 @@ async fn library_round_trip_event_session_observe_memory() {
         timestamp: now(),
         source: Some("library_test".into()),
         obs_type: Some("user_prompt".into()),
+        parent_obs_id: None,
         data: serde_json::json!({"prompt": "what does library_api test do"}),
     };
-    let _ = h.observe(payload).await.expect("observe");
+    let prompt_obs_id = h
+        .observe(payload)
+        .await
+        .expect("observe")
+        .expect("prompt observation should be stored, not deduped");
+
+    // Second observation parented to the first — proves the new field travels
+    // through the pipeline and the ord allocator increments monotonically.
+    let child = HookPayload {
+        hook_type: "PostToolUse".into(),
+        session_id: "s_lib_test".into(),
+        project: "/tmp/test".into(),
+        cwd: "/tmp/test".into(),
+        timestamp: now(),
+        source: Some("library_test".into()),
+        obs_type: Some("file_read".into()),
+        parent_obs_id: Some(prompt_obs_id),
+        data: serde_json::json!({"tool_name": "Read", "tool_input": {"file_path": "/tmp/x"}}),
+    };
+    let _ = h.observe(child).await.expect("observe child");
 
     let obs = h
         .observations_search(ObservationsReq {
@@ -115,7 +104,7 @@ async fn library_round_trip_event_session_observe_memory() {
     let mems = h
         .memories_search(MemoriesReq {
             project: Some("/tmp/test".into()),
-            category: Some("insight".into()),
+            category: Some("lesson".into()),
             ..Default::default()
         })
         .await
@@ -123,7 +112,7 @@ async fn library_round_trip_event_session_observe_memory() {
     let mc = mems.get("count").and_then(|v| v.as_u64()).unwrap_or(0);
     assert!(
         mc >= 1,
-        "remembered insight should appear in memories_search"
+        "remembered lesson should appear in memories_search"
     );
 
     // --- Semantic search round-trip (proves embedding pipeline) ---

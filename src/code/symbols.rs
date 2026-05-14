@@ -91,10 +91,7 @@ pub fn extract_symbols(lang: Language, source: &str) -> Result<Vec<RawSymbol>> {
         let mut def_seen = false;
 
         for cap in m.captures {
-            let cap_name = capture_names
-                .get(cap.index as usize)
-                .copied()
-                .unwrap_or("");
+            let cap_name = capture_names.get(cap.index as usize).copied().unwrap_or("");
             if cap_name == "name" {
                 let txt = cap
                     .node
@@ -190,6 +187,10 @@ const MAX: usize = 16;
     #[test]
     fn empty_or_plain_yields_no_symbols() {
         assert!(extract_symbols(Language::Rust, "").unwrap().is_empty());
-        assert!(extract_symbols(Language::Plain, "anything").unwrap().is_empty());
+        assert!(
+            extract_symbols(Language::Plain, "anything")
+                .unwrap()
+                .is_empty()
+        );
     }
 }

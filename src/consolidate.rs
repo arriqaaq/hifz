@@ -74,12 +74,22 @@ async fn tier_semantic(db: &Surreal<Db>, ollama: &OllamaClient) -> Result<usize>
             continue;
         }
 
+        let title = fact.chars().take(80).collect::<String>();
         db.query(
-            "CREATE semantic_memory SET \
-             fact = $fact, confidence = $confidence, \
-             retrieval_count = 0, strength = 1.0, \
-             last_accessed_at = $now, created_at = $now, updated_at = $now",
+            "CREATE memory SET \
+             project = 'global', \
+             category = 'semantic_fact', \
+             title = $title, \
+             content = $fact, \
+             keywords = [], files = [], tags = [], \
+             evolution_history = [], \
+             strength = 1.0, retrieval_count = 0, \
+             last_accessed_at = $now, \
+             version = 1, is_latest = true, pinned = false, \
+             metadata = { confidence: $confidence }, \
+             created_at = $now, updated_at = $now",
         )
+        .bind(("title", title))
         .bind(("fact", fact))
         .bind(("confidence", confidence))
         .bind(("now", now.clone()))
@@ -237,13 +247,28 @@ async fn tier_procedural(db: &Surreal<Db>, ollama: &OllamaClient) -> Result<usiz
             continue;
         }
 
+        let content = steps
+            .iter()
+            .enumerate()
+            .map(|(i, s)| format!("{}. {s}", i + 1))
+            .collect::<Vec<_>>()
+            .join("\n");
         db.query(
-            "CREATE procedural_memory SET \
-             name = $name, steps = $steps, trigger_condition = $trigger, \
-             frequency = 1, strength = 1.0, \
+            "CREATE memory SET \
+             project = 'global', \
+             category = 'procedure', \
+             title = $name, \
+             content = $content, \
+             keywords = [], files = [], tags = [], \
+             evolution_history = [], \
+             strength = 1.0, retrieval_count = 0, \
+             last_accessed_at = $now, \
+             version = 1, is_latest = true, pinned = false, \
+             metadata = { steps: $steps, trigger_condition: $trigger, frequency: 1 }, \
              created_at = $now, updated_at = $now",
         )
         .bind(("name", name))
+        .bind(("content", content))
         .bind(("steps", steps))
         .bind(("trigger", trigger))
         .bind(("now", now.clone()))
@@ -258,8 +283,8 @@ async fn tier_decay(db: &Surreal<Db>, decay_days: i64) -> Result<usize> {
     // Apply exponential decay: strength *= 0.9 for each decay period elapsed
     let mut resp = db
         .query(
-            "SELECT id, strength, last_accessed_at FROM semantic_memory \
-             WHERE strength > 0.1",
+            "SELECT id, strength, last_accessed_at FROM memory \
+             WHERE category = 'semantic_fact' AND strength > 0.1",
         )
         .await?;
     let memories: Vec<serde_json::Value> = resp.take(0)?;
@@ -292,12 +317,14 @@ async fn tier_decay(db: &Surreal<Db>, decay_days: i64) -> Result<usize> {
         }
     }
 
-    // Also decay memory table memories (longer period: 60 days)
+    // Also decay general memory table memories (longer period: 60 days),
+    // excluding the consolidation-tier rows already decayed above.
     let memory_decay_days: i64 = 60;
     let mut resp = db
         .query(
             "SELECT id, strength, last_accessed_at FROM memory \
-             WHERE strength > 0.1 AND is_latest = true AND pinned = false",
+             WHERE strength > 0.1 AND is_latest = true AND pinned = false \
+                AND category NOT IN ['semantic_fact', 'procedure']",
         )
         .await?;
     let memory_memories: Vec<serde_json::Value> = resp.take(0)?;

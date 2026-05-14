@@ -72,9 +72,7 @@ pub async fn run_forget(db: &Surreal<Db>, dry_run: bool) -> Result<ForgetResult>
         // Sweep tombstoned code_file rows older than 30 days.
         let cutoff = (chrono::Utc::now() - chrono::Duration::days(30)).to_rfc3339();
         let _ = db
-            .query(
-                "DELETE code_file WHERE deleted_at IS NOT NONE AND deleted_at < $cutoff",
-            )
+            .query("DELETE code_file WHERE deleted_at IS NOT NONE AND deleted_at < $cutoff")
             .bind(("cutoff", cutoff))
             .await;
     }

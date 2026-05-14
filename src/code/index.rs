@@ -177,9 +177,7 @@ async fn index_walked(
 
     // -- Step 4: embed ----------------------------------------------------
     let texts: Vec<String> = chunks.iter().map(|c| c.content.clone()).collect();
-    let embeddings = embedder
-        .embed_batch(&texts)
-        .context("embed_batch failed")?;
+    let embeddings = embedder.embed_batch(&texts).context("embed_batch failed")?;
     if embeddings.len() != chunks.len() {
         anyhow::bail!(
             "embedder returned {} vectors for {} chunks",
@@ -237,8 +235,9 @@ async fn index_walked(
     };
 
     // -- Step 6a: snapshot inbound references for re-anchoring (G6) -------
-    let archived_chunks =
-        crate::code::link::snapshot_references(db, &file_id).await.unwrap_or_default();
+    let archived_chunks = crate::code::link::snapshot_references(db, &file_id)
+        .await
+        .unwrap_or_default();
     let archived_symbols = crate::code::link::snapshot_symbol_references(db, &file_id)
         .await
         .unwrap_or_default();
@@ -308,9 +307,10 @@ async fn index_walked(
     let mut symbol_count = 0usize;
     for s in &symbols {
         // Pick the chunk whose line range best contains the symbol.
-        let primary = chunks.iter().enumerate().find(|(_, c)| {
-            c.start_line <= s.start_line && c.end_line >= s.start_line
-        });
+        let primary = chunks
+            .iter()
+            .enumerate()
+            .find(|(_, c)| c.start_line <= s.start_line && c.end_line >= s.start_line);
         let primary_chunk_id = primary.and_then(|(i, _)| chunk_ids.get(i).cloned());
 
         let mut resp = db

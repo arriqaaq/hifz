@@ -93,12 +93,15 @@ pub async fn generate_context_with_query(
         context.push('\n');
     }
 
-    // 2. Consolidated semantic facts (from tier_semantic).
+    // 2. Consolidated semantic facts (from tier_semantic). After the schema
+    //    trim these live in `memory` with `category='semantic_fact'`;
+    //    confidence is stored under `metadata.confidence`.
     let mut sem_resp = db
         .query(
-            "SELECT fact, confidence FROM semantic_memory \
-             WHERE strength > 0.3 \
-             ORDER BY confidence DESC LIMIT 10",
+            "SELECT content AS fact, metadata.confidence AS confidence \
+             FROM memory \
+             WHERE category = 'semantic_fact' AND strength > 0.3 \
+             ORDER BY metadata.confidence DESC LIMIT 10",
         )
         .await
         .ok();
@@ -125,12 +128,17 @@ pub async fn generate_context_with_query(
         context.push('\n');
     }
 
-    // 3. Consolidated procedural knowledge (from tier_procedural).
+    // 3. Consolidated procedural knowledge (from tier_procedural). Same
+    //    schema-trim story: lives in `memory` with `category='procedure'`,
+    //    structured fields under `metadata`.
     let mut proc_resp = db
         .query(
-            "SELECT name, steps, trigger_condition, frequency FROM procedural_memory \
-             WHERE strength > 0.3 \
-             ORDER BY frequency DESC LIMIT 5",
+            "SELECT title AS name, metadata.steps AS steps, \
+                    metadata.trigger_condition AS trigger_condition, \
+                    metadata.frequency AS frequency \
+             FROM memory \
+             WHERE category = 'procedure' AND strength > 0.3 \
+             ORDER BY metadata.frequency DESC LIMIT 5",
         )
         .await
         .ok();

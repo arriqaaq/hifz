@@ -21,8 +21,6 @@ pub mod dedup;
 pub mod digest;
 pub mod embed;
 pub mod enrich;
-pub mod entities;
-pub mod event;
 pub mod evolve;
 pub mod export;
 pub mod forget;
@@ -242,26 +240,6 @@ impl Hifz {
         params: crate::models::ObservationsReq,
     ) -> Result<serde_json::Value> {
         crate::observe::search(&self.db, params).await
-    }
-
-    // --- Events (raw ledger) ---
-    pub async fn event_ingest(&self, ev: crate::models::EventRequest) -> Result<serde_json::Value> {
-        crate::event::ingest(&self.db, ev).await
-    }
-    pub async fn event_ingest_batch(
-        &self,
-        evs: Vec<crate::models::EventRequest>,
-    ) -> Result<serde_json::Value> {
-        crate::event::ingest_batch(&self.db, evs).await
-    }
-    pub async fn events_list(
-        &self,
-        params: crate::models::EventsListReq,
-    ) -> Result<serde_json::Value> {
-        crate::event::list(&self.db, params).await
-    }
-    pub async fn event_get(&self, id: &str) -> Result<serde_json::Value> {
-        crate::event::get(&self.db, id).await
     }
 
     // --- Runs ---
@@ -694,10 +672,7 @@ impl Hifz {
     // --- Code dimension (M2+) ---
 
     #[cfg(feature = "code")]
-    pub async fn code_index(
-        &self,
-        req: crate::models::CodeIndexReq,
-    ) -> Result<serde_json::Value> {
+    pub async fn code_index(&self, req: crate::models::CodeIndexReq) -> Result<serde_json::Value> {
         let opts = crate::code::index::IndexOpts {
             follow_symlinks: req.follow_symlinks.unwrap_or(false),
             max_file_bytes: req.max_file_bytes.unwrap_or(2 * 1024 * 1024),
@@ -733,10 +708,7 @@ impl Hifz {
     }
 
     #[cfg(feature = "code")]
-    pub async fn code_link(
-        &self,
-        req: crate::models::CodeLinkReq,
-    ) -> Result<serde_json::Value> {
+    pub async fn code_link(&self, req: crate::models::CodeLinkReq) -> Result<serde_json::Value> {
         let mid = if req.memory_id.starts_with("memory:") {
             req.memory_id.clone()
         } else {
@@ -803,10 +775,7 @@ impl Hifz {
     }
 
     #[cfg(feature = "code")]
-    pub async fn code_gc(
-        &self,
-        req: crate::models::CodeGcReq,
-    ) -> Result<serde_json::Value> {
+    pub async fn code_gc(&self, req: crate::models::CodeGcReq) -> Result<serde_json::Value> {
         let report = crate::code::gc::run_gc(
             &self.db,
             &req.project,

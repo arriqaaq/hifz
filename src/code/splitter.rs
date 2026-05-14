@@ -167,7 +167,11 @@ mod tests {
             src.push_str(&format!("fn f{i}() {{ let x = {i}; }}\n"));
         }
         let chunks = s.split(Language::Rust, &src).unwrap();
-        assert!(chunks.len() >= 2, "expected ≥2 chunks, got {}", chunks.len());
+        assert!(
+            chunks.len() >= 2,
+            "expected ≥2 chunks, got {}",
+            chunks.len()
+        );
         // First chunk starts at line 1.
         assert_eq!(chunks[0].start_line, 1);
         // Lines are monotonically non-decreasing across chunks.

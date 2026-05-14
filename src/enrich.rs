@@ -328,14 +328,9 @@ pub async fn save_enriched(
         }
     }
 
-    // Entity extraction + via='entity' links.
-    let entity_body = format!(
-        "{title}\n{content}\n{}",
-        content_long.as_deref().unwrap_or("")
-    );
-    for ent in crate::entities::extract(&files, &keywords, &entity_body) {
-        let _ = crate::entities::upsert(db, ent.kind, &ent.name, project).await;
-    }
+    // Shared-entity links between memories. The `via='entity'` tag is a plain
+    // string label — no dedicated `entity` table is queried; similarity is
+    // computed from shared keywords + files on the memory rows themselves.
     if let Err(e) = link_by_shared_entities(db, &new_id, project, &keywords, &files).await {
         tracing::warn!("entity-link pass failed for {new_id:?}: {e}");
     }
@@ -352,9 +347,7 @@ pub async fn save_enriched(
     {
         let long_text = content_long.as_deref().unwrap_or("");
         let texts: [&str; 3] = [title, content, long_text];
-        if let Err(e) =
-            crate::code::link::auto_link_memory(db, &new_id, project, &texts).await
-        {
+        if let Err(e) = crate::code::link::auto_link_memory(db, &new_id, project, &texts).await {
             tracing::warn!("code auto-link failed for {new_id:?}: {e}");
         }
     }

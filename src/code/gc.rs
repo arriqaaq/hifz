@@ -96,7 +96,9 @@ pub async fn reconcile_deletions(
         }
 
         // Drop inbound references / references_symbol edges with audit metadata.
-        let chunks_dropped = drop_inbound_code_edges(db, &row.id, &now).await.unwrap_or(0);
+        let chunks_dropped = drop_inbound_code_edges(db, &row.id, &now)
+            .await
+            .unwrap_or(0);
         report.edges_dropped += chunks_dropped;
 
         // Count chunks/symbols before deletion for the report.
@@ -136,11 +138,7 @@ pub async fn reconcile_deletions(
     Ok(())
 }
 
-async fn drop_inbound_code_edges(
-    db: &Surreal<Db>,
-    file_id: &RecordId,
-    now: &str,
-) -> Result<usize> {
+async fn drop_inbound_code_edges(db: &Surreal<Db>, file_id: &RecordId, now: &str) -> Result<usize> {
     // Mark with dropped_reason for audit, then DELETE.
     let _ = db
         .query(

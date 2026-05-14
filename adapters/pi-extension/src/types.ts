@@ -1,17 +1,3 @@
-/** Wire shape sent to POST /api/v1/agent/events. Mirrors Hifz `EventRequest`. */
-export interface EventRequest {
-  source: string;
-  event_type: string;
-  session_id?: string | null;
-  run_id?: string | null;
-  sequence?: number | null;
-  timestamp: string;
-  parent_event_id?: string | null;
-  payload_hash: string;
-  payload?: unknown;
-  metadata?: unknown;
-}
-
 /** Wire shape sent to POST /api/v1/agent/observe. Mirrors Hifz `HookPayload`,
  *  plus optional enrichment fields the Claude Code adapter also sends at top
  *  level (title/facts/keywords/files/metadata/importance). Hifz's HookPayload
@@ -25,6 +11,9 @@ export interface HookPayload {
   timestamp: string;
   source?: string;
   obs_type?: string;
+  /** Causal parent observation id (e.g. `observation:abc`). Set by the
+   *  producer when this event correlates to an earlier one. */
+  parentObsId?: string | null;
   data: unknown;
   // Optional enrichment (claude-code parity)
   title?: string;

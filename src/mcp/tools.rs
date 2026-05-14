@@ -401,54 +401,64 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
         }
 
         #[cfg(feature = "code")]
-        "hifz_code_index" => state
-            .client
-            .post(format!("{}/api/v1/code/index", state.base_url))
-            .json(&args)
-            .send()
-            .await?
-            .json()
-            .await?,
+        "hifz_code_index" => {
+            state
+                .client
+                .post(format!("{}/api/v1/code/index", state.base_url))
+                .json(&args)
+                .send()
+                .await?
+                .json()
+                .await?
+        }
 
         #[cfg(feature = "code")]
-        "hifz_code_search" => state
-            .client
-            .post(format!("{}/api/v1/code/search", state.base_url))
-            .json(&args)
-            .send()
-            .await?
-            .json()
-            .await?,
+        "hifz_code_search" => {
+            state
+                .client
+                .post(format!("{}/api/v1/code/search", state.base_url))
+                .json(&args)
+                .send()
+                .await?
+                .json()
+                .await?
+        }
 
         #[cfg(feature = "code")]
-        "hifz_link_code" => state
-            .client
-            .post(format!("{}/api/v1/code/link", state.base_url))
-            .json(&args)
-            .send()
-            .await?
-            .json()
-            .await?,
+        "hifz_link_code" => {
+            state
+                .client
+                .post(format!("{}/api/v1/code/link", state.base_url))
+                .json(&args)
+                .send()
+                .await?
+                .json()
+                .await?
+        }
 
         #[cfg(feature = "code")]
-        "hifz_link_symbol" => state
-            .client
-            .post(format!("{}/api/v1/code/link/symbol", state.base_url))
-            .json(&args)
-            .send()
-            .await?
-            .json()
-            .await?,
+        "hifz_link_symbol" => {
+            state
+                .client
+                .post(format!("{}/api/v1/code/link/symbol", state.base_url))
+                .json(&args)
+                .send()
+                .await?
+                .json()
+                .await?
+        }
 
         #[cfg(feature = "code")]
-        "hifz_code_gc" => state
-            .client
-            .post(format!("{}/api/v1/code/gc", state.base_url))
-            .json(&args)
-            .send()
-            .await?
-            .json()
-            .await?,
+        "hifz_code_gc" => {
+            state
+                .client
+                .post(format!("{}/api/v1/code/gc", state.base_url))
+                .json(&args)
+                .send()
+                .await?
+                .json()
+                .await?
+        }
 
         _ => {
             return Err(anyhow::anyhow!("Unknown tool: {name}"));

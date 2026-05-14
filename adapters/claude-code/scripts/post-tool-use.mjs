@@ -2,10 +2,14 @@
 //#region src/hooks/post-tool-use.ts
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
+import { promises as fs } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
 
 const execAsync = promisify(exec);
 const REST_URL = process.env["HIFZ_URL"] || "http://localhost:3111";
 const HEADERS = { "Content-Type": "application/json" };
+const STATE_DIR = join(homedir(), ".hifz", "hook-state");
 
 const OBS_TYPE_MAP = {
 	Read: "file_read",
@@ -19,6 +23,17 @@ const OBS_TYPE_MAP = {
 	WebFetch: "web_fetch",
 	WebSearch: "web_fetch",
 };
+
+async function lookupParent(sessionId, key) {
+	if (!sessionId || !key) return null;
+	try {
+		const path = join(STATE_DIR, `${sessionId}.json`);
+		const state = JSON.parse(await fs.readFile(path, "utf8"));
+		return state[key] || null;
+	} catch {
+		return null;
+	}
+}
 
 function isGitCommitCommand(command) {
 	const subs = command.split(/[&;|]/);
@@ -90,6 +105,9 @@ async function main() {
 	const toolName = data.tool_name || "unknown";
 	const obs_type = OBS_TYPE_MAP[toolName] || "other";
 	const toolOutput = data.tool_response || data.tool_output;
+	// Causal parent: the most recent UserPromptSubmit observation in this
+	// session. Lets readers walk "this tool call was caused by that prompt."
+	const parentObsId = await lookupParent(sessionId, "current_prompt");
 
 	try {
 		await fetch(`${REST_URL}/api/v1/agent/observe`, {
@@ -102,6 +120,7 @@ async function main() {
 				cwd,
 				obs_type,
 				timestamp: new Date().toISOString(),
+				parentObsId,
 				data: {
 					tool_name: toolName,
 					tool_input: data.tool_input,
@@ -148,6 +167,7 @@ async function main() {
 							cwd,
 							obs_type: "commit_made",
 							timestamp: new Date().toISOString(),
+							parentObsId,
 							title: `commit: ${commit.branch}: ${commit.message}`,
 							facts: [`sha:${commit.sha}`, `branch:${commit.branch}`],
 							keywords,
@@ -187,4 +207,3 @@ main();
 
 //#endregion
 export {};
-//# sourceMappingURL=post-tool-use.mjs.map

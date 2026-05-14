@@ -1,19 +1,18 @@
-// Hifz logger — Pi extension that captures every Pi event into the local Hifz store.
+// Hifz logger — Pi extension that captures Pi events into the local Hifz store.
 //
 // Loads via Pi's extension discovery (~/.pi/extensions/<name>/index.ts).
-// Subscribes to every meaningful Pi hook, dual-writes:
-//   - every event → POST /api/v1/agent/events  (lossless ledger, no embedding)
+// Subscribes to every meaningful Pi hook, then selectively promotes events
+// to the unified `observation` log (POST /api/v1/agent/observe). After the
+// hifz schema trim there's a single ordered log per session — no separate
+// event ledger.
 //   - selected events → POST /api/v1/agent/observe / /memories / /consolidate
-// See plan: /Users/kfarhan/.claude/plans/can-you-create-a-gleaming-manatee.md
 
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { Client } from "./src/client.js";
 import { detectCommit } from "./src/git.js";
-import { hashEvent } from "./src/hash.js";
 import { CATEGORIES } from "./src/ontology.js";
 import { detectPlan } from "./src/plans.js";
 import { promote } from "./src/promote.js";
-import { redact } from "./src/redact.js";
 
 const RPC_VISIBLE_HOOKS = [
   "agent_start",
@@ -70,7 +69,6 @@ export default async function (pi: ExtensionAPI): Promise<void> {
   void client.drainSpool();
 
   let sessionId: string | undefined;
-  let sequence = 0;
 
   async function ensureSession(ctx: ExtensionContext): Promise<string> {
     if (sessionId) return sessionId;
@@ -94,27 +92,16 @@ export default async function (pi: ExtensionAPI): Promise<void> {
   async function handle(eventType: string, evt: unknown, ctx: ExtensionContext): Promise<void> {
     try {
       const sid = await ensureSession(ctx);
-      const seq = ++sequence;
 
-      // 1) Always: lossless ledger.
-      const redactedPayload = redact(evt);
-      const eventBody = {
-        source: "pi_extension",
-        event_type: eventType,
-        session_id: sid,
-        run_id: null,
-        sequence: seq,
-        timestamp: new Date().toISOString(),
-        parent_event_id: null,
-        payload_hash: hashEvent(sid, eventType, seq, evt),
-        payload:
-          redactedPayload && typeof redactedPayload === "object"
-            ? (redactedPayload as object)
-            : { value: redactedPayload },
-      };
-      await client.sendEvent(eventBody);
+      // After the hifz schema trim the event ledger no longer exists —
+      // `observation` is the single ordered log per session (with `ord` +
+      // `parent_obs_id`). Pi events surface here only via selective
+      // promotion: `promote()` decides which ones are worth keeping as
+      // observations, and the rest are dropped. The local `sequence`
+      // counter and event-ledger fields (payload_hash, parent_event_id)
+      // are no longer used by the server.
 
-      // 2) Selective promotion → /observe.
+      // 1) Selective promotion → /observe.
       const obs = promote(eventType, evt as any, ctx, { sessionId: sid });
       if (obs) {
         // 2a) Failure recovery: attach similar past failures to error observations.

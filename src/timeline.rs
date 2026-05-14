@@ -18,7 +18,7 @@ pub async fn list(db: &Surreal<Db>, params: TimelineReq) -> Result<serde_json::V
         let sid_clean = session_id.strip_prefix("session:").unwrap_or(session_id);
         format!(
             "SELECT * FROM observation WHERE session_id = type::record('session:{}') \
-             ORDER BY timestamp ASC LIMIT {limit}",
+             ORDER BY ord ASC LIMIT {limit}",
             sid_clean.replace('\'', "")
         )
     };

@@ -169,7 +169,9 @@ async fn apply_chunk_link(
         }
     };
     if chunks.is_empty() {
-        report.unresolved_paths.push(format!("{path}:{start}-{end}"));
+        report
+            .unresolved_paths
+            .push(format!("{path}:{start}-{end}"));
         return;
     }
 
@@ -179,16 +181,8 @@ async fn apply_chunk_link(
         if !seen.insert((mem_key.clone(), chunk_key)) {
             continue;
         }
-        if let Err(e) = link::upsert_edge(
-            db,
-            memory_id,
-            &c.id,
-            "references",
-            via,
-            0.9,
-            reason,
-        )
-        .await
+        if let Err(e) =
+            link::upsert_edge(db, memory_id, &c.id, "references", via, 0.9, reason).await
         {
             tracing::warn!("upsert references edge failed: {e}");
             continue;
@@ -244,22 +238,15 @@ async fn apply_symbol_link(
     if symbols.len() > 1 {
         // Ambiguity: multiple symbols share this qualified name. Drop with a
         // log entry rather than guessing — G9 says ambiguity → unresolved.
-        report
-            .unresolved_symbols
-            .push(format!("{qualified} (ambiguous: {} matches)", symbols.len()));
+        report.unresolved_symbols.push(format!(
+            "{qualified} (ambiguous: {} matches)",
+            symbols.len()
+        ));
         return;
     }
     let s = &symbols[0];
-    if let Err(e) = link::upsert_edge(
-        db,
-        memory_id,
-        &s.id,
-        "references_symbol",
-        via,
-        0.9,
-        reason,
-    )
-    .await
+    if let Err(e) =
+        link::upsert_edge(db, memory_id, &s.id, "references_symbol", via, 0.9, reason).await
     {
         tracing::warn!("upsert references_symbol edge failed: {e}");
         return;
@@ -442,10 +429,7 @@ pub struct ArchivedRef {
 /// Capture all `references` edges whose `out` endpoint is a chunk of `file_id`.
 /// Called by `index_walked` BEFORE deleting old chunks. The returned snapshots
 /// feed `re_anchor_references` after new chunks are written.
-pub async fn snapshot_references(
-    db: &Surreal<Db>,
-    file_id: &RecordId,
-) -> Result<Vec<ArchivedRef>> {
+pub async fn snapshot_references(db: &Surreal<Db>, file_id: &RecordId) -> Result<Vec<ArchivedRef>> {
     #[derive(Debug, SurrealValue)]
     struct Row {
         edge_id: RecordId,
@@ -522,8 +506,7 @@ pub async fn re_anchor_references(
 ) -> Result<usize> {
     let mut rewritten = 0usize;
     for a in archived {
-        let (Some(path), Some(start), Some(end)) =
-            (a.ref_path.as_deref(), a.ref_start, a.ref_end)
+        let (Some(path), Some(start), Some(end)) = (a.ref_path.as_deref(), a.ref_start, a.ref_end)
         else {
             // Missing anchor metadata — drop the edge as orphan.
             let _ = db
@@ -532,8 +515,14 @@ pub async fn re_anchor_references(
                 .await;
             continue;
         };
-        let chunks =
-            resolve_chunks(db, project, path, start.max(0) as usize, end.max(0) as usize).await?;
+        let chunks = resolve_chunks(
+            db,
+            project,
+            path,
+            start.max(0) as usize,
+            end.max(0) as usize,
+        )
+        .await?;
         if chunks.is_empty() {
             // The lines vanished — record the reason and drop.
             let now = chrono::Utc::now().to_rfc3339();
@@ -676,7 +665,11 @@ mod tests {
     #[test]
     fn qualified_symbol_re_requires_double_colon() {
         // Bareword identifier — must NOT match (G9).
-        assert!(QUALIFIED_SYMBOL_RE.captures("the parse_chunk function").is_none());
+        assert!(
+            QUALIFIED_SYMBOL_RE
+                .captures("the parse_chunk function")
+                .is_none()
+        );
         // Qualified — matches.
         let m = QUALIFIED_SYMBOL_RE
             .captures("see chunk::persist_chunks here")

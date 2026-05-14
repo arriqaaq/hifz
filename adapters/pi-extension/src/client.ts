@@ -1,5 +1,5 @@
 import { Spool } from "./spool.js";
-import type { EventRequest, HookPayload, MemoryRequest } from "./types.js";
+import type { HookPayload, MemoryRequest } from "./types.js";
 
 interface ClientOpts {
   url: string;
@@ -9,7 +9,7 @@ interface ClientOpts {
 
 const FETCH_TIMEOUT_MS = 5000;
 
-type SpoolKind = "event" | "observation" | "memory" | "consolidate" | "session";
+type SpoolKind = "observation" | "memory" | "consolidate" | "session";
 
 export class Client {
   private opts: ClientOpts;
@@ -35,14 +35,10 @@ export class Client {
     await this.post("/api/v1/agent/sessions/end", body, "session");
   }
 
-  async sendEvent(ev: EventRequest): Promise<void> {
-    await this.post("/api/v1/agent/events", ev, "event");
-  }
-
   /**
-   * Promote an event to a Hifz observation. Hifz does not currently surface the run id
-   * via /observe, so callers cannot stamp event.run_id from the response. Run linkage
-   * is preserved at the observation level via run.observation_ids (see observe.rs).
+   * Send a Hifz observation. After the schema trim, `observation` is the
+   * single ordered log per session — there is no separate event ledger.
+   * Run linkage is preserved at the observation level via run.observation_ids.
    */
   async sendObservation(payload: HookPayload): Promise<void> {
     await this.post("/api/v1/agent/observe", payload, "observation");
@@ -148,8 +144,6 @@ export class Client {
 
 function endpointFor(kind: SpoolKind): string | null {
   switch (kind) {
-    case "event":
-      return "/api/v1/agent/events";
     case "observation":
       return "/api/v1/agent/observe";
     case "memory":

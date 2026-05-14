@@ -1,6 +1,6 @@
 //! REST handlers — pure JSON marshalling around `Hifz` library methods.
 //!
-//! Every business-logic line lives in a core module (`event.rs`, `session.rs`,
+//! Every business-logic line lives in a core module (`session.rs`,
 //! `observe.rs`, etc.) and is dispatched through a `Hifz` method. Handlers
 //! here just parse JSON, call the method, and stringify the result.
 
@@ -12,9 +12,9 @@ use surrealdb::types::SurrealValue;
 #[cfg(feature = "code")]
 use crate::models::{CodeGcReq, CodeIndexReq, CodeLinkReq, CodeLinkSymReq, CodeSearchReq};
 use crate::models::{
-    CommitsReq, ContextReq, CoreEditReq, EventRequest, EventsListReq, ExportReq, HookPayload,
-    MemoriesReq, ObservationsReq, PlanActivateReq, PlansListReq, RememberReq, RunsReq, SearchReq,
-    SessionStartReq, TimelineReq, TraceReq,
+    CommitsReq, ContextReq, CoreEditReq, ExportReq, HookPayload, MemoriesReq, ObservationsReq,
+    PlanActivateReq, PlansListReq, RememberReq, RunsReq, SearchReq, SessionStartReq, TimelineReq,
+    TraceReq,
 };
 use crate::web::AppState;
 
@@ -117,45 +117,10 @@ pub async fn observe(
     Json(payload): Json<HookPayload>,
 ) -> Json<serde_json::Value> {
     match state.observe(payload).await {
-        Ok(Some(title)) => Json(serde_json::json!({"status": "ok", "title": title})),
+        Ok(Some(obs_id)) => Json(serde_json::json!({"status": "ok", "obs_id": obs_id})),
         Ok(None) => Json(serde_json::json!({"status": "duplicate"})),
         Err(e) => Json(serde_json::json!({"status": "error", "error": e.to_string()})),
     }
-}
-
-// -----------------------------------------------------------------------
-// Events (raw ledger)
-// -----------------------------------------------------------------------
-
-pub async fn event_ingest(
-    State(state): State<AppState>,
-    Json(ev): Json<EventRequest>,
-) -> Json<serde_json::Value> {
-    match state.event_ingest(ev).await {
-        Ok(v) => Json(v),
-        Err(e) => Json(serde_json::json!({"status": "error", "error": e.to_string()})),
-    }
-}
-
-pub async fn events_batch(
-    State(state): State<AppState>,
-    Json(events): Json<Vec<EventRequest>>,
-) -> Json<serde_json::Value> {
-    json_or_err(state.event_ingest_batch(events).await)
-}
-
-pub async fn events_list(
-    State(state): State<AppState>,
-    Query(params): Query<EventsListReq>,
-) -> Json<serde_json::Value> {
-    json_or_err(state.events_list(params).await)
-}
-
-pub async fn event_get(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> Json<serde_json::Value> {
-    json_or_err(state.event_get(&id).await)
 }
 
 // -----------------------------------------------------------------------

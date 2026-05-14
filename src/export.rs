@@ -99,15 +99,18 @@ pub async fn run(db: &Surreal<Db>, params: ExportReq) -> Result<serde_json::Valu
         .and_then(|mut r| r.take(0).ok())
         .unwrap_or_default();
 
+    // Consolidation outputs live in `memory` with category='semantic_fact' or
+    // 'procedure'; surface them in their own export buckets for tooling that
+    // expects the old shape.
     let semantic: Vec<serde_json::Value> = db
-        .query("SELECT * FROM semantic_memory")
+        .query("SELECT * FROM memory WHERE category = 'semantic_fact'")
         .await
         .ok()
         .and_then(|mut r| r.take(0).ok())
         .unwrap_or_default();
 
     let procedural: Vec<serde_json::Value> = db
-        .query("SELECT * FROM procedural_memory")
+        .query("SELECT * FROM memory WHERE category = 'procedure'")
         .await
         .ok()
         .and_then(|mut r| r.take(0).ok())

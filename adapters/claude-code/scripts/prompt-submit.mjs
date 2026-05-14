@@ -1,7 +1,26 @@
 #!/usr/bin/env node
 //#region src/hooks/prompt-submit.ts
+import { promises as fs } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
+
 const REST_URL = process.env["HIFZ_URL"] || "http://localhost:3111";
 const HEADERS = { "Content-Type": "application/json" };
+const STATE_DIR = join(homedir(), ".hifz", "hook-state");
+
+async function cacheObsId(sessionId, key, obsId) {
+	if (!sessionId || !key || !obsId) return;
+	try {
+		await fs.mkdir(STATE_DIR, { recursive: true });
+		const path = join(STATE_DIR, `${sessionId}.json`);
+		let state = {};
+		try {
+			state = JSON.parse(await fs.readFile(path, "utf8"));
+		} catch {}
+		state[key] = obsId;
+		await fs.writeFile(path, JSON.stringify(state));
+	} catch {}
+}
 
 async function main() {
 	let input = "";
@@ -15,9 +34,12 @@ async function main() {
 	const sessionId = data.session_id || "unknown";
 	const prompt = data.prompt || "";
 
-	// 1. Write: capture the prompt as an observation
+	// 1. Write: capture the prompt as an observation. Cache its obs_id as
+	//    `current_prompt` so subsequent PostToolUse observations within this
+	//    prompt window can stamp themselves as children — that's the causal
+	//    chain that lets readers reconstruct "what led to what".
 	try {
-		await fetch(`${REST_URL}/api/v1/agent/observe`, {
+		const res = await fetch(`${REST_URL}/api/v1/agent/observe`, {
 			method: "POST",
 			headers: HEADERS,
 			body: JSON.stringify({
@@ -30,6 +52,12 @@ async function main() {
 			}),
 			signal: AbortSignal.timeout(3000)
 		});
+		if (res.ok) {
+			const body = await res.json().catch(() => null);
+			if (body && body.obs_id) {
+				await cacheObsId(sessionId, "current_prompt", body.obs_id);
+			}
+		}
 	} catch {}
 
 	// 2. Read: search hifz for context relevant to this prompt
@@ -45,7 +73,6 @@ async function main() {
 		const results = await res.json();
 		if (!results.results || results.results.length === 0) return;
 
-		// Format results as context
 		const lines = results.results
 			.filter(r => r.score > 0.1)
 			.map(r => {
@@ -59,7 +86,6 @@ async function main() {
 
 		const context = `# Relevant hifz context\n\n${lines.join("\n")}`;
 
-		// Return as additionalContext so Claude Code injects it
 		const output = JSON.stringify({
 			hookSpecificOutput: {
 				hookEventName: "UserPromptSubmit",
@@ -73,4 +99,3 @@ main();
 
 //#endregion
 export {};
-//# sourceMappingURL=prompt-submit.mjs.map

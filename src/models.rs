@@ -23,6 +23,18 @@ pub struct Session {
 pub struct Observation {
     pub id: Option<surrealdb::types::RecordId>,
     pub session_id: Option<surrealdb::types::RecordId>,
+    /// Per-session monotonically-increasing ordinal (0-indexed, dense). Assigned
+    /// atomically at insert time via `obs_session_ord` UNIQUE index. Lets readers
+    /// reconstruct the exact sequence of operations within a session even when
+    /// timestamps collide under burst.
+    pub ord: i64,
+    /// Causal parent (e.g. a `PostToolUse` row points back at its `PreToolUse`,
+    /// a `SubagentStop` at the dispatching `Task`'s PreToolUse). None for
+    /// top-level events.
+    pub parent_obs_id: Option<surrealdb::types::RecordId>,
+    /// Producer identifier — "hook" (default, Claude Code adapter), "pi"
+    /// (Pi extension), or "rpc" (programmatic).
+    pub source: String,
     pub timestamp: String,
     pub obs_type: String,
     pub title: String,
@@ -112,19 +124,6 @@ pub struct EvolutionEntry {
     pub triggered_by: Option<String>,
 }
 
-// --- Entity ---
-
-#[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
-pub struct Entity {
-    pub id: Option<surrealdb::types::RecordId>,
-    pub kind: String, // file | symbol | concept | error
-    pub name: String,
-    pub project: String,
-    pub first_seen: String,
-    pub last_seen: String,
-    pub count: i64,
-}
-
 // --- Run ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
@@ -152,34 +151,6 @@ pub struct CoreMemory {
     pub goals: Vec<String>,
     pub invariants: Vec<String>,
     pub watchlist: Vec<String>,
-    pub updated_at: String,
-}
-
-// --- Consolidation Tiers ---
-
-#[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
-pub struct SemanticMemory {
-    pub id: Option<surrealdb::types::RecordId>,
-    pub fact: String,
-    pub confidence: f64,
-    pub source_sessions: Vec<surrealdb::types::RecordId>,
-    pub retrieval_count: i64,
-    pub strength: f64,
-    pub last_accessed_at: String,
-    pub created_at: String,
-    pub updated_at: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
-pub struct ProceduralMemory {
-    pub id: Option<surrealdb::types::RecordId>,
-    pub name: String,
-    pub steps: Vec<String>,
-    pub trigger_condition: String,
-    pub frequency: i64,
-    pub strength: f64,
-    pub source_sessions: Vec<surrealdb::types::RecordId>,
-    pub created_at: String,
     pub updated_at: String,
 }
 
@@ -243,47 +214,10 @@ pub struct FileFreq {
     pub frequency: i64,
 }
 
-// --- Generic event ledger (producer-agnostic) ---
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EventRequest {
-    pub source: String,
-    pub event_type: String,
-    #[serde(default)]
-    pub session_id: Option<String>,
-    #[serde(default)]
-    pub run_id: Option<String>,
-    #[serde(default)]
-    pub sequence: Option<i64>,
-    pub timestamp: String,
-    #[serde(default)]
-    pub parent_event_id: Option<String>,
-    pub payload_hash: String,
-    #[serde(default)]
-    pub payload: Option<serde_json::Value>,
-    #[serde(default)]
-    pub metadata: Option<serde_json::Value>,
-}
-
 // --- Request types for library / REST API ---
 //
 // These mirror the on-the-wire JSON shape used by the REST handlers, exposed
-// here so library users can construct them directly. `Default` is provided so
-// callers can use `EventsListReq { source: Some("foo".into()), ..Default::default() }`.
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct EventsListReq {
-    #[serde(default)]
-    pub source: Option<String>,
-    #[serde(default)]
-    pub event_type: Option<String>,
-    #[serde(default)]
-    pub session_id: Option<String>,
-    #[serde(default)]
-    pub run_id: Option<String>,
-    #[serde(default)]
-    pub limit: Option<usize>,
-}
+// here so library users can construct them directly.
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SessionStartReq {
@@ -552,6 +486,11 @@ pub struct HookPayload {
     /// Adapter may pre-set obs_type (e.g. "commit_made"). Overrides inference.
     #[serde(rename = "obs_type", default)]
     pub obs_type: Option<String>,
+    /// Causal parent observation id (e.g. `observation:abc`). Set by hook
+    /// scripts that can correlate to an earlier observation via shared
+    /// tool_use_id / subagent id / pre-compact pairing.
+    #[serde(default, rename = "parentObsId", alias = "parent_obs_id")]
+    pub parent_obs_id: Option<String>,
     pub data: serde_json::Value,
 }
 
@@ -833,6 +772,12 @@ pub enum Category {
     ShipReport,
     /// Long-form: a project-context slice (architecture, conventions, etc.).
     ContextSlice,
+    /// Consolidation output: a recurring fact extracted across sessions
+    /// (tier_semantic). Confidence stored in `metadata.confidence`.
+    SemanticFact,
+    /// Consolidation output: a recurring procedure/workflow extracted across
+    /// sessions (tier_procedural). Steps/trigger stored in `metadata`.
+    Procedure,
     /// Catch-all for ad-hoc memories.
     Note,
 }
@@ -853,6 +798,8 @@ impl Category {
             Self::CodeReview => "code_review",
             Self::ShipReport => "ship_report",
             Self::ContextSlice => "context_slice",
+            Self::SemanticFact => "semantic_fact",
+            Self::Procedure => "procedure",
             Self::Note => "note",
         }
     }
@@ -874,6 +821,8 @@ impl Category {
             "code_review" => Self::CodeReview,
             "ship_report" => Self::ShipReport,
             "context_slice" => Self::ContextSlice,
+            "semantic_fact" => Self::SemanticFact,
+            "procedure" => Self::Procedure,
             _ => Self::Note,
         }
     }
@@ -900,9 +849,6 @@ pub enum RecordKind {
     Observation,
     Run,
     Session,
-    Entity,
-    SemanticMemory,
-    ProceduralMemory,
     /// Long-form artifact chunk (parent of a `Memory` row).
     MemoryChunk,
     /// Indexed source file (root of the code dimension).
@@ -922,9 +868,6 @@ impl RecordKind {
             "observation" => Self::Observation,
             "run" => Self::Run,
             "session" => Self::Session,
-            "entity" => Self::Entity,
-            "semantic_memory" => Self::SemanticMemory,
-            "procedural_memory" => Self::ProceduralMemory,
             "memory_chunk" => Self::MemoryChunk,
             "code_file" => Self::CodeFile,
             "code_chunk" => Self::CodeChunk,

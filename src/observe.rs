@@ -123,32 +123,54 @@ pub async fn observe(
         }
     };
 
-    // Store in SurrealDB
+    // Store in SurrealDB. Per-session monotonic `ord` allocated atomically
+    // inside the transaction; the `obs_session_ord` UNIQUE index is the final
+    // guard against any race between concurrent writers.
     let session_rid = format!("session:{}", payload.session_id);
-    let sql = "CREATE observation SET \
-        session_id = type::record($session_rid), \
-        timestamp = $timestamp, \
-        obs_type = $obs_type, \
-        title = $title, \
-        subtitle = $subtitle, \
-        facts = $facts, \
-        facts_text = $facts_text, \
-        narrative = $narrative, \
-        keywords = $keywords, \
-        files = $files, \
-        importance = $importance, \
-        confidence = $confidence, \
-        embedding = $embedding";
+    let source = payload.source.clone().unwrap_or_else(|| "hook".to_string());
+    let parent_rid = payload.parent_obs_id.as_deref().map(|s| {
+        if s.contains(':') {
+            s.to_string()
+        } else {
+            format!("observation:{s}")
+        }
+    });
+    let sql = "
+        BEGIN TRANSACTION;
+        LET $sess = type::record($session_rid);
+        LET $next = count(SELECT id FROM observation WHERE session_id = $sess);
+        LET $created = (CREATE observation SET
+            session_id    = $sess,
+            ord           = $next,
+            parent_obs_id = IF $parent_rid = NONE THEN NONE ELSE type::record($parent_rid) END,
+            source        = $source,
+            timestamp     = $timestamp,
+            obs_type      = $obs_type,
+            title         = $title,
+            subtitle      = $subtitle,
+            facts         = $facts,
+            facts_text    = $facts_text,
+            narrative     = $narrative,
+            keywords      = $keywords,
+            files         = $files,
+            importance    = $importance,
+            confidence    = $confidence,
+            embedding     = $embedding
+          RETURN id, ord);
+        RETURN $created;
+        COMMIT TRANSACTION;
+    ";
 
     #[derive(Debug, SurrealValue)]
     struct Created {
         id: Option<RecordId>,
     }
 
-    let sql_with_return = format!("{sql} RETURN id");
     let response = db
-        .query(&sql_with_return)
+        .query(sql)
         .bind(("session_rid", session_rid))
+        .bind(("parent_rid", parent_rid))
+        .bind(("source", source))
         .bind(("timestamp", payload.timestamp.clone()))
         .bind(("obs_type", compressed.obs_type.clone()))
         .bind(("title", compressed.title.clone()))
@@ -163,6 +185,9 @@ pub async fn observe(
         .bind(("embedding", embedding.clone()))
         .await?;
     let mut response = response.check()?;
+    // Inside a transaction, only the explicit RETURN $created emits to the
+    // client (BEGIN/LET/COMMIT are silent), so the CREATE result lands at
+    // statement index 0.
     let created: Vec<Created> = response.take(0).unwrap_or_default();
     let new_obs_id = created.into_iter().next().and_then(|c| c.id);
 
@@ -229,7 +254,28 @@ pub async fn observe(
         }
     }
 
-    Ok(Some(compressed.title))
+    // Return the new observation id (e.g. "observation:abc") so hook scripts
+    // can cache it and stamp `parent_obs_id` on the next correlated event
+    // (e.g. SubagentStop pointing back at SubagentStart). Falls back to the
+    // observation title if for any reason no id was captured.
+    let returned = new_obs_id
+        .as_ref()
+        .map(rid_to_string)
+        .unwrap_or(compressed.title);
+    Ok(Some(returned))
+}
+
+/// Format a SurrealDB `RecordId` as the canonical `"table:key"` string,
+/// matching how hook scripts and the rest of the codebase quote them.
+fn rid_to_string(rid: &RecordId) -> String {
+    use surrealdb::types::RecordIdKey;
+    let key = match &rid.key {
+        RecordIdKey::String(s) => s.clone(),
+        RecordIdKey::Number(n) => n.to_string(),
+        RecordIdKey::Uuid(u) => u.to_string(),
+        other => format!("{other:?}"),
+    };
+    format!("{}:{key}", rid.table)
 }
 
 /// Phase 3.3: when a `commit_made` observation arrives, BM25-search open

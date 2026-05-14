@@ -1,7 +1,23 @@
 #!/usr/bin/env node
 //#region src/hooks/post-tool-failure.ts
+import { promises as fs } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
+
 const REST_URL = process.env["HIFZ_URL"] || "http://localhost:3111";
 const HEADERS = { "Content-Type": "application/json" };
+const STATE_DIR = join(homedir(), ".hifz", "hook-state");
+
+async function lookupParent(sessionId, key) {
+	if (!sessionId || !key) return null;
+	try {
+		const path = join(STATE_DIR, `${sessionId}.json`);
+		const state = JSON.parse(await fs.readFile(path, "utf8"));
+		return state[key] || null;
+	} catch {
+		return null;
+	}
+}
 
 async function main() {
 	let input = "";
@@ -18,6 +34,7 @@ async function main() {
 	const errorStr = typeof data.error === "string"
 		? data.error.slice(0, 4000)
 		: JSON.stringify(data.error ?? "").slice(0, 4000);
+	const parentObsId = await lookupParent(sessionId, "current_prompt");
 
 	// 1. Write: capture the failure
 	try {
@@ -30,6 +47,7 @@ async function main() {
 				project: data.cwd || process.cwd(),
 				cwd: data.cwd || process.cwd(),
 				timestamp: new Date().toISOString(),
+				parentObsId,
 				data: {
 					tool_name: data.tool_name,
 					tool_input: typeof data.tool_input === "string"

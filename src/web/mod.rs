@@ -94,12 +94,6 @@ pub async fn serve(state: Hifz, port: u16) -> Result<()> {
         )
         .route("/observe", axum::routing::post(api::observe))
         .route(
-            "/events",
-            axum::routing::post(api::event_ingest).get(api::events_list),
-        )
-        .route("/events/batch", axum::routing::post(api::events_batch))
-        .route("/events/{id}", axum::routing::get(api::event_get))
-        .route(
             "/observations",
             axum::routing::get(api::observations_search),
         )

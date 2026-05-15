@@ -113,6 +113,22 @@ impl CodeSplitter {
             }
         }
 
+        // `text_splitter` trims trailing whitespace off each chunk, so the
+        // final chunk's `end_byte` can stop short of EOF (e.g. a file
+        // ending in `\n`). When the only thing between the last chunk and
+        // EOF is whitespace, extend it so chunks tile the whole file.
+        if let Some(last) = out.last_mut() {
+            if last.end_byte < source.len()
+                && source[last.end_byte..].chars().all(char::is_whitespace)
+            {
+                last.end_byte = source.len();
+                last.end_line = byte_to_line(
+                    source.len().saturating_sub(1).max(last.start_byte),
+                    &line_starts,
+                );
+            }
+        }
+
         Ok(out)
     }
 }

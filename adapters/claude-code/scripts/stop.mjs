@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 //#region src/hooks/stop.ts
+import { ingestTranscript } from "./ingest-current-transcript.mjs";
 const REST_URL = process.env["HIFZ_URL"] || "http://localhost:3111";
 const HEADERS = { "Content-Type": "application/json" };
 async function main() {
@@ -12,7 +13,7 @@ async function main() {
 		return;
 	}
 	const sessionId = data.session_id || "unknown";
-	
+
 	// Send to /api/v1/agent/observe so Stop hook triggers run-close logic
 	try {
 		await fetch(`${REST_URL}/api/v1/agent/observe`, {
@@ -27,7 +28,17 @@ async function main() {
 			signal: AbortSignal.timeout(5e3)
 		});
 	} catch {}
-	
+
+	// Ingest the latest assistant turn(s) — re-sends the whole transcript;
+	// hifz dedupes via (agent, external_id) UNIQUE so this is safe to repeat.
+	try {
+		await ingestTranscript({
+			session_id: sessionId,
+			transcript_path: data.transcript_path,
+			cwd: data.cwd || process.cwd(),
+		});
+	} catch {}
+
 	// Also end the session
 	try {
 		await fetch(`${REST_URL}/api/v1/agent/sessions/end`, {

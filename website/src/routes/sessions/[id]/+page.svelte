@@ -14,6 +14,7 @@
   import { extractId } from '$lib/components/entity/entityHelpers';
   import EntityChip from '$lib/components/entity/EntityChip.svelte';
   import { shell } from '$lib/stores/shell.svelte';
+  import TokenUsagePanel from './_components/TokenUsagePanel.svelte';
 
   let session = $state<Session | null>(null);
   let runs = $state<Run[]>([]);
@@ -145,6 +146,8 @@
         </div>
       {/if}
     </header>
+
+    <TokenUsagePanel sessionId={timelineId} />
 
     <div class="layout">
       <aside class="tree-pane">

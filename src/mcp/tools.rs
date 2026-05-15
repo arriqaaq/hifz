@@ -460,6 +460,53 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                 .await?
         }
 
+        "hifz_usage" => {
+            let mode = args.get("mode").and_then(|v| v.as_str()).unwrap_or("");
+            match mode {
+                "session" => {
+                    let sid = args
+                        .get("session_id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    state
+                        .client
+                        .get(format!(
+                            "{}/api/v1/agent/usage/session/{sid}",
+                            state.base_url
+                        ))
+                        .send()
+                        .await?
+                        .json()
+                        .await?
+                }
+                "project" => {
+                    let project = args.get("project").and_then(|v| v.as_str()).unwrap_or("");
+                    let mut url =
+                        format!("{}/api/v1/agent/usage/project/{project}", state.base_url);
+                    let mut qs = Vec::new();
+                    if let Some(from) = args.get("from").and_then(|v| v.as_str()) {
+                        qs.push(format!("from={from}"));
+                    }
+                    if let Some(to) = args.get("to").and_then(|v| v.as_str()) {
+                        qs.push(format!("to={to}"));
+                    }
+                    if let Some(model) = args.get("model").and_then(|v| v.as_str()) {
+                        qs.push(format!("model={model}"));
+                    }
+                    if !qs.is_empty() {
+                        url.push('?');
+                        url.push_str(&qs.join("&"));
+                    }
+                    state.client.get(url).send().await?.json().await?
+                }
+                other => {
+                    return Err(anyhow::anyhow!(
+                        "hifz_usage: unknown mode '{other}' (expected 'session' or 'project')"
+                    ));
+                }
+            }
+        }
+
         _ => {
             return Err(anyhow::anyhow!("Unknown tool: {name}"));
         }
@@ -526,6 +573,22 @@ fn tool_defs() -> Vec<serde_json::Value> {
         serde_json::json!({"name": "hifz_warmup", "description": "Build the project-scoped warmup digest — latest plan, recent decisions, conventions, open bugs, gotchas, failure patterns, recent lessons. Inject the `top` field as system context at session start to give the agent a 'here's where you are' snapshot.", "inputSchema": {"type": "object", "properties": {"session_id": {"type": "string"}, "project": {"type": "string", "description": "Defaults to the session's project."}, "top_n": {"type": "integer", "default": 15}}, "required": ["session_id"]}}),
         serde_json::json!({"name": "hifz_project_accumulators", "description": "Get the project's cross-cutting rollup: latest plan, decisions, conventions, open bugs, gotchas, failure patterns, recent lessons. Like hifz_warmup but project-only (no session scope).", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}}, "required": ["project"]}}),
         serde_json::json!({"name": "hifz_project_digest", "description": "Chronological digest of recent activity for a project, grouped by typed category. Powers a 'what happened in the last N days' view.", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "days": {"type": "integer", "default": 30, "minimum": 1}}, "required": ["project"]}}),
+        serde_json::json!({
+            "name": "hifz_usage",
+            "description": "LLM token usage scoped to a session or a project. Generic over any agent that posts to /api/v1/agent/usage — no Claude-specific concepts. mode='session' returns per-call array + totals + session patterns; mode='project' returns daily/model/top-prompts/top-sessions + project patterns.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "mode":       {"type": "string", "enum": ["session", "project"]},
+                    "session_id": {"type": "string", "description": "Required when mode=session."},
+                    "project":    {"type": "string", "description": "Required when mode=project."},
+                    "from":       {"type": "string", "description": "YYYY-MM-DD lower bound (project mode)."},
+                    "to":         {"type": "string", "description": "YYYY-MM-DD upper bound (project mode)."},
+                    "model":      {"type": "string", "description": "Filter by model id (project mode)."}
+                },
+                "required": ["mode"]
+            }
+        }),
         // Code dimension (M2+) — gated by `code` Cargo feature.
         #[cfg(feature = "code")]
         serde_json::json!({"name": "hifz_code_index", "description": "Walk a repo (gitignore-honest) and chunk + embed source files for semantic code search. Idempotent — unchanged files (matching mtime + sha256) are skipped.", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "root": {"type": "string", "description": "Absolute path to repo root"}, "follow_symlinks": {"type": "boolean", "default": false}, "max_file_bytes": {"type": "integer", "default": 2097152}}, "required": ["project", "root"]}}),

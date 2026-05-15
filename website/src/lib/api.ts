@@ -284,3 +284,138 @@ export function searchObservations(
   params.set('limit', String(filters.limit ?? 100));
   return get(`${AGENT}/observations?${params}`);
 }
+
+// --- Agent usage (generic, adapter-populated token records) ---
+
+export interface UsageTotals {
+  input: number;
+  output: number;
+  /** Raw token volume = input + output + cache_read + cache_creation. NOT cost-equivalent. */
+  total: number;
+  breakdown: Record<string, number>;
+  cache_read: number;
+  cache_creation: number;
+  cache_hit_rate: number;
+  /** Server-side billable-equivalent cost in USD, summed against the embedded
+   * price table. Calls whose model isn't in the table contribute 0 and increment
+   * `cost_unknown_calls`. */
+  cost_usd: number;
+  cost_unknown_calls: number;
+  /** Auxiliary Anthropic calls Anthropic billed for but excluded from the JSONL
+   * (ai-title, summary). Surfaced as a UI badge; never folded into token counts. */
+  aux_calls: number;
+}
+
+export interface UsageCallRow {
+  id: string;
+  session_id: string;
+  project: string;
+  agent: string;
+  model: string;
+  external_id: string;
+  timestamp: string;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  prompt: string | null;
+  tools: string[];
+  breakdown: Record<string, number> | null;
+  aux_calls: number | null;
+}
+
+export interface UsagePattern {
+  id: string;
+  kind: 'warning' | 'info' | 'neutral';
+  title: string;
+  body: string;
+  action: string | null;
+}
+
+export interface DailyBucket {
+  date: string;
+  input: number;
+  output: number;
+  total: number;
+  breakdown: Record<string, number>;
+  calls: number;
+  sessions: number;
+}
+
+export interface ModelBucket {
+  model: string;
+  total: number;
+  input: number;
+  output: number;
+  calls: number;
+}
+
+export interface PromptRow {
+  prompt: string;
+  total: number;
+  input: number;
+  output: number;
+  breakdown: Record<string, number>;
+  session_id: string;
+  model: string;
+  date: string;
+  call_count: number;
+}
+
+export interface UsageSessionRow {
+  session_id: string;
+  first_prompt: string | null;
+  total: number;
+  input: number;
+  output: number;
+  calls: number;
+  model: string;
+  date: string;
+}
+
+export interface SessionUsageView {
+  session_id: string;
+  totals: UsageTotals;
+  model: string | null;
+  primary_agent: string | null;
+  call_count: number;
+  calls: UsageCallRow[];
+  patterns: UsagePattern[];
+}
+
+export interface ProjectUsageView {
+  project: string;
+  totals: UsageTotals;
+  session_count: number;
+  call_count: number;
+  date_range: { from: string; to: string } | null;
+  daily: DailyBucket[];
+  models: ModelBucket[];
+  top_prompts: PromptRow[];
+  top_sessions: UsageSessionRow[];
+  patterns: UsagePattern[];
+}
+
+export interface ProjectUsageFilters {
+  from?: string;
+  to?: string;
+  model?: string;
+}
+
+export function fetchSessionUsage(sessionId: string): Promise<SessionUsageView> {
+  return get(`${AGENT}/usage/session/${encodeURIComponent(sessionId)}`);
+}
+
+export function fetchProjectUsage(
+  project: string,
+  filters: ProjectUsageFilters = {},
+): Promise<ProjectUsageView> {
+  const params = new URLSearchParams();
+  if (filters.from) params.set('from', filters.from);
+  if (filters.to) params.set('to', filters.to);
+  if (filters.model) params.set('model', filters.model);
+  const qs = params.toString();
+  const url = qs
+    ? `${AGENT}/usage/project/${encodeURIComponent(project)}?${qs}`
+    : `${AGENT}/usage/project/${encodeURIComponent(project)}`;
+  return get(url);
+}

@@ -232,11 +232,44 @@ fn parse_inline_list(s: &str) -> Vec<String> {
         return Vec::new();
     }
     let inner = s.trim_start_matches('[').trim_end_matches(']');
-    inner
-        .split(',')
+    split_top_level(inner)
+        .into_iter()
         .map(|p| yaml_unescape(p.trim()))
         .filter(|p| !p.is_empty())
         .collect()
+}
+
+/// Split on commas that are NOT inside a double-quoted segment, so a
+/// quoted element containing `,` (e.g. `"d, e"`) survives a round-trip
+/// through `yaml_escape` / `parse_inline_list`.
+fn split_top_level(inner: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut buf = String::new();
+    let mut in_quotes = false;
+    let mut escaped = false;
+    for c in inner.chars() {
+        if escaped {
+            buf.push(c);
+            escaped = false;
+            continue;
+        }
+        match c {
+            '\\' if in_quotes => {
+                buf.push(c);
+                escaped = true;
+            }
+            '"' => {
+                in_quotes = !in_quotes;
+                buf.push(c);
+            }
+            ',' if !in_quotes => {
+                out.push(std::mem::take(&mut buf));
+            }
+            _ => buf.push(c),
+        }
+    }
+    out.push(buf);
+    out
 }
 
 /// Escape a value for YAML inline form. Quotes if it contains commas,

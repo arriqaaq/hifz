@@ -876,3 +876,96 @@ impl RecordKind {
         }
     }
 }
+
+// --- Agent Usage (generic LLM-inference token record) ---
+
+/// One row = one LLM inference call. Adapter-neutral: every adapter
+/// (`claude-code`, future `openai-cli`, etc.) maps its provider-specific
+/// token categories into the generic `breakdown` JSON. Top-level
+/// `input_tokens` / `output_tokens` / `total_tokens` cover the universal
+/// case so aggregations don't have to reach into `breakdown`.
+///
+/// A user prompt that triggers tool round-trips produces multiple rows;
+/// the UI groups them under their shared `prompt` to display a "turn."
+#[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
+pub struct AgentUsage {
+    pub id: Option<surrealdb::types::RecordId>,
+    pub session_id: surrealdb::types::RecordId,
+    pub project: String,
+    /// Adapter id, e.g. "claude-code", "pi", "openai-cli".
+    pub agent: String,
+    /// Optional vendor/provider hint, e.g. "anthropic", "openai".
+    pub provider: Option<String>,
+    pub model: String,
+    /// Adapter-supplied dedup key (e.g. the assistant message id in JSONL).
+    /// Combined with `agent` it forms a UNIQUE index, so re-posts are no-ops.
+    pub external_id: String,
+    pub timestamp: String,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub total_tokens: i64,
+    pub prompt: Option<String>,
+    pub prompt_at: Option<String>,
+    pub tools: Vec<String>,
+    pub run_id: Option<surrealdb::types::RecordId>,
+    /// Vendor-specific token categories. Examples:
+    /// - Anthropic: `{ "cache_read": ..., "cache_creation": ... }`
+    /// - OpenAI (future): `{ "cached_prompt": ..., "reasoning": ... }`
+    pub breakdown: Option<serde_json::Value>,
+    /// Per-file count of auxiliary calls the adapter knew Anthropic billed
+    /// for but couldn't capture (e.g. `ai-title`, `summary` JSONL entries
+    /// with no `usage` block). Stamped on the first record of each file by
+    /// the adapter; aggregations sum across calls.
+    #[serde(default)]
+    pub aux_calls: Option<i64>,
+}
+
+/// Payload an adapter POSTs to `/api/v1/agent/usage` (single) or
+/// `/api/v1/agent/usage/batch`. Differs from `AgentUsage` in two ways:
+///   - `session_id` is a plain string (the adapter-side session id, e.g.
+///     the Claude session UUID); hifz core prepends `session:` to build
+///     the record reference (matches `session.rs:21`).
+///   - `total_tokens` is computed server-side if absent (covers adapters
+///     that just submit `input` + `output` + `breakdown`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentUsageRecord {
+    pub session_id: String,
+    pub project: String,
+    pub agent: String,
+    #[serde(default)]
+    pub provider: Option<String>,
+    pub model: String,
+    pub external_id: String,
+    pub timestamp: String,
+    #[serde(default)]
+    pub input_tokens: i64,
+    #[serde(default)]
+    pub output_tokens: i64,
+    #[serde(default)]
+    pub total_tokens: Option<i64>,
+    #[serde(default)]
+    pub prompt: Option<String>,
+    #[serde(default)]
+    pub prompt_at: Option<String>,
+    #[serde(default)]
+    pub tools: Vec<String>,
+    #[serde(default)]
+    pub run_id: Option<String>,
+    #[serde(default)]
+    pub breakdown: Option<serde_json::Value>,
+    #[serde(default)]
+    pub aux_calls: Option<i64>,
+}
+
+/// A descriptive pattern about token usage in a session or project.
+/// Generic over any LLM adapter — never names a specific model in code.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UsagePattern {
+    /// Stable id ("vague-prompts", "context-growth", ...).
+    pub id: String,
+    /// One of "warning" | "info" | "neutral". Drives card color in the UI.
+    pub kind: String,
+    pub title: String,
+    pub body: String,
+    pub action: Option<String>,
+}

@@ -113,7 +113,17 @@ pub async fn serve(state: Hifz, port: u16) -> Result<()> {
             "/plans/{id}/abandon",
             axum::routing::post(api::plan_abandon),
         )
-        .route("/digest", axum::routing::get(api::digest));
+        .route("/digest", axum::routing::get(api::digest))
+        .route("/usage", axum::routing::post(api::usage_record))
+        .route("/usage/batch", axum::routing::post(api::usage_record_batch))
+        .route(
+            "/usage/session/{session_id}",
+            axum::routing::get(api::usage_session),
+        )
+        .route(
+            "/usage/project/{project}",
+            axum::routing::get(api::usage_project),
+        );
 
     let api = Router::new()
         .nest("/api/v1", core_api)

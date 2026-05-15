@@ -301,4 +301,42 @@ DEFINE INDEX IF NOT EXISTS code_symbol_kind   ON TABLE code_symbol FIELDS projec
 DEFINE INDEX IF NOT EXISTS code_symbol_vec    ON TABLE code_symbol
   FIELDS embedding HNSW DIMENSION 384 DIST COSINE;
 
+-- === AGENT USAGE (generic, adapter-populated) ===
+-- One row per LLM inference call. Vendor-neutral: adapters map their own
+-- token-category fields into `breakdown` (a JSON object). The Claude Code
+-- adapter, for example, fills breakdown.cache_read and breakdown.cache_creation;
+-- a future OpenAI adapter would fill breakdown.cached_prompt. Top-level
+-- input/output/total cover the universal case.
+
+DEFINE TABLE IF NOT EXISTS agent_usage SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS session_id    ON agent_usage TYPE record<session>;
+DEFINE FIELD IF NOT EXISTS project       ON agent_usage TYPE string;
+DEFINE FIELD IF NOT EXISTS agent         ON agent_usage TYPE string;
+DEFINE FIELD IF NOT EXISTS provider      ON agent_usage TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS model         ON agent_usage TYPE string;
+DEFINE FIELD IF NOT EXISTS external_id   ON agent_usage TYPE string;
+DEFINE FIELD IF NOT EXISTS timestamp     ON agent_usage TYPE string;
+DEFINE FIELD IF NOT EXISTS input_tokens  ON agent_usage TYPE int DEFAULT 0;
+DEFINE FIELD IF NOT EXISTS output_tokens ON agent_usage TYPE int DEFAULT 0;
+DEFINE FIELD IF NOT EXISTS total_tokens  ON agent_usage TYPE int DEFAULT 0;
+DEFINE FIELD IF NOT EXISTS prompt        ON agent_usage TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS prompt_at     ON agent_usage TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS tools         ON agent_usage TYPE array<string> DEFAULT [];
+DEFINE FIELD IF NOT EXISTS run_id        ON agent_usage TYPE option<record<run>>;
+-- FLEXIBLE: `breakdown` holds adapter-defined keys (cache_read,
+-- cache_creation, ...) that aren't declared on this SCHEMAFULL table.
+-- Without FLEXIBLE, SurrealDB rejects every record that carries a
+-- breakdown — i.e. every cache-using Claude Code call.
+DEFINE FIELD IF NOT EXISTS breakdown     ON agent_usage TYPE option<object> FLEXIBLE;
+-- Per-file count of auxiliary Anthropic calls (ai-title, summary) that were
+-- billed but excluded from the JSONL transcript. The adapter stamps this on
+-- the FIRST emitted record of each file; the (agent, external_id) UNIQUE
+-- index makes re-ingestion of the same file idempotent.
+DEFINE FIELD IF NOT EXISTS aux_calls     ON agent_usage TYPE option<int>;
+DEFINE INDEX IF NOT EXISTS au_ext_uniq   ON TABLE agent_usage FIELDS agent, external_id UNIQUE;
+DEFINE INDEX IF NOT EXISTS au_session    ON TABLE agent_usage FIELDS session_id;
+DEFINE INDEX IF NOT EXISTS au_project    ON TABLE agent_usage FIELDS project;
+DEFINE INDEX IF NOT EXISTS au_ts         ON TABLE agent_usage FIELDS timestamp;
+DEFINE INDEX IF NOT EXISTS au_model      ON TABLE agent_usage FIELDS model;
+
 "#;

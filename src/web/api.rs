@@ -584,6 +584,49 @@ pub async fn export(
 }
 
 // -----------------------------------------------------------------------
+// Agent usage (generic LLM token tracking — adapter-populated)
+// -----------------------------------------------------------------------
+
+pub async fn usage_record(
+    State(state): State<AppState>,
+    Json(body): Json<crate::models::AgentUsageRecord>,
+) -> Json<serde_json::Value> {
+    json_or_err(state.usage_record(body).await)
+}
+
+#[derive(Deserialize)]
+pub struct UsageBatchReq {
+    pub records: Vec<crate::models::AgentUsageRecord>,
+}
+
+pub async fn usage_record_batch(
+    State(state): State<AppState>,
+    Json(body): Json<UsageBatchReq>,
+) -> Json<serde_json::Value> {
+    json_or_err(state.usage_record_batch(body.records).await)
+}
+
+pub async fn usage_session(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+) -> Json<serde_json::Value> {
+    json_or_err(state.usage_for_session(&session_id).await)
+}
+
+pub async fn usage_project(
+    State(state): State<AppState>,
+    Path(project): Path<String>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Json<serde_json::Value> {
+    let filters = crate::usage::ProjectFilters {
+        from: params.get("from").cloned(),
+        to: params.get("to").cloned(),
+        model: params.get("model").cloned(),
+    };
+    json_or_err(state.usage_for_project(&project, filters).await)
+}
+
+// -----------------------------------------------------------------------
 // Code dimension (M2+) — gated by `code` Cargo feature.
 // -----------------------------------------------------------------------
 

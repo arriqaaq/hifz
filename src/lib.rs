@@ -44,6 +44,7 @@ pub mod search;
 pub mod session;
 pub mod timeline;
 pub mod trace;
+pub mod usage;
 pub mod warmup;
 pub mod web;
 
@@ -908,6 +909,33 @@ impl Hifz {
             self.git_path.as_ref(),
         )
         .await
+    }
+
+    // --- Agent usage (generic LLM token tracking) ---
+    pub async fn usage_record(
+        &self,
+        rec: crate::models::AgentUsageRecord,
+    ) -> Result<crate::usage::IngestResult> {
+        crate::usage::record(&self.db, rec).await
+    }
+    pub async fn usage_record_batch(
+        &self,
+        records: Vec<crate::models::AgentUsageRecord>,
+    ) -> Result<crate::usage::IngestResult> {
+        crate::usage::record_batch(&self.db, records).await
+    }
+    pub async fn usage_for_session(
+        &self,
+        session_id: &str,
+    ) -> Result<crate::usage::SessionUsageView> {
+        crate::usage::for_session(&self.db, session_id).await
+    }
+    pub async fn usage_for_project(
+        &self,
+        project: &str,
+        filters: crate::usage::ProjectFilters,
+    ) -> Result<crate::usage::ProjectUsageView> {
+        crate::usage::for_project(&self.db, project, filters).await
     }
 
     /// Shared finalisation for `open_*`: schema migration, fastembed,

@@ -146,13 +146,53 @@ async fn insert_row(db: &Surreal<Db>, row: AgentUsageInsert) -> Result<IngestRes
 
 // SurrealDB doesn't surface typed errors for these two cases; string-match
 // is the pragmatic test. Lower-cases the error so we tolerate phrasing
-// drift between releases.
+// drift between releases. Note the index-violation phrasing in this rev is
+// `Database index `au_ext_uniq` already contains [...], with record ...` —
+// which contains neither "unique" (only "uniq") nor "already exists", hence
+// the explicit "already contains" / index-violation disjuncts below.
 fn is_unique_or_conflict(e: &surrealdb::Error) -> bool {
-    let msg = e.to_string().to_lowercase();
+    is_unique_or_conflict_msg(&e.to_string())
+}
+
+/// Message-level test, split out so it can be unit-tested without
+/// constructing a `surrealdb::Error`.
+fn is_unique_or_conflict_msg(raw: &str) -> bool {
+    let msg = raw.to_lowercase();
     msg.contains("unique")
         || msg.contains("transaction conflict")
         || msg.contains("write conflict")
         || msg.contains("already exists")
+        || msg.contains("already contains")
+        || (msg.contains("database index") && msg.contains("contains"))
+}
+
+#[cfg(test)]
+mod conflict_tests {
+    use super::is_unique_or_conflict_msg;
+
+    #[test]
+    fn recognizes_surrealdb_unique_index_violation() {
+        let msg = "Database index `au_ext_uniq` already contains \
+                   ['claude-code', 'msg_01XfzQqX2zEPdWEf4Bbci532'], \
+                   with record `agent_usage:rx8ls17u6o8eg2teyzey`";
+        assert!(is_unique_or_conflict_msg(msg));
+    }
+
+    #[test]
+    fn recognizes_classic_phrasings() {
+        assert!(is_unique_or_conflict_msg("Unique constraint violation"));
+        assert!(is_unique_or_conflict_msg("Transaction conflict"));
+        assert!(is_unique_or_conflict_msg("write conflict detected"));
+        assert!(is_unique_or_conflict_msg("record already exists"));
+    }
+
+    #[test]
+    fn ignores_unrelated_errors() {
+        assert!(!is_unique_or_conflict_msg("connection refused"));
+        assert!(!is_unique_or_conflict_msg(
+            "deserialization failed: missing field"
+        ));
+    }
 }
 
 /// Delete every usage row tied to a session. Provided for callers that want

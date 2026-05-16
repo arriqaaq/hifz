@@ -293,33 +293,61 @@ Two patterns:
 
 ### Claude Code (reference adapter)
 
-`.mcp.json` at the project root:
+The plugin is a **client** of a running hifz server, so the order matters:
+
+**1. Build the binary.** Nothing works until the binary exists:
+
+```bash
+cargo build --release      # → target/release/hifz
+# or: cargo build          # → target/debug/hifz (faster build, slower runtime)
+```
+
+**2. Register the MCP server.** `.mcp.json` at the project root. The `command` path must point at the binary you built in step 1 (`debug` vs `release` must match):
 
 ```json
 {
   "mcpServers": {
     "hifz": {
-      "command": "/absolute/path/to/hifz",
+      "command": "/absolute/path/to/target/release/hifz",
       "args": ["mcp"]
     }
   }
 }
 ```
 
-Install hooks and slash commands:
+**3. Start the server:**
+
+```bash
+./target/release/hifz serve --db-path ~/.hifz/data
+```
+
+**4. Install the plugin** (hooks + skills). Two ways — they do the same thing:
 
 ```
+# Interactive slash command, inside a Claude Code session:
 /plugin marketplace add /path/to/hifz/adapters/claude-code
 /plugin install hifz@hifz
 ```
 
-Optional auto-injection at session start, in `.claude/settings.local.json`:
+```bash
+# Shell subcommand — use this when /plugin is unavailable
+# (e.g. the VSCode/IDE extension, or when slash commands are disabled):
+claude plugin marketplace add /path/to/hifz/adapters/claude-code
+claude plugin install hifz@hifz
+claude plugin list                       # verify: hifz@hifz → enabled
+```
+
+Installing a plugin is a free, local config operation — it never consumes API credits. (A "credit balance too low" error is an unrelated account-billing issue for running Claude itself, not a charge for the plugin.)
+
+**5. Restart Claude Code.** Plugin hooks/skills and the MCP server load at startup. After restart, `/mcp` lists `hifz` and the skills below are available.
+
+**Optional** — auto-inject memory at session start, in `.claude/settings.local.json`:
 
 ```json
 { "env": { "HIFZ_INJECT_CONTEXT": "true" } }
 ```
 
-The adapter ships four slash commands — `/recall`, `/remember`, `/forget`, `/session-history` — and lifecycle hooks that auto-capture tool use, prompts, and session/run boundaries to `/observe`.
+The adapter ships four skills — `/recall`, `/remember`, `/forget`, `/session-history` — and lifecycle hooks that auto-capture tool use, prompts, and session/run boundaries to `/observe`.
 
 ---
 
@@ -340,9 +368,11 @@ cargo run --release --bin memory-bench -- base
 
 **Server not responding.** `curl http://localhost:3111/api/v1/health`. If it fails, the server isn't running — start it with `./target/release/hifz serve --db-path ~/.hifz/data`.
 
-**MCP not in Claude Code's `/mcp`.** Restart Claude Code so it picks up `.mcp.json`.
+**MCP not in Claude Code's `/mcp`.** Restart Claude Code so it picks up `.mcp.json`. Confirm the `command` path in `.mcp.json` matches the binary you actually built (`target/debug/hifz` vs `target/release/hifz`).
 
-**Adapter not auto-capturing.** Check `grep -A2 enabledPlugins ~/.claude/settings.json` — should include `"hifz@hifz": true`. Reinstall via `/plugin install hifz@hifz` if missing.
+**`/plugin` says "not available in this environment".** The interactive slash command is unavailable in the VSCode/IDE extension and when slash commands are disabled. Use the shell subcommand instead: `claude plugin marketplace add /path/to/hifz/adapters/claude-code` then `claude plugin install hifz@hifz`. Verify with `claude plugin list`.
+
+**Adapter not auto-capturing.** Check `grep -A2 enabledPlugins ~/.claude/settings.json` — should include `"hifz@hifz": true`. Reinstall via `/plugin install hifz@hifz` (or `claude plugin install hifz@hifz`) if missing.
 
 **Context not injected.** Ensure `HIFZ_INJECT_CONTEXT=true` in `.claude/settings.local.json`.
 

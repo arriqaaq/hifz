@@ -56,7 +56,20 @@ pub async fn observe(
         _ => {}
     }
 
-    // Dedup check
+    // Dedup check.
+    //
+    // The fingerprint must distinguish *meaningful* payload content per
+    // event type, otherwise unrelated events collide and all but the first
+    // within the TTL are silently dropped. In particular `prompt_submit`
+    // carries no tool_name/tool_input, so a tool-only fingerprint hashed
+    // every prompt in a session identically.
+    //
+    // - `dedup_kind` folds in `hook_type` so a prompt and a tool call can
+    //   never collide even if their content stringifies the same.
+    // - `dedup_content` uses tool_input when present (real tool calls),
+    //   else the prompt text (prompt_submit), else the raw data blob.
+    //   `tool_output` is deliberately excluded — it varies run-to-run and
+    //   would defeat genuine repeat-suppression (e.g. a retried command).
     let tool_name = payload
         .data
         .get("tool_name")
@@ -69,8 +82,22 @@ pub async fn observe(
         .or_else(|| payload.data.get("toolInput"))
         .map(|v| v.to_string())
         .unwrap_or_default();
-    let hash = DedupMap::compute_hash(&payload.session_id, tool_name, &tool_input_str);
+    let dedup_content = if !tool_input_str.is_empty() {
+        tool_input_str.clone()
+    } else if let Some(prompt) = payload.data.get("prompt").and_then(|v| v.as_str()) {
+        prompt.to_string()
+    } else {
+        payload.data.to_string()
+    };
+    let dedup_kind = format!("{}|{}", payload.hook_type, tool_name);
+    let hash = DedupMap::compute_hash(&payload.session_id, &dedup_kind, &dedup_content);
     if dedup.is_duplicate(&hash) {
+        tracing::info!(
+            session_id = %payload.session_id,
+            hook_type = %payload.hook_type,
+            hash_prefix = %&hash[..hash.len().min(12)],
+            "observation dropped as duplicate"
+        );
         return Ok(None);
     }
     dedup.record(hash);
@@ -123,25 +150,40 @@ pub async fn observe(
         }
     };
 
-    // Store in SurrealDB. Per-session monotonic `ord` allocated atomically
-    // inside the transaction; the `obs_session_ord` UNIQUE index is the final
-    // guard against any race between concurrent writers.
+    // Store in SurrealDB as a single `CREATE ... RETURN id` statement
+    // (mirrors the proven pattern in `run::start`). A wrapping
+    // multi-statement transaction was previously used to allocate `ord`,
+    // but its `RETURN $created` did not round-trip the created id in this
+    // SurrealDB rev — leaving `new_obs_id = None`, which silently skipped
+    // run-append + memory bridging and returned the title as `obs_id`.
+    //
+    // `ord` is allocated inline via `count()`; the `obs_session_ord` UNIQUE
+    // index is the race guard — on a lost race the CREATE fails with a
+    // unique violation and we retry (the inline `count()` recomputes the
+    // next ord).
     let session_rid = format!("session:{}", payload.session_id);
     let source = payload.source.clone().unwrap_or_else(|| "hook".to_string());
-    let parent_rid = payload.parent_obs_id.as_deref().map(|s| {
-        if s.contains(':') {
-            s.to_string()
+    // Only accept a parent that is a well-formed observation record id. A
+    // leaked non-id string (e.g. a title, back when id capture failed) must
+    // never reach `type::record` — it would violate the
+    // `parent_obs_id TYPE option<record<observation>>` schema and fail the
+    // entire CREATE (this was the root of zero PostToolUse observations).
+    // Anything malformed degrades to NONE rather than nuking the row.
+    let parent_rid: Option<String> = payload.parent_obs_id.as_deref().and_then(|s| {
+        let key = match s.strip_prefix("observation:") {
+            Some(k) => k,
+            None if !s.contains(':') => s,
+            None => return None,
+        };
+        if !key.is_empty() && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+            Some(format!("observation:{key}"))
         } else {
-            format!("observation:{s}")
+            None
         }
     });
-    let sql = "
-        BEGIN TRANSACTION;
-        LET $sess = type::record($session_rid);
-        LET $next = count(SELECT id FROM observation WHERE session_id = $sess);
-        LET $created = (CREATE observation SET
-            session_id    = $sess,
-            ord           = $next,
+    let sql = "CREATE observation SET
+            session_id    = type::record($session_rid),
+            ord           = count(SELECT id FROM observation WHERE session_id = type::record($session_rid)),
             parent_obs_id = IF $parent_rid = NONE THEN NONE ELSE type::record($parent_rid) END,
             source        = $source,
             timestamp     = $timestamp,
@@ -156,40 +198,72 @@ pub async fn observe(
             importance    = $importance,
             confidence    = $confidence,
             embedding     = $embedding
-          RETURN id, ord);
-        RETURN $created;
-        COMMIT TRANSACTION;
-    ";
+          RETURN id";
 
     #[derive(Debug, SurrealValue)]
     struct Created {
         id: Option<RecordId>,
     }
 
-    let response = db
-        .query(sql)
-        .bind(("session_rid", session_rid))
-        .bind(("parent_rid", parent_rid))
-        .bind(("source", source))
-        .bind(("timestamp", payload.timestamp.clone()))
-        .bind(("obs_type", compressed.obs_type.clone()))
-        .bind(("title", compressed.title.clone()))
-        .bind(("subtitle", compressed.subtitle.clone()))
-        .bind(("facts", compressed.facts.clone()))
-        .bind(("facts_text", facts_text.clone()))
-        .bind(("narrative", compressed.narrative.clone()))
-        .bind(("keywords", compressed.keywords.clone()))
-        .bind(("files", compressed.files.clone()))
-        .bind(("importance", compressed.importance))
-        .bind(("confidence", compressed.confidence))
-        .bind(("embedding", embedding.clone()))
-        .await?;
-    let mut response = response.check()?;
-    // Inside a transaction, only the explicit RETURN $created emits to the
-    // client (BEGIN/LET/COMMIT are silent), so the CREATE result lands at
-    // statement index 0.
-    let created: Vec<Created> = response.take(0).unwrap_or_default();
-    let new_obs_id = created.into_iter().next().and_then(|c| c.id);
+    // `obs_session_ord` UNIQUE collisions are expected under concurrent
+    // writers; retry a bounded number of times (the inline `count()`
+    // recomputes ord). Kept local — intentionally not shared with
+    // `usage::is_unique_or_conflict` so the modules stay decoupled.
+    fn is_ord_conflict(e: &anyhow::Error) -> bool {
+        let m = e.to_string().to_lowercase();
+        m.contains("unique")
+            || m.contains("already contains")
+            || m.contains("transaction conflict")
+            || m.contains("write conflict")
+            || m.contains("already exists")
+    }
+
+    let mut new_obs_id: Option<RecordId> = None;
+    for attempt in 0..4 {
+        let query_res = db
+            .query(sql)
+            .bind(("session_rid", session_rid.clone()))
+            .bind(("parent_rid", parent_rid.clone()))
+            .bind(("source", source.clone()))
+            .bind(("timestamp", payload.timestamp.clone()))
+            .bind(("obs_type", compressed.obs_type.clone()))
+            .bind(("title", compressed.title.clone()))
+            .bind(("subtitle", compressed.subtitle.clone()))
+            .bind(("facts", compressed.facts.clone()))
+            .bind(("facts_text", facts_text.clone()))
+            .bind(("narrative", compressed.narrative.clone()))
+            .bind(("keywords", compressed.keywords.clone()))
+            .bind(("files", compressed.files.clone()))
+            .bind(("importance", compressed.importance))
+            .bind(("confidence", compressed.confidence))
+            .bind(("embedding", embedding.clone()))
+            .await
+            .and_then(|r| r.check());
+        match query_res {
+            Ok(mut resp) => {
+                let created: Vec<Created> = resp.take(0).unwrap_or_default();
+                new_obs_id = created.into_iter().next().and_then(|c| c.id);
+                break;
+            }
+            Err(e) => {
+                let ae = anyhow::Error::new(e);
+                if is_ord_conflict(&ae) && attempt < 3 {
+                    tracing::debug!(
+                        "observation ord conflict (attempt {}), retrying",
+                        attempt + 1
+                    );
+                    continue;
+                }
+                return Err(ae);
+            }
+        }
+    }
+    if new_obs_id.is_none() {
+        tracing::warn!(
+            session_id = %payload.session_id,
+            "observation created but id not captured (all retries lost the ord race)"
+        );
+    }
 
     // Append to the open run (if any) for this session.
     if let Some(obs_id) = new_obs_id.as_ref() {
@@ -480,7 +554,11 @@ pub async fn search(
         ));
     }
     if params.project.is_some() {
-        conditions.push("project = $project".to_string());
+        // `project` lives on the linked `session` record, not on the
+        // observation row — traverse the non-optional `session_id`
+        // `record<session>` link. A dangling link (no such session)
+        // evaluates to NONE and is correctly excluded by the `=` predicate.
+        conditions.push("session_id.project = $project".to_string());
     }
     if let Some(ref types) = params.obs_type {
         let parts: Vec<String> = types

@@ -155,6 +155,214 @@ async fn library_round_trip_event_session_observe_memory() {
     h.session_end("s_lib_test").await.expect("session_end");
 }
 
+/// Bug 2 + 3a: every distinct prompt in a session must persist with a real
+/// `observation:<id>` (not the title), and must be appended to the open run.
+/// Pre-fix: the dedup hash collided on every prompt (only the first stored),
+/// and the transactional id capture returned None (title as obs_id, run
+/// append skipped).
+#[tokio::test]
+async fn bug2_3a_distinct_prompts_persist_with_real_ids_and_run_link() {
+    let h = Hifz::open_memory().await.expect("open in-memory hifz");
+    h.session_start(SessionStartReq {
+        session_id: "s_bug2".into(),
+        project: "/tmp/bug2".into(),
+        cwd: "/tmp/bug2".into(),
+    })
+    .await
+    .expect("session_start");
+
+    let mk = |prompt: &str| HookPayload {
+        hook_type: "UserPromptSubmit".into(),
+        session_id: "s_bug2".into(),
+        project: "/tmp/bug2".into(),
+        cwd: "/tmp/bug2".into(),
+        timestamp: now(),
+        source: Some("library_test".into()),
+        obs_type: Some("user_prompt".into()),
+        parent_obs_id: None,
+        data: serde_json::json!({ "prompt": prompt }),
+    };
+
+    let id_a = h
+        .observe(mk("alpha: investigate the widget subsystem"))
+        .await
+        .expect("observe alpha")
+        .expect("alpha prompt must be stored, not deduped");
+    let id_b = h
+        .observe(mk("beta: a completely different prompt about gadgets"))
+        .await
+        .expect("observe beta")
+        .expect("beta prompt must be stored, not deduped (Bug 3a)");
+
+    assert!(
+        id_a.starts_with("observation:"),
+        "obs_id must be a record id, got {id_a:?} (Bug 2)"
+    );
+    assert!(
+        id_b.starts_with("observation:"),
+        "obs_id must be a record id, got {id_b:?} (Bug 2)"
+    );
+    assert_ne!(id_a, id_b, "two distinct prompts must yield distinct ids");
+
+    let obs = h
+        .observations_search(ObservationsReq {
+            session_id: Some("s_bug2".into()),
+            ..Default::default()
+        })
+        .await
+        .expect("observations_search");
+    assert_eq!(
+        obs.get("count").and_then(|v| v.as_u64()),
+        Some(2),
+        "both prompt observations must be searchable (Bug 3a)"
+    );
+
+    // Run linkage proves the `if let Some(obs_id)` block executed — i.e.
+    // new_obs_id was actually captured (Bug 2).
+    let tree = h.session_tree("s_bug2").await.expect("session_tree");
+    let linked: usize = tree
+        .get("runs")
+        .and_then(|v| v.as_array())
+        .map(|runs| {
+            runs.iter()
+                .filter_map(|r| r.get("observation_ids").and_then(|v| v.as_array()))
+                .map(|a| a.len())
+                .sum()
+        })
+        .unwrap_or(0);
+    assert!(
+        linked >= 2,
+        "both observations must be appended to the open run (Bug 2), got {linked}"
+    );
+}
+
+/// Bug 3b: a malformed `parent_obs_id` (e.g. a leaked title with colons)
+/// must NOT fail the whole observation — it degrades to no parent. Pre-fix
+/// it was fed to `type::record` and violated the schema, dropping every
+/// PostToolUse observation.
+#[tokio::test]
+async fn bug3b_malformed_parent_does_not_drop_observation() {
+    let h = Hifz::open_memory().await.expect("open in-memory hifz");
+    h.session_start(SessionStartReq {
+        session_id: "s_bug3b".into(),
+        project: "/tmp/bug3b".into(),
+        cwd: "/tmp/bug3b".into(),
+    })
+    .await
+    .expect("session_start");
+
+    let prompt_id = h
+        .observe(HookPayload {
+            hook_type: "UserPromptSubmit".into(),
+            session_id: "s_bug3b".into(),
+            project: "/tmp/bug3b".into(),
+            cwd: "/tmp/bug3b".into(),
+            timestamp: now(),
+            source: Some("library_test".into()),
+            obs_type: Some("user_prompt".into()),
+            parent_obs_id: None,
+            data: serde_json::json!({ "prompt": "kick off the session" }),
+        })
+        .await
+        .expect("observe prompt")
+        .expect("prompt stored");
+    assert!(prompt_id.starts_with("observation:"));
+
+    // Valid parent → links fine.
+    h.observe(HookPayload {
+        hook_type: "PostToolUse".into(),
+        session_id: "s_bug3b".into(),
+        project: "/tmp/bug3b".into(),
+        cwd: "/tmp/bug3b".into(),
+        timestamp: now(),
+        source: Some("library_test".into()),
+        obs_type: Some("file_read".into()),
+        parent_obs_id: Some(prompt_id),
+        data: serde_json::json!({ "tool_name": "Read", "tool_input": { "file_path": "/a" } }),
+    })
+    .await
+    .expect("observe with valid parent")
+    .expect("valid-parent tool obs stored");
+
+    // Malformed parent (leaked title with colons) → must still store.
+    let bogus = h
+        .observe(HookPayload {
+            hook_type: "PostToolUse".into(),
+            session_id: "s_bug3b".into(),
+            project: "/tmp/bug3b".into(),
+            cwd: "/tmp/bug3b".into(),
+            timestamp: now(),
+            source: Some("library_test".into()),
+            obs_type: Some("file_read".into()),
+            parent_obs_id: Some("Prompt: <ide_opened_file> /tmp/x:y (junk):with:colons".into()),
+            data: serde_json::json!({ "tool_name": "Read", "tool_input": { "file_path": "/b" } }),
+        })
+        .await
+        .expect("observe with malformed parent must not error (Bug 3b)")
+        .expect("malformed-parent tool obs must still be stored (Bug 3b)");
+    assert!(
+        bogus.starts_with("observation:"),
+        "malformed parent must degrade to NONE, not drop the row, got {bogus:?}"
+    );
+}
+
+/// Bug 1: the project filter on `observations_search` must scope by the
+/// linked session's project (`session_id.project`), not a non-existent
+/// `project` field on the observation row.
+#[tokio::test]
+async fn bug1_observations_project_filter_traverses_session() {
+    let h = Hifz::open_memory().await.expect("open in-memory hifz");
+    for (sid, proj) in [("s_pa", "/tmp/projA"), ("s_pb", "/tmp/projB")] {
+        h.session_start(SessionStartReq {
+            session_id: sid.into(),
+            project: proj.into(),
+            cwd: proj.into(),
+        })
+        .await
+        .expect("session_start");
+        h.observe(HookPayload {
+            hook_type: "UserPromptSubmit".into(),
+            session_id: sid.into(),
+            project: proj.into(),
+            cwd: proj.into(),
+            timestamp: now(),
+            source: Some("library_test".into()),
+            obs_type: Some("user_prompt".into()),
+            parent_obs_id: None,
+            data: serde_json::json!({ "prompt": format!("prompt in {proj}") }),
+        })
+        .await
+        .expect("observe")
+        .expect("stored");
+    }
+
+    let only_a = h
+        .observations_search(ObservationsReq {
+            project: Some("/tmp/projA".into()),
+            ..Default::default()
+        })
+        .await
+        .expect("observations_search projA");
+    assert_eq!(
+        only_a.get("count").and_then(|v| v.as_u64()),
+        Some(1),
+        "project filter must return only projA's observation (Bug 1)"
+    );
+
+    let unfiltered = h
+        .observations_search(ObservationsReq::default())
+        .await
+        .expect("observations_search all");
+    assert!(
+        unfiltered
+            .get("count")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0)
+            >= 2,
+        "unfiltered search must see both observations"
+    );
+}
+
 #[tokio::test]
 async fn library_idempotent_open_runs_schema_migration() {
     // Opening twice on different in-memory DBs should both succeed and run migrations cleanly.

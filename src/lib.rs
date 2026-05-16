@@ -937,6 +937,12 @@ impl Hifz {
     ) -> Result<crate::usage::ProjectUsageView> {
         crate::usage::for_project(&self.db, project, filters).await
     }
+    pub async fn usage_session_totals(
+        &self,
+        project: Option<&str>,
+    ) -> Result<Vec<crate::usage::aggregate::SessionRow>> {
+        crate::usage::session_totals(&self.db, project).await
+    }
 
     /// Shared finalisation for `open_*`: schema migration, fastembed,
     /// optional Ollama, git path, config.

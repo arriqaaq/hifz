@@ -24,11 +24,26 @@ const AUX_ENTRY_TYPES = new Set(["ai-title", "summary"]);
  * @param {string} [opts.cwd]        cwd of the session (used as fallback project).
  * @returns {Promise<{records: object[], untrackedAuxCount: number}>}
  */
+// hifz keys Claude Code sessions by the FIRST dash-segment of the UUID, not
+// the full UUID. This isn't a hifz design choice — `session::start` runs
+// `CREATE type::record("session:<uuid>")` and SurrealDB's record-id parser
+// stops the unquoted id at the first `-`, so `5a8bca58-f11a-...` is stored
+// as `session:5a8bca58`. Observations/runs all link by that short key.
+// The token records MUST use the same key or they won't join the session
+// row (the /sessions/[id] panel and project rollup would show nothing).
+// Keep this Claude-ism in the adapter — hifz core stays vendor-neutral.
+export function normalizeSessionId(id) {
+  const s = String(id ?? "").replace(/^session:/, "");
+  const seg = s.split("-")[0];
+  return seg || s;
+}
+
 export async function parseTranscript(path, opts = {}) {
   const lines = await readJsonl(path);
 
-  const inferredSession =
-    opts.sessionId || path.split("/").pop().replace(/\.jsonl$/, "");
+  const inferredSession = normalizeSessionId(
+    opts.sessionId || path.split("/").pop().replace(/\.jsonl$/, ""),
+  );
 
   // Pass 1: index entries by uuid; collect eligible-prompt entries; count
   // auxiliary calls (ai-title, summary) Anthropic billed but didn't put a
@@ -111,7 +126,8 @@ export async function parseTranscript(path, opts = {}) {
       // Subagent JSONL files carry the parent session id on each row;
       // fall back to the caller-supplied / filename-inferred id when
       // entry.sessionId is missing (typical for top-level transcripts).
-      session_id: entry.sessionId ?? inferredSession,
+      // Normalize to hifz's short key so the row joins the session record.
+      session_id: normalizeSessionId(entry.sessionId ?? inferredSession),
       project: opts.project ?? opts.cwd ?? entry.cwd ?? "global",
       agent: "claude-code",
       provider: "anthropic",

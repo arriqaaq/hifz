@@ -626,6 +626,20 @@ pub async fn usage_project(
     json_or_err(state.usage_for_project(&project, filters).await)
 }
 
+/// Per-session token totals, uncapped. Optional `?project=` scopes to one
+/// project; absent = every session with usage data (the `/sessions` list
+/// spans projects). Returns `{ sessions: [...] }`.
+pub async fn usage_sessions(
+    State(state): State<AppState>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Json<serde_json::Value> {
+    let project = params.get("project").map(|s| s.as_str());
+    match state.usage_session_totals(project).await {
+        Ok(sessions) => Json(serde_json::json!({ "sessions": sessions })),
+        Err(e) => Json(serde_json::json!({ "error": e.to_string() })),
+    }
+}
+
 // -----------------------------------------------------------------------
 // Code dimension (M2+) — gated by `code` Cargo feature.
 // -----------------------------------------------------------------------

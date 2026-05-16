@@ -3,7 +3,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { getHealth } from '$lib/api';
-  import { Layers, Workflow, Activity, Brain, GitCommit, Search } from 'lucide-svelte';
+  import { Layers, Workflow, Activity, Brain, GitCommit, Coins, Search } from 'lucide-svelte';
   import { shell } from '$lib/stores/shell.svelte';
 
   let counts = $state({
@@ -93,6 +93,10 @@
 
     <div class="section">
       <div class="section-h">Tools</div>
+      <a href="/tokens" class="link" class:active={page.url.pathname.startsWith('/tokens')}>
+        <span class="link-icon" style="color: var(--ink-muted)"><Coins size={14} strokeWidth={1.7} /></span>
+        <span class="link-label">Tokens</span>
+      </a>
       <a href="/graph" class="link" class:active={page.url.pathname.startsWith('/graph')}>
         <span class="link-icon" style="color: var(--ink-muted)">⬡</span>
         <span class="link-label">Knowledge graph</span>

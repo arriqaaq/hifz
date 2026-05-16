@@ -16,7 +16,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 
-import { parseTranscript } from "./parse-transcript.mjs";
+import { parseTranscript, normalizeSessionId } from "./parse-transcript.mjs";
 
 const REST_URL = process.env["HIFZ_URL"] || "http://localhost:3111";
 
@@ -72,7 +72,11 @@ async function main() {
 
     for (const { path: filePath, sessionId } of entries) {
       filesScanned += 1;
-      if (trackedSet && !trackedSet.has(sessionId)) continue;
+      // hifz keys sessions by the first UUID dash-segment (see
+      // normalizeSessionId); the transcript filename is the full UUID.
+      // Compare on the normalized key or every file is filtered out.
+      const shortId = normalizeSessionId(sessionId);
+      if (trackedSet && !trackedSet.has(shortId)) continue;
 
       // If --project was passed, filter by matching project string. We don't
       // know the project from the directory name alone; ask hifz instead.
@@ -80,14 +84,14 @@ async function main() {
       try {
         parsed = await parseTranscript(filePath, { sessionId });
       } catch (e) {
-        console.error(`  skip ${sessionId}: parse error (${e.message ?? e})`);
+        console.error(`  skip ${shortId}: parse error (${e.message ?? e})`);
         continue;
       }
       const { records } = parsed;
       if (records.length === 0) continue;
 
       // Override the project field if we have the hifz session's project.
-      const project = trackedProject(trackedSet, sessionId, proj);
+      const project = trackedProject(trackedSet, shortId, proj);
       for (const r of records) {
         if (project) r.project = project;
       }
@@ -214,9 +218,16 @@ async function fetchTrackedSessions() {
   }
 }
 
-function trackedProject(map, sessionId, fallbackDirName) {
-  if (!map) return fallbackDirName ?? null;
-  return map.get(sessionId) ?? fallbackDirName ?? null;
+// Returns the hifz session's real project path ONLY when we matched a
+// tracked session. The directory-name fallback is deliberately NOT used:
+// Claude encodes the cwd as a mangled dir name (`-Users-…-hifz`), which
+// would corrupt the project key. Returning null lets the caller's
+// `if (project) r.project = project` guard fall through to
+// parse-transcript's `entry.cwd` — the authoritative absolute path from
+// the JSONL itself.
+function trackedProject(map, sessionId, _fallbackDirName) {
+  if (!map) return null;
+  return map.get(sessionId) ?? null;
 }
 
 function extractSessionId(s) {

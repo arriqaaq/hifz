@@ -297,6 +297,24 @@ pub async fn for_project(
     })
 }
 
+/// Per-session token totals, uncapped. Drives the `/sessions` list column
+/// (which spans projects). `project=None` returns every session that has
+/// usage data; `Some(p)` scopes to one project. Reuses `top_sessions`
+/// with no cap so the row shape (session_id short-key, first_prompt,
+/// total, calls, model, date) matches the dashboard's existing type.
+pub async fn session_totals(
+    db: &Surreal<Db>,
+    project: Option<&str>,
+) -> Result<Vec<aggregate::SessionRow>> {
+    let calls = match project {
+        Some(p) if !p.is_empty() => {
+            aggregate::calls_for_project(db, p, &ProjectFilters::default()).await?
+        }
+        _ => aggregate::calls_all(db).await?,
+    };
+    Ok(aggregate::top_sessions(&calls, usize::MAX))
+}
+
 // --- internals ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]

@@ -290,6 +290,26 @@ pub async fn calls_for_project(
     Ok(rows)
 }
 
+/// Every usage row across all projects (no project filter). Powers the
+/// `/sessions` list column, which spans projects. Same projection as
+/// `calls_for_project` so the in-memory rollups can be reused unchanged.
+pub async fn calls_all(db: &Surreal<Db>) -> Result<Vec<UsageCallRow>> {
+    let mut resp = db
+        .query(
+            "SELECT
+                record::id(id) AS id,
+                record::id(session_id) AS session_id,
+                project, agent, model, external_id, timestamp,
+                input_tokens, output_tokens, total_tokens,
+                prompt, tools, breakdown, aux_calls
+             FROM agent_usage
+             ORDER BY timestamp ASC;",
+        )
+        .await?;
+    let rows: Vec<UsageCallRow> = resp.take(0).unwrap_or_default();
+    Ok(rows)
+}
+
 // --- in-memory rollups ---
 
 pub fn sum_calls(calls: &[UsageCallRow]) -> TokenTotals {

@@ -419,3 +419,15 @@ export function fetchProjectUsage(
     : `${AGENT}/usage/project/${encodeURIComponent(project)}`;
   return get(url);
 }
+
+/** Per-session token totals, uncapped. Optional project scopes to one
+ *  project; omit for every session with usage data. Drives the Tokens
+ *  column on the /sessions list. */
+export function fetchSessionTotals(
+  project?: string,
+): Promise<{ sessions: UsageSessionRow[] }> {
+  const url = project
+    ? `${AGENT}/usage/sessions?project=${encodeURIComponent(project)}`
+    : `${AGENT}/usage/sessions`;
+  return get(url);
+}

@@ -50,17 +50,16 @@ async function main() {
 	const sessionId = data.session_id || `ses_${Date.now().toString(36)}`;
 	const project = data.cwd || process.cwd();
 	try {
-		// Step 1: register the session (existing behavior).
-		await fetch(`${REST_URL}/api/v1/agent/sessions`, {
-			method: "POST",
-			headers: HEADERS,
-			body: JSON.stringify({ sessionId, project, cwd: project }),
-			signal: AbortSignal.timeout(5e3),
-		});
+		// NOTE: we deliberately do NOT register the session here. The
+		// server lazily creates the session row (observe::ensure_session)
+		// on the first real observation, so a SessionStart with no
+		// follow-up activity (startup/resume/clear/compact churn) never
+		// leaves an empty "ghost" session row.
 
-		// Step 2 (Phase 3.1): pull the project-scoped warmup digest and
-		// inject as system context. Failure here is silent — warmup is
-		// a nice-to-have, not a session-blocker.
+		// Pull the project-scoped warmup digest and inject as system
+		// context. Failure here is silent — warmup is a nice-to-have,
+		// not a session-blocker, and is project-scoped (no session row
+		// required).
 		if (INJECT_CONTEXT) {
 			const warmupRes = await fetch(
 				`${REST_URL}/api/v1/agent/sessions/${encodeURIComponent(sessionId)}/warmup?project=${encodeURIComponent(project)}&top_n=${WARMUP_TOP_N}`,

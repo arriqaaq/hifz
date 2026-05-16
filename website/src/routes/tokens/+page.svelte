@@ -22,7 +22,10 @@
       const res = await getSessions(200);
       const set = new Set<string>();
       for (const s of res.sessions ?? []) {
-        if (s?.project) set.add(projectName(s.project));
+        // Keep the FULL project path — that's the key agent_usage rows are
+        // stored under (hifz uses the cwd path, not the basename). The
+        // dropdown shows only the basename via projectName() as a label.
+        if (s?.project) set.add(s.project);
       }
       projects = Array.from(set).sort();
       project = projects[0] ?? '';
@@ -86,7 +89,7 @@
     <span class="control-label">Project</span>
     <select bind:value={project} onchange={load}>
       {#each projects as p}
-        <option value={p}>{p}</option>
+        <option value={p}>{projectName(p)}</option>
       {/each}
     </select>
   </label>
@@ -121,6 +124,10 @@
   </div>
 {:else if view}
   <StatCards totals={view.totals} callCount={view.call_count} sessionCount={view.session_count} dateRange={view.date_range} />
+  <div class="card">
+    <h3>Top sessions by tokens</h3>
+    <TopSessionsTable rows={view.top_sessions} />
+  </div>
   <div class="charts">
     <div class="card">
       <h3>Daily tokens</h3>
@@ -135,10 +142,6 @@
   <div class="card">
     <h3>Top 20 most expensive prompts</h3>
     <TopPromptsTable rows={view.top_prompts} />
-  </div>
-  <div class="card">
-    <h3>Top sessions by tokens</h3>
-    <TopSessionsTable rows={view.top_sessions} />
   </div>
 {/if}
 

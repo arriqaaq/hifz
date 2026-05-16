@@ -31,14 +31,6 @@ async fn library_round_trip_event_session_observe_memory() {
         Some("s_lib_test")
     );
 
-    let listed = h.sessions_list(10).await.expect("sessions_list");
-    let count = listed
-        .get("sessions")
-        .and_then(|v| v.as_array())
-        .map(|a| a.len())
-        .unwrap_or(0);
-    assert!(count >= 1, "sessions_list should include the new session");
-
     // --- Observations via /observe ---
     // After the schema trim, `observation` is the single ordered log per
     // session (with monotonic `ord` and optional `parent_obs_id`). The old
@@ -59,6 +51,20 @@ async fn library_round_trip_event_session_observe_memory() {
         .await
         .expect("observe")
         .expect("prompt observation should be stored, not deduped");
+
+    // sessions_list is asserted AFTER the first observation: empty
+    // ("ghost") sessions are now filtered out of session::list, so a
+    // session only appears once it has real activity.
+    let listed = h.sessions_list(10).await.expect("sessions_list");
+    let count = listed
+        .get("sessions")
+        .and_then(|v| v.as_array())
+        .map(|a| a.len())
+        .unwrap_or(0);
+    assert!(
+        count >= 1,
+        "sessions_list should include the active session"
+    );
 
     // Second observation parented to the first — proves the new field travels
     // through the pipeline and the ord allocator increments monotonically.

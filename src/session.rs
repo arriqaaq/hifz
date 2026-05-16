@@ -91,9 +91,14 @@ pub async fn get(db: &Surreal<Db>, id: &str) -> Result<serde_json::Value> {
 
 /// List sessions, newest first.
 pub async fn list(db: &Surreal<Db>, limit: usize) -> Result<serde_json::Value> {
+    // `observation_count > 0` hides empty "ghost" sessions (a SessionStart
+    // with no follow-up activity). Real sessions always have ≥1 observation
+    // (the prompt that started them) and the count only increments, so this
+    // only ever filters ghosts — never a session with real activity.
     let mut resp = db
         .query(format!(
-            "SELECT * FROM session ORDER BY started_at DESC LIMIT {limit}"
+            "SELECT * FROM session WHERE observation_count > 0 \
+             ORDER BY started_at DESC LIMIT {limit}"
         ))
         .await?;
     let sessions: Vec<serde_json::Value> = resp.take(0).unwrap_or_default();

@@ -116,6 +116,7 @@ pub async fn serve(state: Hifz, port: u16) -> Result<()> {
         .route("/digest", axum::routing::get(api::digest))
         .route("/usage", axum::routing::post(api::usage_record))
         .route("/usage/batch", axum::routing::post(api::usage_record_batch))
+        .route("/usage/sessions", axum::routing::get(api::usage_sessions))
         .route(
             "/usage/session/{session_id}",
             axum::routing::get(api::usage_session),

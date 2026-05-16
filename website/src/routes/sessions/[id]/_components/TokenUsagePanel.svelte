@@ -69,11 +69,12 @@
     <div class="placeholder error">{error}</div>
   {:else if !view || view.call_count === 0}
     <div class="placeholder">
-      <strong>No token data for this session.</strong>
+      <strong>No recorded token data for this session.</strong>
       <div class="hint">
-        Either this session pre-dates the token tracker, or the Stop hook
-        hasn't fired yet. The backfill script imports history:
-        <code>node adapters/claude-code/scripts/backfill-tokens.mjs</code>
+        This session predates the token tracker or hasn't been backfilled —
+        nothing is wrong. New sessions populate automatically; to import
+        history run
+        <code>node adapters/claude-code/scripts/backfill-tokens.mjs --include-untracked</code>
       </div>
     </div>
   {:else if view}

@@ -1,14 +1,22 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getSessions } from '$lib/api';
+  import { getSessions, fetchSessionTotals } from '$lib/api';
   import type { Session } from '$lib/types';
   import LoadingSpinner from '$lib/components/common/LoadingSpinner.svelte';
   import EntityChip from '$lib/components/entity/EntityChip.svelte';
 
   let allSessions = $state<Session[]>([]);
+  let tokenMap = $state<Map<string, number>>(new Map());
   let loading = $state(true);
   let error = $state('');
   let searchQuery = $state('');
+
+  function fmtTokens(n: number): string {
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+    if (n >= 10_000) return `${Math.round(n / 1_000)}K`;
+    if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+    return n.toLocaleString();
+  }
 
   let filteredSessions = $derived(() => {
     if (!searchQuery.trim()) return allSessions;
@@ -24,6 +32,16 @@
     try {
       const res = await getSessions(100);
       allSessions = res.sessions;
+      // Per-session token totals span all projects; one lightweight fetch.
+      // Keyed by the short session id (matches extractId(s.id)).
+      try {
+        const t = await fetchSessionTotals();
+        const m = new Map<string, number>();
+        for (const r of t.sessions ?? []) m.set(r.session_id, r.total);
+        tokenMap = m;
+      } catch {
+        // Token data is optional — leave the column showing —.
+      }
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load';
     } finally {
@@ -96,6 +114,7 @@
           <th>Name</th>
           <th>Status</th>
           <th>Observations</th>
+          <th>Tokens</th>
           <th>Duration</th>
           <th>Date</th>
         </tr>
@@ -114,6 +133,7 @@
               {/if}
             </td>
             <td class="mono">{s.observation_count}</td>
+            <td class="mono">{tokenMap.has(extractId(s.id)) ? fmtTokens(tokenMap.get(extractId(s.id))!) : '—'}</td>
             <td class="mono">{duration(s.started_at, s.ended_at)}</td>
             <td class="mono faint">{formatDate(s.started_at)} {formatTime(s.started_at)}</td>
           </tr>

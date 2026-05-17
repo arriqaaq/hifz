@@ -197,7 +197,8 @@ pub async fn observe(
             files         = $files,
             importance    = $importance,
             confidence    = $confidence,
-            embedding     = $embedding
+            embedding     = $embedding,
+            metadata      = $metadata
           RETURN id";
 
     #[derive(Debug, SurrealValue)]
@@ -237,6 +238,7 @@ pub async fn observe(
             .bind(("importance", compressed.importance))
             .bind(("confidence", compressed.confidence))
             .bind(("embedding", embedding.clone()))
+            .bind(("metadata", compressed.metadata.clone()))
             .await
             .and_then(|r| r.check());
         match query_res {
@@ -304,7 +306,16 @@ pub async fn observe(
     //     BM25-matches an open Bug/Plan/Decision, the commit closes the loop
     //     for that memory)
     if compressed.obs_type == "commit_made" {
-        let _ = ground::on_commit_observation(db, &payload.project, &compressed.files).await;
+        // Polarity-aware grounding: a non-revert add/modify confirms
+        // (strengthens) the touched memories; a revert/deletion contradicts
+        // (weakens) them. Backward-compatible: no `metadata` ⇒ all-add /
+        // no-revert ⇒ identical to the prior boost-only behavior.
+        let sig =
+            ground::CommitSignal::from_metadata(compressed.metadata.as_ref(), &compressed.files);
+        match ground::on_commit_signal(db, &payload.project, &sig).await {
+            Ok(r) => tracing::debug!(?sig, ?r, "ground::on_commit_signal ok"),
+            Err(e) => tracing::warn!(?sig, "ground::on_commit_signal failed: {e}"),
+        }
         if let Some(obs_id) = new_obs_id.as_ref() {
             if let Ok(Some(run_id)) = run::find_open(db, &payload.session_id).await {
                 let _ = link::upsert_edge(
@@ -318,13 +329,20 @@ pub async fn observe(
                 )
                 .await;
             }
-            let commit_msg = compressed
-                .narrative
-                .lines()
-                .next()
-                .unwrap_or(&compressed.title)
-                .to_string();
-            link_commit_to_open_memories(db, obs_id, &payload.project, &commit_msg).await;
+            // A revert ("Revert \"fix X\"") must NOT BM25-match and falsely
+            // `commits_for`/close the very bug/plan it undoes (Burhan
+            // Claim 3). Skip the linker entirely on reverts.
+            if sig.is_revert {
+                tracing::debug!("commit is a revert; skipping commits_for linking");
+            } else {
+                let commit_msg = compressed
+                    .narrative
+                    .lines()
+                    .next()
+                    .unwrap_or(&compressed.title)
+                    .to_string();
+                link_commit_to_open_memories(db, obs_id, &payload.project, &commit_msg).await;
+            }
         }
     }
 

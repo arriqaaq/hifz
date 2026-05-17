@@ -45,6 +45,7 @@ async fn library_round_trip_event_session_observe_memory() {
         obs_type: Some("user_prompt".into()),
         parent_obs_id: None,
         data: serde_json::json!({"prompt": "what does library_api test do"}),
+        metadata: None,
     };
     let prompt_obs_id = h
         .observe(payload)
@@ -78,6 +79,7 @@ async fn library_round_trip_event_session_observe_memory() {
         obs_type: Some("file_read".into()),
         parent_obs_id: Some(prompt_obs_id),
         data: serde_json::json!({"tool_name": "Read", "tool_input": {"file_path": "/tmp/x"}}),
+        metadata: None,
     };
     let _ = h.observe(child).await.expect("observe child");
 
@@ -187,6 +189,7 @@ async fn bug2_3a_distinct_prompts_persist_with_real_ids_and_run_link() {
         obs_type: Some("user_prompt".into()),
         parent_obs_id: None,
         data: serde_json::json!({ "prompt": prompt }),
+        metadata: None,
     };
 
     let id_a = h
@@ -268,6 +271,7 @@ async fn bug3b_malformed_parent_does_not_drop_observation() {
             obs_type: Some("user_prompt".into()),
             parent_obs_id: None,
             data: serde_json::json!({ "prompt": "kick off the session" }),
+            metadata: None,
         })
         .await
         .expect("observe prompt")
@@ -285,6 +289,7 @@ async fn bug3b_malformed_parent_does_not_drop_observation() {
         obs_type: Some("file_read".into()),
         parent_obs_id: Some(prompt_id),
         data: serde_json::json!({ "tool_name": "Read", "tool_input": { "file_path": "/a" } }),
+        metadata: None,
     })
     .await
     .expect("observe with valid parent")
@@ -302,6 +307,7 @@ async fn bug3b_malformed_parent_does_not_drop_observation() {
             obs_type: Some("file_read".into()),
             parent_obs_id: Some("Prompt: <ide_opened_file> /tmp/x:y (junk):with:colons".into()),
             data: serde_json::json!({ "tool_name": "Read", "tool_input": { "file_path": "/b" } }),
+            metadata: None,
         })
         .await
         .expect("observe with malformed parent must not error (Bug 3b)")
@@ -336,6 +342,7 @@ async fn bug1_observations_project_filter_traverses_session() {
             obs_type: Some("user_prompt".into()),
             parent_obs_id: None,
             data: serde_json::json!({ "prompt": format!("prompt in {proj}") }),
+            metadata: None,
         })
         .await
         .expect("observe")
@@ -376,4 +383,234 @@ async fn library_idempotent_open_runs_schema_migration() {
     drop(h1);
     let h2 = Hifz::open_memory().await.expect("second open");
     let _ = h2.health().await.expect("health on second open");
+}
+
+// ---------------------------------------------------------------------------
+// Phase 1: polarity-aware grounding (revert → contradict) + revert guard.
+// These exercise the full ingestion path: adapter `metadata` →
+// HookPayload.metadata → CompressResult → observation row → ground.rs.
+// ---------------------------------------------------------------------------
+
+fn commit_made_payload(
+    session: &str,
+    project: &str,
+    sha: &str,
+    message: &str,
+    file_status: &[(&str, &str)],
+    is_revert: bool,
+) -> HookPayload {
+    let files: Vec<String> = file_status.iter().map(|(p, _)| p.to_string()).collect();
+    let fs: Vec<serde_json::Value> = file_status
+        .iter()
+        .map(|(p, s)| serde_json::json!({ "path": p, "status": s }))
+        .collect();
+    HookPayload {
+        hook_type: "PostToolUse".into(),
+        session_id: session.into(),
+        project: project.into(),
+        cwd: project.into(),
+        timestamp: now(),
+        source: Some("test".into()),
+        obs_type: Some("commit_made".into()),
+        parent_obs_id: None,
+        // The unique sha in the command keeps the dedup fingerprint distinct
+        // across multiple commits in one session.
+        data: serde_json::json!({
+            "tool_name": "Bash",
+            "tool_input": { "command": format!("git commit -m '{message}'  # {sha}") }
+        }),
+        metadata: Some(serde_json::json!({
+            "sha": sha,
+            "branch": "main",
+            "message": message,
+            "files": files,
+            "file_status": fs,
+            "is_revert": is_revert,
+            "reverts_sha": serde_json::Value::Null,
+        })),
+    }
+}
+
+async fn strength_of(h: &Hifz, project: &str, title: &str) -> Option<f64> {
+    let res = h
+        .memories_search(MemoriesReq {
+            project: Some(project.into()),
+            ..Default::default()
+        })
+        .await
+        .expect("memories_search");
+    res.get("memories")
+        .and_then(|v| v.as_array())
+        .and_then(|arr| {
+            arr.iter()
+                .find(|m| m.get("title").and_then(|t| t.as_str()) == Some(title))
+                .and_then(|m| m.get("strength").and_then(|s| s.as_f64()))
+        })
+}
+
+/// A revert weakens the memory it undid — unconditionally (no flag). Then a
+/// subsequent non-revert commit on the same file *boosts* it back up,
+/// clamped ≤ 1.0 (proves the `math::min([..])` array-form clamp works).
+#[tokio::test]
+async fn phase1_revert_weakens_then_confirm_boosts() {
+    let h = Hifz::open_memory().await.expect("open in-memory hifz");
+    let project = "/tmp/ground";
+    h.session_start(SessionStartReq {
+        session_id: "s_ground".into(),
+        project: project.into(),
+        cwd: project.into(),
+    })
+    .await
+    .expect("session_start");
+
+    h.remember(RememberReq {
+        title: "JWT decision".into(),
+        content: "Use JWT for auth in src/auth.rs.".into(),
+        category: Some("decision".into()),
+        files: Some(vec!["src/auth.rs".into()]),
+        project: Some(project.into()),
+        ..Default::default()
+    })
+    .await
+    .expect("remember");
+    assert_eq!(
+        strength_of(&h, project, "JWT decision").await,
+        Some(1.0),
+        "fresh memory starts at strength 1.0"
+    );
+
+    // Revert → weaken 1.0 → 0.5, unconditionally (no env, no flag).
+    h.observe(commit_made_payload(
+        "s_ground",
+        project,
+        "deadbee1",
+        "Revert \"use JWT for auth\"",
+        &[("src/auth.rs", "M")],
+        true,
+    ))
+    .await
+    .expect("observe revert");
+    assert_eq!(
+        strength_of(&h, project, "JWT decision").await,
+        Some(0.5),
+        "a revert must weaken strength by the 0.5 factor, no flag required"
+    );
+
+    // Non-revert commit on the same file → boost 0.5 × 1.15 = 0.575,
+    // clamped ≤ 1.0 (exercises the array-form math::min clamp).
+    h.observe(commit_made_payload(
+        "s_ground",
+        project,
+        "feedface",
+        "use JWT for auth (reinstated)",
+        &[("src/auth.rs", "M")],
+        false,
+    ))
+    .await
+    .expect("observe confirm");
+    let boosted = strength_of(&h, project, "JWT decision").await.unwrap();
+    assert!(
+        (boosted - 0.575).abs() < 1e-6,
+        "confirm must boost 0.5 → 0.575 (got {boosted}); proves the clamp query runs"
+    );
+    assert!(boosted <= 1.0, "boost must stay clamped ≤ 1.0");
+}
+
+/// A revert commit must NOT BM25-match and falsely `commits_for` the very
+/// bug/plan it undoes; a normal commit with the same message still links.
+#[tokio::test]
+async fn phase1_revert_suppresses_false_commits_for() {
+    let h = Hifz::open_memory().await.expect("open in-memory hifz");
+    let project = "/tmp/cf";
+    h.session_start(SessionStartReq {
+        session_id: "s_cf".into(),
+        project: project.into(),
+        cwd: project.into(),
+    })
+    .await
+    .expect("session_start");
+
+    let bug = h
+        .remember(RememberReq {
+            title: "fix the auth token crash".into(),
+            content: "Auth token parsing panics on empty header.".into(),
+            category: Some("bug".into()),
+            files: Some(vec!["src/auth.rs".into()]),
+            project: Some(project.into()),
+            ..Default::default()
+        })
+        .await
+        .expect("remember bug");
+    let bug_id = bug.get("id").and_then(|v| v.as_str()).unwrap().to_string();
+
+    // Revert commit whose message matches the bug — must be SKIPPED.
+    h.observe(commit_made_payload(
+        "s_cf",
+        project,
+        "rev00001",
+        "Revert \"fix the auth token crash\"",
+        &[("src/auth.rs", "M")],
+        true,
+    ))
+    .await
+    .expect("observe revert");
+    let after_revert = h
+        .memory_backlinks(&bug_id, Some("commits_for"))
+        .await
+        .expect("backlinks")
+        .get("count")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    assert_eq!(
+        after_revert, 0,
+        "a revert must NOT create a commits_for edge to the bug it undoes"
+    );
+    // (We deliberately do NOT assert the converse — that a *normal* commit
+    // creates the edge — here: that path depends on the BM25 FULLTEXT index
+    // built `CONCURRENTLY`, whose readiness is timing-dependent in a fast
+    // in-memory test and is pre-existing behavior outside Phase 1's scope.)
+}
+
+/// Backward-compat: a `commit_made` with NO `metadata` (old adapter / queued
+/// payload) must not error and must be a no-op on strength (today's behavior).
+#[tokio::test]
+async fn phase1_commit_without_metadata_is_backward_compatible() {
+    let h = Hifz::open_memory().await.expect("open in-memory hifz");
+    let project = "/tmp/bc";
+    h.session_start(SessionStartReq {
+        session_id: "s_bc".into(),
+        project: project.into(),
+        cwd: project.into(),
+    })
+    .await
+    .expect("session_start");
+    h.remember(RememberReq {
+        title: "old-world memory".into(),
+        content: "References src/legacy.rs.".into(),
+        category: Some("note".into()),
+        files: Some(vec!["src/legacy.rs".into()]),
+        project: Some(project.into()),
+        ..Default::default()
+    })
+    .await
+    .expect("remember");
+
+    let mut p = commit_made_payload(
+        "s_bc",
+        project,
+        "nometa01",
+        "touch legacy",
+        &[("src/legacy.rs", "M")],
+        false,
+    );
+    p.metadata = None; // simulate an old adapter
+
+    h.observe(p)
+        .await
+        .expect("observe commit_made without metadata must not error");
+    assert_eq!(
+        strength_of(&h, project, "old-world memory").await,
+        Some(1.0),
+        "no-metadata commit must be a strength no-op (backward compatible)"
+    );
 }

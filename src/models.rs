@@ -492,6 +492,12 @@ pub struct HookPayload {
     #[serde(default, rename = "parentObsId", alias = "parent_obs_id")]
     pub parent_obs_id: Option<String>,
     pub data: serde_json::Value,
+    /// Adapter-supplied structured signal that does not fit `data` (e.g. a
+    /// `commit_made` carrying `{sha, branch, message, files, file_status,
+    /// is_revert, reverts_sha}`). Optional and `#[serde(default)]` so older
+    /// adapters / queued payloads without it deserialize unchanged.
+    #[serde(default)]
+    pub metadata: Option<serde_json::Value>,
 }
 
 // --- Canonical event vocabulary ---

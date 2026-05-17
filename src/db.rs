@@ -86,7 +86,13 @@ DEFINE FIELD IF NOT EXISTS files         ON observation TYPE array<string>;
 DEFINE FIELD IF NOT EXISTS importance    ON observation TYPE int;
 DEFINE FIELD IF NOT EXISTS confidence    ON observation TYPE option<float>;
 DEFINE FIELD IF NOT EXISTS embedding     ON observation TYPE option<array<float>>;
-DEFINE FIELD IF NOT EXISTS metadata      ON observation TYPE option<object>;
+-- FLEXIBLE: adapter-supplied `metadata` carries arbitrary nested keys
+-- (e.g. a commit_made's {sha, branch, message, file_status, is_revert}).
+-- Without FLEXIBLE, SCHEMAFULL rejects any record with nested metadata
+-- keys. OVERWRITE (not IF NOT EXISTS) so DBs created before this field
+-- was ever written are widened in place — the column was always empty
+-- (HookPayload dropped adapter metadata pre-Phase-1), so this is lossless.
+DEFINE FIELD OVERWRITE metadata      ON observation TYPE option<object> FLEXIBLE;
 
 DEFINE ANALYZER IF NOT EXISTS obs_analyzer TOKENIZERS blank, class
   FILTERS lowercase, snowball(english);

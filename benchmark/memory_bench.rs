@@ -724,11 +724,11 @@ async fn main() -> Result<()> {
             }
         } else if let Some(rest) = a.strip_prefix("--rerank=") {
             rerank = parse_rerank_spec(rest);
-        } else if matches!(a.as_str(), "full" | "base") {
+        } else if matches!(a.as_str(), "full" | "base" | "ground") {
             mode = a;
         } else if a == "--help" || a == "-h" {
             eprintln!(
-                "usage: memory-bench [base|full] [--ablate=vector,recency,graph,diversify] \
+                "usage: memory-bench [base|full|ground] [--ablate=vector,recency,graph,diversify] \
                  [--rrf-k=N] [--rerank=<spec>]\n\
                  \n\
                  --rerank spec:\n  \
@@ -744,7 +744,228 @@ async fn main() -> Result<()> {
         }
     }
 
+    if mode == "ground" {
+        return run_ground().await;
+    }
     run(&mode, &ablations, rrf_k, rerank).await
+}
+
+// ===========================================================================
+// Grounding gate (Phase 2). Measures whether the revert→contradict path
+// actually reduces "false advice" — a rolled-back approach out-ranking the
+// approach that shipped — without hurting recall of the shipped approach.
+//
+// Each case is a competing pair on one topic: a `shipped` memory (current,
+// correct) and a `reverted` memory (tried, then rolled back). They live in
+// DISTINCT files so the simulated `git revert` (which touches only the
+// reverted file) weakens just the stale memory. The probe is topical and
+// matches both, so they genuinely compete in retrieval.
+//
+//   base  — the revert is NOT observed (no grounding at all).
+//   treat — the revert IS observed; Phase-1 weakens the stale row
+//           (unconditional — no flag).
+//
+// Gate: `treat` must strictly reduce false-advice vs `base` AND not regress
+// shipped recall. No measurable lift ⇒ Phase 3 does not proceed.
+// ===========================================================================
+
+struct GroundCase {
+    shipped_title: &'static str,
+    shipped_content: &'static str,
+    shipped_file: &'static str,
+    reverted_title: &'static str,
+    reverted_content: &'static str,
+    reverted_file: &'static str,
+    probe: &'static str,
+}
+
+const GROUND_CASES: &[GroundCase] = &[
+    GroundCase {
+        shipped_title: "Auth middleware via Axum extractors",
+        shipped_content: "Authentication is enforced with an Axum FromRequestParts extractor that validates the bearer token per handler.",
+        shipped_file: "src/auth_axum.rs",
+        reverted_title: "Auth middleware via hand-rolled tower Layer",
+        reverted_content: "Authentication was implemented as a custom tower::Layer wrapping the router; rolled back due to extractor ergonomics.",
+        reverted_file: "src/auth_tower.rs",
+        probe: "how is authentication middleware implemented",
+    },
+    GroundCase {
+        shipped_title: "Local-first storage on embedded SurrealKV",
+        shipped_content: "The store is an embedded SurrealKV instance; no external database process is required.",
+        shipped_file: "src/store_surrealkv.rs",
+        reverted_title: "Storage on a RocksDB-backed engine",
+        reverted_content: "An earlier attempt used a RocksDB-backed store; reverted in favor of the embedded engine.",
+        reverted_file: "src/store_rocksdb.rs",
+        probe: "what storage engine does the project use",
+    },
+    GroundCase {
+        shipped_title: "Local fastembed 384-d embeddings",
+        shipped_content: "Embeddings are produced locally with fastembed AllMiniLM at 384 dimensions; no network calls.",
+        shipped_file: "src/embed_fastembed.rs",
+        reverted_title: "Remote OpenAI embeddings",
+        reverted_content: "A remote OpenAI text-embedding integration was tried and then rolled back to keep the system offline.",
+        reverted_file: "src/embed_openai.rs",
+        probe: "how are vector embeddings generated",
+    },
+    GroundCase {
+        shipped_title: "Hybrid search via RRF fusion",
+        shipped_content: "Ranking fuses BM25 and vector candidates with reciprocal-rank fusion.",
+        shipped_file: "src/search_rrf.rs",
+        reverted_title: "Pure cosine vector search",
+        reverted_content: "Search was briefly pure cosine vector similarity; reverted because lexical matches were lost.",
+        reverted_file: "src/search_cosine.rs",
+        probe: "how does the project rank search results",
+    },
+    GroundCase {
+        shipped_title: "Config from environment and dotenv",
+        shipped_content: "Configuration loads from process env plus ~/.hifz/.env.",
+        shipped_file: "src/config_env.rs",
+        reverted_title: "Config from a TOML file",
+        reverted_content: "A TOML configuration file loader was added then reverted in favor of env-based config.",
+        reverted_file: "src/config_toml.rs",
+        probe: "how is configuration loaded",
+    },
+    GroundCase {
+        shipped_title: "Observation dedup by content hash + TTL",
+        shipped_content: "Duplicate observations are suppressed by a content hash within a TTL window.",
+        shipped_file: "src/dedup_hash.rs",
+        reverted_title: "Observation dedup by embedding cosine",
+        reverted_content: "Embedding-cosine dedup was attempted and rolled back due to false merges.",
+        reverted_file: "src/dedup_cosine.rs",
+        probe: "how are duplicate observations suppressed",
+    },
+];
+
+struct GroundMetrics {
+    shipped_recall_at5: f64,
+    false_advice_at5: f64,
+    n: usize,
+}
+
+/// One grounding evaluation pass on a fresh in-memory DB. `feed_revert`
+/// selects the arm structurally (no flag — revert→weaken is unconditional):
+///   - false (base):  the revert is NOT observed → no grounding at all.
+///   - true  (treat): the revert IS observed → Phase-1 weakens the stale row.
+async fn eval_ground(embedder: &Embedder, feed_revert: bool) -> Result<GroundMetrics> {
+    let db = db::connect_mem().await?;
+    init_schema(&db, embedder.dimension()).await?;
+
+    for c in GROUND_CASES {
+        remember::save(
+            &db,
+            embedder,
+            PROJECT,
+            "fact",
+            c.shipped_title,
+            c.shipped_content,
+            &[],
+            &[c.shipped_file.to_string()],
+            None,
+        )
+        .await?;
+        remember::save(
+            &db,
+            embedder,
+            PROJECT,
+            "fact",
+            c.reverted_title,
+            c.reverted_content,
+            &[],
+            &[c.reverted_file.to_string()],
+            None,
+        )
+        .await?;
+    }
+
+    // treat arm only: simulate the rollback — a `git revert` touching just
+    // the reverted file. base arm skips this entirely (no grounding).
+    if feed_revert {
+        for c in GROUND_CASES {
+            let sig = hifz::ground::CommitSignal {
+                files_added_modified: vec![c.reverted_file.to_string()],
+                files_removed: vec![],
+                is_revert: true,
+            };
+            hifz::ground::on_commit_signal(&db, PROJECT, &sig).await?;
+        }
+    }
+
+    let cfg = SearchConfig::default();
+    let mut shipped_hits = 0usize;
+    let mut false_advice = 0usize;
+    for c in GROUND_CASES {
+        let results =
+            search::search_hybrid_with_config(&db, embedder, c.probe, 20, Some(PROJECT), cfg)
+                .await?;
+        let shipped_rank = rank_of(&results, c.shipped_title);
+        let reverted_rank = rank_of(&results, c.reverted_title);
+        if matches!(shipped_rank, Some(p) if p < 5) {
+            shipped_hits += 1;
+        }
+        // False advice: the rolled-back approach is in the top-5 AND ranks
+        // at or above the shipped approach.
+        let fa = match (reverted_rank, shipped_rank) {
+            (Some(rr), Some(sr)) => rr < 5 && rr <= sr,
+            (Some(rr), None) => rr < 5,
+            _ => false,
+        };
+        if fa {
+            false_advice += 1;
+        }
+    }
+
+    let n = GROUND_CASES.len();
+    Ok(GroundMetrics {
+        shipped_recall_at5: shipped_hits as f64 / n as f64,
+        false_advice_at5: false_advice as f64 / n as f64,
+        n,
+    })
+}
+
+async fn run_ground() -> Result<()> {
+    let start = Instant::now();
+    let embedder = Embedder::new()?;
+    println!("=== memory-bench: ground (Phase 2 gate) ===");
+    println!(
+        "cases: {} competing shipped/reverted pairs",
+        GROUND_CASES.len()
+    );
+
+    let base = eval_ground(&embedder, false).await?;
+    let treat = eval_ground(&embedder, true).await?;
+
+    println!();
+    println!("                 shipped_recall@5   false_advice@5");
+    println!(
+        "base  (no revert) :   {:.3}             {:.3}",
+        base.shipped_recall_at5, base.false_advice_at5
+    );
+    println!(
+        "treat (Phase 1)   :   {:.3}             {:.3}",
+        treat.shipped_recall_at5, treat.false_advice_at5
+    );
+    println!();
+
+    let advice_lift = base.false_advice_at5 - treat.false_advice_at5;
+    let recall_regressed = treat.shipped_recall_at5 + 1e-9 < base.shipped_recall_at5;
+    println!(
+        "false-advice reduction: {:.3}  ({} of {} cases)",
+        advice_lift,
+        ((advice_lift) * base.n as f64).round() as i64,
+        base.n
+    );
+    let pass = advice_lift > 0.0 && !recall_regressed;
+    println!(
+        "GATE: {}  (Phase-1 revert→weaken is unconditional)",
+        if pass { "PASS" } else { "FAIL" },
+    );
+    if recall_regressed {
+        println!("  (reason: shipped recall regressed under treat)");
+    } else if advice_lift <= 0.0 {
+        println!("  (reason: no measurable false-advice reduction)");
+    }
+    println!("total time     : {:?}", start.elapsed());
+    Ok(())
 }
 
 fn parse_rerank_spec(raw: &str) -> RerankSpec {

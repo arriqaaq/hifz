@@ -13,6 +13,11 @@ pub struct CompressResult {
     pub files: Vec<String>,
     pub importance: i64,
     pub confidence: Option<f64>,
+    /// Adapter-supplied structured signal, passed through verbatim to the
+    /// observation row (schema field `observation.metadata`). For
+    /// `commit_made` this carries the git polarity signal consumed by
+    /// grounding.
+    pub metadata: Option<serde_json::Value>,
 }
 
 /// Synthetic compression: extract structured data from raw hook payload without LLM.
@@ -42,7 +47,25 @@ pub fn compress_synthetic(payload: &HookPayload) -> CompressResult {
         build_title(tool_name, data)
     };
     let facts = extract_facts(data);
-    let files = extract_files(data);
+    // A `commit_made` payload carries a git command in `data` (no file
+    // paths), so the changed-file set only arrives via adapter `metadata`.
+    // Without this, `compressed.files` is empty and grounding is inert.
+    let files = if obs_type == "commit_made" {
+        payload
+            .metadata
+            .as_ref()
+            .and_then(|m| m.get("files"))
+            .and_then(|f| f.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(str::to_string))
+                    .collect::<Vec<_>>()
+            })
+            .filter(|v| !v.is_empty())
+            .unwrap_or_else(|| extract_files(data))
+    } else {
+        extract_files(data)
+    };
     let keywords = extract_keywords(&files, tool_name);
     let narrative = build_narrative(tool_name, &payload.hook_type, data);
     let importance = infer_importance(&payload.hook_type, tool_name);
@@ -57,6 +80,7 @@ pub fn compress_synthetic(payload: &HookPayload) -> CompressResult {
         files,
         importance,
         confidence: Some(0.5), // synthetic = moderate confidence
+        metadata: payload.metadata.clone(),
     }
 }
 
@@ -75,6 +99,9 @@ pub async fn compress_llm(
     if let Some(ref ot) = payload.obs_type {
         result.obs_type = ot.clone();
     }
+    // Carry adapter metadata through the LLM path too (the model never sees
+    // or produces it).
+    result.metadata = payload.metadata.clone();
     Ok(result)
 }
 
@@ -128,6 +155,7 @@ fn parse_compression_xml(xml: &str) -> anyhow::Result<CompressResult> {
         files: extract_list("files", "file"),
         importance: extract("importance").parse().unwrap_or(5),
         confidence: Some(0.8),
+        metadata: None,
     })
 }
 

@@ -78,15 +78,68 @@ function parseCommitOutput(output) {
 }
 
 async function getCommitFiles(sha, cwd) {
+	// `--name-status` yields lines like "M\tsrc/foo.rs" / "A\t..." / "D\t..."
+	// / "R100\told\tnew". We keep a flat path list (backward-compat) plus a
+	// per-file status list so grounding can tell add/modify from delete.
 	try {
 		const { stdout } = await execAsync(
-			`git diff-tree --no-commit-id -r --name-only ${sha}`,
+			`git diff-tree --no-commit-id -r --name-status ${sha}`,
 			{ cwd, timeout: 5000 }
 		);
-		return stdout.trim().split("\n").filter(Boolean);
+		const files = [];
+		const fileStatus = [];
+		for (const line of stdout.trim().split("\n").filter(Boolean)) {
+			const parts = line.split("\t").filter(Boolean);
+			if (parts.length < 2) continue;
+			const code = parts[0];
+			const letter = code[0]; // R100 / C75 -> R / C
+			// For rename/copy the last field is the new path; treat as modify.
+			const path = parts[parts.length - 1];
+			const status =
+				letter === "A"
+					? "A"
+					: letter === "D"
+						? "D"
+						: letter === "R" || letter === "C"
+							? "M"
+							: "M";
+			files.push(path);
+			fileStatus.push({ path, status });
+		}
+		return { files, fileStatus };
 	} catch {
-		return [];
+		return { files: [], fileStatus: [] };
 	}
+}
+
+// Full commit message (subject + body). The parsed stdout only carries the
+// subject; the body is where `git revert` writes "This reverts commit <sha>".
+async function getCommitMessage(sha, cwd) {
+	try {
+		const { stdout } = await execAsync(`git log -1 --format=%B ${sha}`, {
+			cwd,
+			timeout: 5000,
+		});
+		return stdout.trim();
+	} catch {
+		return "";
+	}
+}
+
+// A revert/rollback is a negative outcome: it withdraws the approach the
+// memory described. Detect git's canonical revert (`Revert "..."` +
+// `This reverts commit <sha>`) and common manual phrasings.
+function detectRevert(fullMessage) {
+	const msg = fullMessage || "";
+	const firstLine = msg.split("\n")[0] || "";
+	const revertsMatch = msg.match(
+		/^This reverts commit ([0-9a-f]{7,40})\.?$/m
+	);
+	const isRevert =
+		/^Revert "/.test(firstLine) ||
+		/^(revert|rollback|roll back|undo|back ?out)\b/i.test(firstLine) ||
+		revertsMatch != null;
+	return { isRevert, revertsSha: revertsMatch ? revertsMatch[1] : null };
 }
 
 async function main() {
@@ -151,7 +204,13 @@ async function main() {
 
 			const commit = parseCommitOutput(outputStr);
 			if (commit) {
-				const files = await getCommitFiles(commit.sha, cwd);
+				const { files, fileStatus } = await getCommitFiles(
+					commit.sha,
+					cwd
+				);
+				const fullMessage =
+					(await getCommitMessage(commit.sha, cwd)) || commit.message;
+				const { isRevert, revertsSha } = detectRevert(fullMessage);
 				const keywords = commit.message
 					.split(/\W+/)
 					.filter((w) => w.length > 2);
@@ -179,8 +238,11 @@ async function main() {
 							metadata: {
 								sha: commit.sha,
 								branch: commit.branch,
-								message: commit.message,
+								message: fullMessage,
 								files,
+								file_status: fileStatus,
+								is_revert: isRevert,
+								reverts_sha: revertsSha,
 							},
 							importance: 8,
 						}),

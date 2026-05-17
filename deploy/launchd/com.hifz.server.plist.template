@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  hifz REST server LaunchAgent (macOS).
+
+  This is a TEMPLATE. Do not load it directly — launchd does not expand "~",
+  so scripts/install-service.sh renders the __PLACEHOLDER__ tokens into
+  absolute paths and writes the result to:
+
+      ~/Library/LaunchAgents/com.hifz.server.plist
+
+  RunAtLoad + KeepAlive  -> start at login/boot, restart on any exit/crash.
+  ThrottleInterval=10    -> cap restart rate; no crash-loop if :__PORT__ is held.
+  Explicit PATH          -> so `git` resolves for commit enrichment.
+  No UserName            -> a LaunchAgent already runs as the logged-in user,
+                            so ~/.hifz ownership is correct.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.hifz.server</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>__HIFZ_BIN__</string>
+        <string>serve</string>
+        <string>--db-path</string>
+        <string>__DB_PATH__</string>
+        <string>--port</string>
+        <string>__PORT__</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <key>WorkingDirectory</key>
+    <string>__WORKDIR__</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HIFZ_PORT</key>
+        <string>__PORT__</string>
+        <key>PATH</key>
+        <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>__LOG_DIR__/server.out.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>__LOG_DIR__/server.err.log</string>
+</dict>
+</plist>

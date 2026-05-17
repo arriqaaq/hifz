@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "hifz": {
-      "command": "/Users/kfarhan/workspace/projects/hifz/target/debug/hifz",
+      "command": "/Users/kfarhan/workspace/projects/hifz/target/release/hifz",
       "args": ["mcp"]
     }
   }

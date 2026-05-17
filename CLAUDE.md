@@ -17,5 +17,13 @@ When you learn something important during a session, use `hifz_save` to persist 
 
 Do NOT save trivial things like "read a file" or "ran a command" — hooks already capture those as observations. Only save insights that would be valuable in a future session.
 
+## Always-on server (launchd)
+
+The hifz REST server runs as a macOS launchd LaunchAgent (`com.hifz.server`, db `~/.hifz/data`, port 3111) — **not** via `make dev`. Install/manage it with `make install-service` / `restart-service` / `service-status` / `uninstall-service`.
+
+**Whenever hifz Rust code changes, the daemon keeps running the OLD `target/release/hifz` until restarted.** After completing code changes, run `make restart-service` (it does `cargo build --release` then `launchctl kickstart -k`) so the new build is reflected. Do this **once after all phases/builds complete**, not per edit — consistent with the "run builds after all phases" convention.
+
+`make dev` is foreground/testing only and conflicts with the service on port 3111 — stop the service or use `HIFZ_PORT=3120 make dev`. `make stop` only pauses the daemon (KeepAlive resurrects it in ~10s); use `make uninstall-service` to truly stop it.
+
 ### Prerequisites
-The REST server must be running (`cargo run -- serve --db-path ~/.hifz/data` or `--memory`).
+The launchd service must be installed and running (`make install-service`). For ad-hoc/testing use, `cargo run -- serve --db-path ~/.hifz/data` or `--memory`.

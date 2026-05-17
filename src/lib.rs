@@ -977,6 +977,25 @@ impl Hifz {
 }
 
 /// Resolve a `"memory:abc"` / `"abc"` string to a SurrealDB `RecordId`.
+/// Canonical `table:key` string for a SurrealDB [`RecordId`].
+///
+/// `RecordId`'s `Debug`/`Display` renders as
+/// `RecordId { table: Table("memory"), key: String("...") }`, which is
+/// useless to API consumers (they can't feed it back to delete/evolve/link).
+/// This produces the canonical `memory:<key>` form instead. Mirrors the
+/// private helpers in `observe.rs` / `trace.rs` — centralized here so the
+/// save path can reuse it.
+pub(crate) fn rid_to_string(rid: &surrealdb::types::RecordId) -> String {
+    use surrealdb::types::RecordIdKey;
+    let key = match &rid.key {
+        RecordIdKey::String(s) => s.clone(),
+        RecordIdKey::Number(n) => n.to_string(),
+        RecordIdKey::Uuid(u) => u.to_string(),
+        other => format!("{other:?}"),
+    };
+    format!("{}:{key}", rid.table)
+}
+
 /// Returns `None` if the row doesn't exist. Used by `Hifz::memory_markdown_put`
 /// to clear stale chunks before writing the new version.
 async fn resolve_memory_record_id(

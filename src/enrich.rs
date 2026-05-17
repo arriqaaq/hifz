@@ -424,7 +424,7 @@ pub async fn save_enriched(
     // state (worst case: a stale `context_summary` for a few hundred ms).
     if !llm_output.neighbour_updates.is_empty() {
         let db = db.clone();
-        let new_id_str = format!("{:?}", new_id);
+        let new_id_str = crate::rid_to_string(&new_id);
         let updates = llm_output.neighbour_updates;
         let neighbors_snapshot = neighbors.clone();
         tokio::spawn(async move {
@@ -432,7 +432,7 @@ pub async fn save_enriched(
         });
     }
 
-    Ok(format!("{:?}", new_id))
+    Ok(crate::rid_to_string(&new_id))
 }
 
 // ---------------------------------------------------------------------------

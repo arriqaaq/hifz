@@ -261,6 +261,25 @@ Open [http://localhost:3111](http://localhost:3111) for the dashboard.
 
 ---
 
+## Run hifz as a background service (macOS)
+
+The Claude Code plugin silently drops observations when the server is down. To keep it always running — started at login/boot, restarted on crash, surviving reboot/logout — install it as a launchd LaunchAgent:
+
+```bash
+make install-service     # cargo build --release, then load com.hifz.server
+make service-status      # state/pid + /api/v1/livez check
+make restart-service     # cargo build --release, then roll the new binary
+make uninstall-service   # remove the agent (keeps ~/.hifz/data and logs)
+```
+
+Logs: `~/.hifz/logs/server.{out,err}.log`. DB: `~/.hifz/data`, port `3111`.
+
+- **After changing hifz code, run `make restart-service`** — the daemon runs a fixed `target/release/hifz` and won't pick up a rebuild until restarted.
+- `make dev` is foreground/testing only and **conflicts with the service on port 3111**. Stop the service first, or run `HIFZ_PORT=3120 make dev`.
+- `make stop` only pauses the daemon — KeepAlive resurrects it in ~10s. Use `make uninstall-service` to truly stop it.
+
+---
+
 ## Dashboard
 
 A SvelteKit SPA lives in `website/` and is served by the same Axum process. It is a read-mostly client of the REST API.
@@ -315,11 +334,15 @@ cargo build --release      # → target/release/hifz
 }
 ```
 
-**3. Start the server:**
+**3. Start the server.** On macOS, install it as an always-on service so the plugin never silently drops observations:
 
 ```bash
+make install-service     # cargo build --release + load launchd agent
+# ad-hoc/testing alternative:
 ./target/release/hifz serve --db-path ~/.hifz/data
 ```
+
+See [Run hifz as a background service (macOS)](#run-hifz-as-a-background-service-macos).
 
 **4. Install the plugin** (hooks + skills). Two ways — they do the same thing:
 
@@ -366,7 +389,7 @@ cargo run --release --bin memory-bench -- base
 <details>
 <summary><b>Troubleshooting</b></summary>
 
-**Server not responding.** `curl http://localhost:3111/api/v1/health`. If it fails, the server isn't running — start it with `./target/release/hifz serve --db-path ~/.hifz/data`.
+**Server not responding.** `curl http://localhost:3111/api/v1/health`. If it fails, the server isn't running — start it with `make install-service` (persistent, macOS) or `./target/release/hifz serve --db-path ~/.hifz/data` (ad-hoc). If the service is installed but down, `make service-status` and check `~/.hifz/logs/server.err.log`.
 
 **MCP not in Claude Code's `/mcp`.** Restart Claude Code so it picks up `.mcp.json`. Confirm the `command` path in `.mcp.json` matches the binary you actually built (`target/debug/hifz` vs `target/release/hifz`).
 

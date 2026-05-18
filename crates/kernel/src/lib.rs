@@ -3,7 +3,7 @@
 //!
 //! Dependency direction: `hifz-core ← atlas ← hifz`. hifz-core has NO
 //! intra-`hifz` deps (verified at extraction time). The `hifz` crate
-//! re-exports every module here (`pub use hifz_core::db;` …) so existing
+//! re-exports every module here (`pub use kernel::db;` …) so existing
 //! `crate::db::*` / external `hifz::db::*` paths resolve unchanged.
 
 pub mod config;

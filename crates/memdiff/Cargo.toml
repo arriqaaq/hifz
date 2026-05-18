@@ -1,0 +1,11 @@
+[package]
+name = "memdiff"
+version = "0.1.0"
+edition = "2024"
+
+# Independent (clean-room) presentation layer. Deliberately depends on
+# nothing but serde — no surrealdb, no kernel, no hifz — so every surface
+# (REST / MCP / CLI / web) renders the same structured memory-state diff.
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

@@ -12,7 +12,7 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use hifz_core::ids::rid_to_string;
+use kernel::ids::rid_to_string;
 use surrealdb::types::{RecordId, SurrealValue};
 
 use crate::store::Store;
@@ -263,7 +263,7 @@ mod tests {
 
     #[tokio::test]
     async fn two_cliques_two_clusters() {
-        let db = hifz_core::db::connect_mem().await.unwrap();
+        let db = kernel::db::connect_mem().await.unwrap();
         crate::store::init_atlas_schema(&db, 384).await.unwrap();
         let store = Store::new(db, "demo");
         // Two triangles joined by one weak bridge → expect 2 clusters.

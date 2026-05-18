@@ -197,6 +197,16 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                 .await?
         }
 
+        "hifz_view" => {
+            let id = args.get("id").and_then(|v| v.as_str()).unwrap_or("");
+            let id = id.strip_prefix("memory:").unwrap_or(id);
+            state
+                .client
+                .get(format!("{}/api/v1/memories/{id}/view", state.base_url))
+                .send_decode()
+                .await?
+        }
+
         "hifz_current_plan" => {
             let project = args.get("project").and_then(|v| v.as_str()).unwrap_or("");
             state
@@ -547,9 +557,40 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
         }
     };
 
-    Ok(serde_json::json!({
-        "content": [{"type": "text", "text": serde_json::to_string_pretty(&result)?}]
-    }))
+    Ok(serde_json::json!({ "content": mcp_content(&result)? }))
+}
+
+/// Build the MCP `content` blocks. Mutation tools (`hifz_save`/`hifz_evolve`/
+/// `hifz_delete`) carry a `delta`; `hifz_view` returns a `MemoryView`. For
+/// those, the first block is the human-readable rendered diff (what the
+/// agent reads); the structured JSON always follows so nothing is lost.
+fn mcp_content(result: &serde_json::Value) -> Result<Vec<serde_json::Value>> {
+    let opts = memdiff::sink_text::TextOpts { colour: false };
+    let mut blocks = Vec::new();
+
+    if let Some(d) = result.get("delta") {
+        if let Ok(delta) = serde_json::from_value::<memdiff::MemoryDelta>(d.clone()) {
+            if !delta.lines.is_empty() {
+                blocks.push(serde_json::json!({
+                    "type": "text",
+                    "text": memdiff::sink_text::render(&delta, &opts),
+                }));
+            }
+        }
+    } else if result.get("header").is_some() && result.get("rows").is_some() {
+        if let Ok(view) = serde_json::from_value::<memdiff::MemoryView>(result.clone()) {
+            blocks.push(serde_json::json!({
+                "type": "text",
+                "text": memdiff::sink_text::render_view(&view, &opts),
+            }));
+        }
+    }
+
+    blocks.push(serde_json::json!({
+        "type": "text",
+        "text": serde_json::to_string_pretty(result)?,
+    }));
+    Ok(blocks)
 }
 
 fn tool_defs() -> Vec<serde_json::Value> {
@@ -597,6 +638,7 @@ fn tool_defs() -> Vec<serde_json::Value> {
         serde_json::json!({"name": "hifz_runs", "description": "Search past task-scoped runs (prompt + derived lesson) via hybrid BM25 fusion", "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}, "project": {"type": "string"}, "limit": {"type": "integer", "default": 10}}, "required": ["query"]}}),
         serde_json::json!({"name": "hifz_commits", "description": "List recent git commits for a project. Use this to see repo history and continue from a specific point.", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "branch": {"type": "string"}, "limit": {"type": "integer", "default": 10}, "sha": {"type": "string", "description": "Get a specific commit by SHA"}}}}),
         serde_json::json!({"name": "hifz_evolve", "description": "Run A-MEM Memory Evolution on a memory — LLM refines neighbour tags/context/links (requires HIFZ_LLM_EVOLVE=true and Ollama)", "inputSchema": {"type": "object", "properties": {"memory_id": {"type": "string", "description": "RecordId like 'memory:xyz'"}}, "required": ["memory_id"]}}),
+        serde_json::json!({"name": "hifz_view", "description": "Inspect a memory as a rendered view — its lineage (superseded rows), outgoing links, and evolution history.", "inputSchema": {"type": "object", "properties": {"id": {"type": "string", "description": "Memory id like 'memory:xyz' or the bare key"}}, "required": ["id"]}}),
         serde_json::json!({"name": "hifz_current_plan", "description": "Get the currently active plan for this project. Returns null if no active plan.", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}}}}),
         serde_json::json!({"name": "hifz_plans", "description": "List plans for a project. Filter by status (active, completed, abandoned, all).", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "status": {"type": "string", "enum": ["active", "completed", "abandoned", "all"], "default": "all"}, "limit": {"type": "integer", "default": 10}}}}),
         serde_json::json!({"name": "hifz_complete_plan", "description": "Mark the current active plan as completed.", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}}}}),

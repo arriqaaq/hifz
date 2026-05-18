@@ -8,7 +8,7 @@
 //! (`related`, via `embedding`) — nothing is dropped, no LLM required.
 
 use anyhow::Result;
-use hifz_core::embed::Embedder;
+use kernel::embed::Embedder;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use surrealdb::types::{RecordId, SurrealValue};
@@ -306,7 +306,7 @@ mod tests {
 
     #[tokio::test]
     async fn stub_backend_extracts_and_dedupes() {
-        let db = hifz_core::db::connect_mem().await.unwrap();
+        let db = kernel::db::connect_mem().await.unwrap();
         crate::store::init_atlas_schema(&db, 384).await.unwrap();
         let store = Store::new(db, "demo");
         let emb = Embedder::new().unwrap();
@@ -330,7 +330,7 @@ mod tests {
         struct C {
             c: Option<i64>,
         }
-        let cnt = |db: surrealdb::Surreal<hifz_core::db::Db>, sql: &'static str| async move {
+        let cnt = |db: surrealdb::Surreal<kernel::db::Db>, sql: &'static str| async move {
             let mut q = db.query(sql).await.unwrap();
             let r: Vec<C> = q.take(0).unwrap_or_default();
             r.into_iter().next().and_then(|x| x.c).unwrap_or(0)
@@ -360,7 +360,7 @@ mod tests {
 
     #[tokio::test]
     async fn no_backend_fallback_links_similar_docs() {
-        let db = hifz_core::db::connect_mem().await.unwrap();
+        let db = kernel::db::connect_mem().await.unwrap();
         crate::store::init_atlas_schema(&db, 384).await.unwrap();
         let store = Store::new(db, "demo");
         let emb = Embedder::new().unwrap();

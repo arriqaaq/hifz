@@ -9,8 +9,8 @@ use axum::{
     extract::{Query, State},
     routing::{get, post},
 };
-use hifz_core::db::Db;
-use hifz_core::embed::Embedder;
+use kernel::db::Db;
+use kernel::embed::Embedder;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use surrealdb::Surreal;

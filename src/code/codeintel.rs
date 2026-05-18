@@ -23,9 +23,9 @@ use surrealdb::types::{RecordId, SurrealValue};
 use crate::code::lang::Language;
 use crate::code::walker::{WalkOpts, walk};
 use crate::db::Db;
-use hifz_core::code_parse::codegraph::walk_file;
-use hifz_core::code_parse::coderesolve::{Resolution, resolve_project};
-use hifz_core::code_parse::langmod::module_path;
+use kernel::code_parse::codegraph::walk_file;
+use kernel::code_parse::coderesolve::{Resolution, resolve_project};
+use kernel::code_parse::langmod::module_path;
 
 #[derive(Debug, Default, serde::Serialize)]
 pub struct CodeGraphReport {

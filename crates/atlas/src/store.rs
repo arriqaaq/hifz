@@ -3,11 +3,11 @@
 //! atlas tables live in the **same** SurrealKV instance as hifz (so the
 //! corpus graph can later cross-link to hifz's grounded code/memory graph)
 //! but are fully isolated: `atlas_*`, never touching hifz tables. Schema
-//! init mirrors `hifz_core::db::init_schema` (strip `--` comments, split
+//! init mirrors `kernel::db::init_schema` (strip `--` comments, split
 //! by `;`, run each statement, fail loudly).
 
 use anyhow::Result;
-use hifz_core::db::Db;
+use kernel::db::Db;
 use surrealdb::Surreal;
 
 /// Thin handle: the shared connection + the project the CLI/REST operate on.
@@ -118,7 +118,7 @@ mod tests {
 
     #[tokio::test]
     async fn schema_inits_and_is_idempotent() {
-        let db = hifz_core::db::connect_mem().await.unwrap();
+        let db = kernel::db::connect_mem().await.unwrap();
         init_atlas_schema(&db, 384).await.unwrap();
         // Idempotent: second apply must also succeed.
         init_atlas_schema(&db, 384).await.unwrap();

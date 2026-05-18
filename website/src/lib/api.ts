@@ -15,6 +15,10 @@ import type {
   BacklinksResponse,
   WarmupDigest,
   ProjectDigestByCategory,
+  MemoryView,
+  ReplaySession,
+  ReplayDetail,
+  RenderTokens,
 } from './types';
 
 const CORE = '/api/v1';
@@ -483,4 +487,21 @@ export function getAtlasGraph(): Promise<AtlasGraph> {
 }
 export function atlasQuery(q: string, limit = 20): Promise<{ hits: AtlasHit[] }> {
   return get(`${ATLAS}/query?q=${encodeURIComponent(q)}&limit=${limit}`);
+}
+
+// --- Renderer / replay (memdiff) ---
+export function getRenderTokens(): Promise<RenderTokens> {
+  return get(`${CORE}/render/tokens`);
+}
+
+export function getMemoryView(id: string): Promise<MemoryView> {
+  return get(`${CORE}/memories/${encodeURIComponent(id)}/view`);
+}
+
+export function getReplays(): Promise<{ replays: ReplaySession[]; count: number }> {
+  return get(`${CORE}/replays`);
+}
+
+export function getReplay(sessionId: string): Promise<ReplayDetail> {
+  return get(`${CORE}/replays/${encodeURIComponent(sessionId)}`);
 }

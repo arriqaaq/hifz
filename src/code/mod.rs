@@ -30,6 +30,6 @@ pub mod search;
 pub mod splitter;
 pub mod watcher;
 
-// `lang` + `walker` moved to `hifz_core::code_parse`; re-exported so
+// `lang` + `walker` moved to `kernel::code_parse`; re-exported so
 // `crate::code::lang::*` / `crate::code::walker::*` resolve unchanged.
-pub use hifz_core::code_parse::{lang, walker};
+pub use kernel::code_parse::{lang, walker};

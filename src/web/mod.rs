@@ -50,6 +50,7 @@ pub async fn serve(state: Hifz, port: u16) -> Result<()> {
             "/memories/{id}/links",
             axum::routing::get(api::memory_links),
         )
+        .route("/memories/{id}/view", axum::routing::get(api::memory_view))
         .route(
             "/memories/{id}/backlinks",
             axum::routing::get(api::memory_backlinks),
@@ -73,6 +74,9 @@ pub async fn serve(state: Hifz, port: u16) -> Result<()> {
         .route("/trace", axum::routing::post(api::trace_graph))
         .route("/consolidate", axum::routing::post(api::consolidate))
         .route("/forget-gc", axum::routing::post(api::forget_gc))
+        .route("/render/tokens", axum::routing::get(api::render_tokens))
+        .route("/replays", axum::routing::get(api::replays_list))
+        .route("/replays/{id}", axum::routing::get(api::replay_get))
         .route("/export", axum::routing::get(api::export));
 
     #[cfg(feature = "code")]

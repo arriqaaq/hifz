@@ -19,6 +19,7 @@ use surrealdb::types::{RecordId, SurrealValue};
 use crate::db::Db;
 use crate::link;
 use crate::ollama::OllamaClient;
+use memdiff::Change;
 
 const DEFAULT_MAX_NEIGHBOURS: usize = 5;
 
@@ -94,19 +95,27 @@ pub struct EvolveReport {
     pub new_note_updated: bool,
 }
 
+/// The original `EvolveReport` counts plus the structured per-mutation
+/// `Change` records the `render` crate turns into a semantic diff.
+#[derive(Debug, Default, Clone, Serialize)]
+pub struct EvolveOutcome {
+    pub report: EvolveReport,
+    pub changes: Vec<Change>,
+}
+
 /// Run evolution against a single memory id.
 pub async fn evolve_one(
     db: &Surreal<Db>,
     ollama: &OllamaClient,
     memory_id: &RecordId,
-) -> Result<EvolveReport> {
+) -> Result<EvolveOutcome> {
     let mut resp = db
         .query("SELECT id, title, content, keywords, tags, context FROM type::record($id)")
         .bind(("id", memory_id.clone()))
         .await?;
     let new_rows: Vec<MemoryRow> = resp.take(0).unwrap_or_default();
     let Some(new_row) = new_rows.into_iter().next() else {
-        return Ok(EvolveReport::default());
+        return Ok(EvolveOutcome::default());
     };
 
     let edges = link::expand_graph(
@@ -125,9 +134,12 @@ pub async fn evolve_one(
     neighbour_ids.truncate(DEFAULT_MAX_NEIGHBOURS);
 
     if neighbour_ids.is_empty() {
-        return Ok(EvolveReport {
-            considered_neighbours: 0,
-            ..Default::default()
+        return Ok(EvolveOutcome {
+            report: EvolveReport {
+                considered_neighbours: 0,
+                ..Default::default()
+            },
+            changes: Vec::new(),
         });
     }
 
@@ -147,7 +159,15 @@ pub async fn evolve_one(
         .context("ollama complete")?;
     let parsed: LlmOutput = parse_json_payload(&raw)?;
 
-    apply_updates(db, memory_id, &neighbour_ids, &parsed).await
+    apply_updates(
+        db,
+        memory_id,
+        &neighbour_ids,
+        &parsed,
+        &new_row,
+        &neighbours,
+    )
+    .await
 }
 
 async fn apply_updates(
@@ -155,11 +175,15 @@ async fn apply_updates(
     new_id: &RecordId,
     candidate_ids: &[RecordId],
     out: &LlmOutput,
-) -> Result<EvolveReport> {
+    new_row: &MemoryRow,
+    neighbours: &[MemoryRow],
+) -> Result<EvolveOutcome> {
     let mut report = EvolveReport {
         considered_neighbours: candidate_ids.len(),
         ..Default::default()
     };
+    let mut changes: Vec<Change> = Vec::new();
+    let new_id_str = crate::rid_to_string(new_id);
 
     // Update the new note's own metadata, if any.
     if let Some(nn) = &out.new_note {
@@ -179,6 +203,27 @@ async fn apply_updates(
                 .await?
                 .check()?;
             report.new_note_updated = true;
+            if !nn.keywords.is_empty() {
+                changes.push(Change::SelfRevised {
+                    id: new_id_str.clone(),
+                    field: "keywords".into(),
+                    previous: new_row.keywords.as_ref().map(|v| v.join(", ")),
+                });
+            }
+            if !nn.tags.is_empty() {
+                changes.push(Change::SelfRevised {
+                    id: new_id_str.clone(),
+                    field: "tags".into(),
+                    previous: new_row.tags.as_ref().map(|v| v.join(", ")),
+                });
+            }
+            if nn.context.is_some() {
+                changes.push(Change::SelfRevised {
+                    id: new_id_str.clone(),
+                    field: "context".into(),
+                    previous: new_row.context.clone(),
+                });
+            }
         }
     }
 
@@ -225,12 +270,46 @@ async fn apply_updates(
                 .await?
                 .check()?;
             report.neighbour_updates_applied += 1;
+
+            let mut fields: Vec<&str> = Vec::new();
+            if !upd.keywords_add.is_empty() || !upd.keywords_remove.is_empty() {
+                fields.push("keywords");
+            }
+            if !upd.tags_add.is_empty() || !upd.tags_remove.is_empty() {
+                fields.push("tags");
+            }
+            if upd.context_rewrite.is_some() {
+                fields.push("context");
+            }
+            let previous = neighbours
+                .iter()
+                .find(|r| {
+                    r.id.as_ref().map(crate::rid_to_string).as_deref() == Some(id_str.as_str())
+                })
+                .map(|r| {
+                    format!(
+                        "keywords={}; tags={}; context={}",
+                        r.keywords.clone().unwrap_or_default().join(", "),
+                        r.tags.clone().unwrap_or_default().join(", "),
+                        r.context.clone().unwrap_or_default()
+                    )
+                });
+            changes.push(Change::NeighbourRevised {
+                id: id_str.clone(),
+                field: fields.join("/"),
+                previous,
+                reason: upd
+                    .context_rewrite
+                    .clone()
+                    .unwrap_or_else(|| "LLM evolve".to_string()),
+            });
         }
 
         // For link + supersedes we need a RecordId — round-trip through SurrealQL.
         let Some(rid) = resolve_id(db, &id_str).await else {
             continue;
         };
+        let rid_str = crate::rid_to_string(&rid);
 
         if let Some(ltn) = &upd.link_to_new {
             if ltn.create {
@@ -243,19 +322,35 @@ async fn apply_updates(
                 let reason = format!("LLM evolve link: relation={relation}, score={score:.2}");
                 link::upsert_edge(db, &rid, new_id, relation, "llm", score, Some(&reason)).await?;
                 report.links_added += 1;
+                changes.push(Change::Linked {
+                    from: rid_str.clone(),
+                    to: new_id_str.clone(),
+                    relation: relation.to_string(),
+                    score,
+                    reason: Some(reason),
+                    via: "llm".to_string(),
+                });
             }
         }
 
         if upd.supersedes_new {
             mark_superseded(db, new_id, &rid).await?;
             report.supersedes_applied += 1;
+            changes.push(Change::Superseded {
+                old_id: new_id_str.clone(),
+                new_id: rid_str.clone(),
+            });
         } else if upd.superseded_by_new {
             mark_superseded(db, &rid, new_id).await?;
             report.supersedes_applied += 1;
+            changes.push(Change::Superseded {
+                old_id: rid_str.clone(),
+                new_id: new_id_str.clone(),
+            });
         }
     }
 
-    Ok(report)
+    Ok(EvolveOutcome { report, changes })
 }
 
 /// Pull stringified ids for a set of RecordIds so we can compare against

@@ -223,3 +223,58 @@ export interface CoreEditRequest {
   op: 'set' | 'add' | 'remove';
   value: string;
 }
+
+// --- Renderer (memdiff) wire types: mirror crates/memdiff serde shapes ---
+export type Tone =
+  | 'plain' | 'added' | 'revised' | 'removed'
+  | 'linked' | 'conflict' | 'muted' | 'cite';
+export type ChangeOp =
+  | 'created' | 'revised' | 'superseded' | 'linked'
+  | 'neighbour_revised' | 'forgotten' | 'conflict';
+export type Glyph =
+  | 'plus' | 'tilde' | 'slashed' | 'arrow' | 'recycle' | 'cross' | 'bang';
+
+export interface SpanStyle {
+  tone: Tone;
+  bold?: boolean;
+  dim?: boolean;
+  strike?: boolean;
+}
+export type Cite =
+  | { kind: 'memory'; id: string }
+  | { kind: 'edge'; relation: string; target: string }
+  | { kind: 'run'; id: string };
+export interface Span {
+  text: string;
+  style: SpanStyle;
+  cite?: Cite;
+}
+export interface DeltaLine {
+  op: ChangeOp;
+  glyph: Glyph;
+  spans: Span[];
+}
+export interface MemoryDelta {
+  lines: DeltaLine[];
+}
+export interface MemoryView {
+  header: Span[];
+  rows: DeltaLine[];
+}
+export type SessionEvent =
+  | { kind: 'prompt'; t: string; text: string }
+  | { kind: 'delta'; t: string; delta: MemoryDelta }
+  | { kind: 'view'; t: string; view: MemoryView }
+  | { kind: 'note'; t: string; text: string }
+  | { kind: 'error'; t: string; message: string };
+export interface ReplaySession {
+  session_id: string;
+  count: number;
+  last_ts: string;
+}
+export interface ReplayDetail {
+  session_id: string;
+  events: SessionEvent[];
+  count: number;
+}
+export type RenderTokens = Record<Tone, string>;

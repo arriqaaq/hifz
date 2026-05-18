@@ -12,14 +12,15 @@ pub mod chunk;
 pub mod code;
 pub mod commits;
 pub mod compress;
-pub use hifz_core::config;
+pub use kernel::config;
 pub mod consolidate;
 pub mod context;
 pub mod core_mem;
-pub use hifz_core::db;
+pub use kernel::db;
 pub mod dedup;
+pub mod delta;
 pub mod digest;
-pub use hifz_core::embed;
+pub use kernel::embed;
 pub mod enrich;
 pub mod error;
 pub mod evolve;
@@ -31,9 +32,9 @@ pub mod link;
 pub mod llm_rerank;
 pub mod markdown;
 pub mod mcp;
-pub use hifz_core::models;
+pub use kernel::models;
 pub mod observe;
-pub use hifz_core::ollama;
+pub use kernel::ollama;
 pub mod plans;
 pub mod prompts;
 pub mod rank;
@@ -309,6 +310,8 @@ impl Hifz {
         let tags = req.tags.unwrap_or_default();
         let project = req.project.as_deref().unwrap_or("global");
 
+        // `&'static str`, so it survives `category` being moved into the call.
+        let category_label = category.as_str();
         let id = crate::enrich::save_enriched(
             &self.db,
             &self.embedder,
@@ -327,7 +330,21 @@ impl Hifz {
             req.session_id.as_deref(),
         )
         .await?;
-        Ok(serde_json::json!({"status": "ok", "id": id, "title": req.title}))
+        let changes = crate::delta::save_changes(
+            &id,
+            &req.title,
+            category_label,
+            req.supersedes_memory_id.as_deref(),
+            req.closes_memory_id.as_deref(),
+        );
+        // Render once; record to the session timeline (replayable) and
+        // attach the same delta to the response.
+        let delta = memdiff::delta_from_changes(&changes);
+        crate::delta::record_observation(&self.db, req.session_id.as_deref(), &delta).await;
+        Ok(crate::delta::attach_delta(
+            serde_json::json!({"status": "ok", "id": id, "title": req.title}),
+            delta,
+        ))
     }
     pub async fn memories_search(
         &self,
@@ -335,8 +352,13 @@ impl Hifz {
     ) -> Result<serde_json::Value> {
         crate::remember::search(&self.db, params).await
     }
-    pub async fn forget(&self, id: &str) -> Result<()> {
-        crate::remember::forget(&self.db, id).await
+    pub async fn forget(&self, id: &str) -> Result<serde_json::Value> {
+        crate::remember::forget(&self.db, id).await?;
+        let changes = [memdiff::Change::Forgotten { id: id.to_string() }];
+        Ok(crate::delta::attach(
+            serde_json::json!({"status": "ok"}),
+            &changes,
+        ))
     }
     pub async fn evolve(&self, id: &str) -> Result<serde_json::Value> {
         let Some(ollama) = self.ollama.as_deref() else {
@@ -362,11 +384,113 @@ impl Hifz {
         let Some(rid) = rows.into_iter().next().and_then(|r| r.id) else {
             return Err(crate::error::HifzError::NotFound("memory not found".into()).into());
         };
-        let report = crate::evolve::evolve_one(&self.db, ollama, &rid).await?;
-        Ok(serde_json::to_value(report).unwrap_or_default())
+        let outcome = crate::evolve::evolve_one(&self.db, ollama, &rid).await?;
+        Ok(crate::delta::attach(
+            serde_json::json!({ "report": outcome.report }),
+            &outcome.changes,
+        ))
     }
     pub async fn memory_links(&self, id: &str) -> Result<serde_json::Value> {
         crate::link::list_for(&self.db, id).await
+    }
+    /// Inspect view: a memory plus its lineage (superseded rows), outgoing
+    /// links, and evolution history, rendered as a structured `MemoryView`.
+    pub async fn memory_view(&self, id: &str) -> Result<serde_json::Value> {
+        let mid = if id.starts_with("memory:") {
+            id.to_string()
+        } else {
+            format!("memory:{id}")
+        };
+        #[derive(Debug, surrealdb::types::SurrealValue)]
+        struct Row {
+            title: Option<String>,
+            category: Option<String>,
+            supersedes: Option<Vec<surrealdb::types::RecordId>>,
+            evolution_history: Option<Vec<crate::models::EvolutionEntry>>,
+        }
+        let mut resp = self
+            .db
+            .query(
+                "SELECT title, category, supersedes, evolution_history \
+                 FROM type::record($id)",
+            )
+            .bind(("id", mid.clone()))
+            .await?;
+        let rows: Vec<Row> = resp.take(0).unwrap_or_default();
+        let Some(row) = rows.into_iter().next() else {
+            return Err(crate::error::HifzError::NotFound("memory not found".into()).into());
+        };
+        let title = row.title.unwrap_or_default();
+        let category = row.category.unwrap_or_else(|| "note".into());
+        let superseded: Vec<String> = row
+            .supersedes
+            .unwrap_or_default()
+            .iter()
+            .map(crate::rid_to_string)
+            .collect();
+        let links = crate::link::list_for(&self.db, &mid).await?;
+        let history = row.evolution_history.unwrap_or_default();
+        let changes = crate::delta::view_changes(&mid, &superseded, &links, &history);
+        let view = memdiff::view_of(&title, &category, &mid, &changes);
+        Ok(memdiff::sink_json::view_to_value(&view))
+    }
+
+    /// Sessions that have recorded memory-delta events (the existing
+    /// `observation` timeline, `obs_type='memory_delta'`).
+    pub async fn replays_list(&self) -> Result<serde_json::Value> {
+        let mut resp = self
+            .db
+            .query(
+                "SELECT meta::id(session_id) AS session_id, count() AS count, \
+                 math::max(timestamp) AS last_ts \
+                 FROM observation WHERE obs_type = 'memory_delta' GROUP BY session_id",
+            )
+            .await?;
+        let mut replays: Vec<serde_json::Value> = resp.take(0).unwrap_or_default();
+        // Most recent activity first.
+        replays.sort_by(|a, b| {
+            b.get("last_ts")
+                .and_then(|v| v.as_str())
+                .cmp(&a.get("last_ts").and_then(|v| v.as_str()))
+        });
+        let count = replays.len();
+        Ok(serde_json::json!({"replays": replays, "count": count}))
+    }
+
+    /// Ordered memory-delta events for one session, as `SessionEvent::Delta`
+    /// JSON (`{kind:"delta", t, delta}`) — the replay player's input.
+    pub async fn replay_get(&self, id: &str) -> Result<serde_json::Value> {
+        if id.is_empty() {
+            return Err(crate::error::HifzError::InvalidInput("empty session id".into()).into());
+        }
+        let sid = format!("session:{}", id.strip_prefix("session:").unwrap_or(id));
+        let mut resp = self
+            .db
+            .query(
+                "SELECT timestamp, ord, metadata FROM observation \
+                 WHERE obs_type = 'memory_delta' AND session_id = type::record($sid) \
+                 ORDER BY ord ASC",
+            )
+            .bind(("sid", sid))
+            .await?;
+        let rows: Vec<serde_json::Value> = resp.take(0).unwrap_or_default();
+        let events: Vec<serde_json::Value> = rows
+            .iter()
+            .map(|r| {
+                let t = r
+                    .get("timestamp")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default();
+                let delta = r
+                    .get("metadata")
+                    .and_then(|m| m.get("delta"))
+                    .cloned()
+                    .unwrap_or_else(|| serde_json::json!({ "lines": [] }));
+                serde_json::json!({ "kind": "delta", "t": t, "delta": delta })
+            })
+            .collect();
+        let count = events.len();
+        Ok(serde_json::json!({"session_id": id, "events": events, "count": count}))
     }
 
     /// Phase 5: typed graph walk from a memory. `relations` filters which
@@ -979,7 +1103,7 @@ impl Hifz {
     }
 }
 
-// `rid_to_string` moved to `hifz_core::ids`; re-exported at crate root
+// `rid_to_string` moved to `kernel::ids`; re-exported at crate root
 // (below) so `crate::rid_to_string` / `hifz::rid_to_string` still resolve.
 
 /// Returns `None` if the row doesn't exist. Used by `Hifz::memory_markdown_put`
@@ -1006,6 +1130,6 @@ async fn resolve_memory_record_id(
     rows.into_iter().next().and_then(|r| r.id)
 }
 
-// `truncate_at_char_boundary` moved to `hifz_core::ids`; re-exported at
+// `truncate_at_char_boundary` moved to `kernel::ids`; re-exported at
 // crate root (below).
-pub use hifz_core::ids::{rid_to_string, truncate_at_char_boundary};
+pub use kernel::ids::{rid_to_string, truncate_at_char_boundary};

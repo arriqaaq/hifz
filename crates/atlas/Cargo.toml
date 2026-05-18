@@ -8,7 +8,7 @@ name = "atlas"
 path = "src/main.rs"
 
 [dependencies]
-hifz-core = { path = "../hifz-core", features = ["code-parse"] }
+kernel = { path = "../kernel", features = ["code-parse"] }
 
 surrealdb = { workspace = true }
 serde = { version = "1", features = ["derive"] }
@@ -34,7 +34,7 @@ clap = { version = "4", features = ["derive", "env"] }
 # REST router (E10) — same axum as hifz
 axum = { version = "0.8", features = ["macros"] }
 
-# tree-sitter (code-graph projection reuses hifz-core's parser)
+# tree-sitter (code-graph projection reuses kernel's parser)
 tree-sitter = "0.26"
 
 [dev-dependencies]

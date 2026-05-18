@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use hifz_core::embed::Embedder;
+use kernel::embed::Embedder;
 use sha2::{Digest, Sha256};
 
 use crate::store::Store;
@@ -143,7 +143,7 @@ pub async fn ingest_path(store: &Store, embedder: &Embedder, root: &Path) -> Res
             .bind(("id", nid.clone()))
             .await;
 
-        for ch in hifz_core::text::split(&text) {
+        for ch in kernel::text::split(&text) {
             let emb = embedder.embed_single(&ch.content).ok();
             store
                 .db
@@ -185,7 +185,7 @@ mod tests {
         // A .pdf that is not a real PDF → extract must skip, never panic.
         std::fs::write(dir.path().join("broken.pdf"), b"%PDF-1.4 not really").unwrap();
 
-        let db = hifz_core::db::connect_mem().await.unwrap();
+        let db = kernel::db::connect_mem().await.unwrap();
         crate::store::init_atlas_schema(&db, 384).await.unwrap();
         let store = Store::new(db, "demo");
         let emb = Embedder::new().unwrap();

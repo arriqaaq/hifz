@@ -5,7 +5,7 @@
 //! deterministic no-LLM fallback.
 
 use anyhow::{Context, Result};
-use hifz_core::ollama::OllamaClient;
+use kernel::ollama::OllamaClient;
 
 pub enum LlmBackend {
     Ollama(OllamaClient),

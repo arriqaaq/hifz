@@ -3,7 +3,7 @@
 //! embedder when a node/chunk has an embedding.
 
 use anyhow::Result;
-use hifz_core::ids::rid_to_string;
+use kernel::ids::rid_to_string;
 use surrealdb::types::{RecordId, SurrealValue};
 
 use crate::store::Store;

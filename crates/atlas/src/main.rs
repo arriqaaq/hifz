@@ -6,7 +6,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use atlas::store::{Store, init_atlas_schema};
 use clap::{Parser, Subcommand};
-use hifz_core::embed::Embedder;
+use kernel::embed::Embedder;
 
 #[derive(Parser)]
 #[command(name = "atlas", about = "corpus knowledge graph on hifz")]
@@ -64,7 +64,7 @@ async fn main() -> Result<()> {
 
     let cli = Cli::parse();
     let path = cli.db.clone().unwrap_or_else(default_db);
-    let db = hifz_core::db::connect(&path).await?;
+    let db = kernel::db::connect(&path).await?;
     let embedder = Embedder::new()?;
     init_atlas_schema(&db, embedder.dimension()).await?;
     let store = Store::new(db.clone(), cli.project.clone());

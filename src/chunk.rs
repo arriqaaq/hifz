@@ -31,10 +31,10 @@ use crate::embed::Embedder;
 use crate::link;
 
 // The pure splitter (`Chunk`, `split`, `best_boundary`,
-// `snap_to_char_boundary`, size constants) moved to `hifz_core::text`.
+// `snap_to_char_boundary`, size constants) moved to `kernel::text`.
 // Re-exported so `crate::chunk::Chunk` / `crate::chunk::split` resolve
 // unchanged. The DB writers below stay here (they need `Db`/`Embedder`).
-pub use hifz_core::text::{Chunk, split};
+pub use kernel::text::{Chunk, split};
 
 // ---------------------------------------------------------------------------
 // DB writers

@@ -10,7 +10,7 @@
 use std::collections::{HashMap, HashSet};
 
 use anyhow::Result;
-use hifz_core::ids::rid_to_string;
+use kernel::ids::rid_to_string;
 use surrealdb::types::{RecordId, SurrealValue};
 
 use crate::store::Store;
@@ -244,7 +244,7 @@ mod tests {
 
     #[tokio::test]
     async fn insights_surface_hub_and_isolated() {
-        let db = hifz_core::db::connect_mem().await.unwrap();
+        let db = kernel::db::connect_mem().await.unwrap();
         crate::store::init_atlas_schema(&db, 384).await.unwrap();
         let store = Store::new(db, "demo");
         for (n, c) in [("hub", 0), ("x1", 0), ("x2", 0), ("y1", 1), ("orphan", 1)] {

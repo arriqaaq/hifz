@@ -90,8 +90,8 @@ uninstall:
 # with the service on port $(PORT).
 
 install-service:
-	@echo "==> Building release binary..."
-	cargo build --release
+	@echo "==> Building release binary (with atlas)..."
+	cargo build --release --features atlas
 	@echo "==> Installing launchd LaunchAgent ($(LABEL))..."
 	@HIFZ_PORT=$(PORT) sh scripts/install-service.sh
 
@@ -102,7 +102,7 @@ uninstall-service:
 # fixed path, so rebuilding in place + kickstart relaunches from the new
 # binary. kickstart hard-fails if the service is not loaded.
 restart-service:
-	cargo build --release
+	cargo build --release --features atlas
 	@launchctl kickstart -k "gui/$$(id -u)/$(LABEL)" && echo "hifz service restarted"
 
 service-status:

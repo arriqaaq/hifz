@@ -9,12 +9,12 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::Result;
-use hifz_core::code_parse::codegraph::walk_file;
-use hifz_core::code_parse::coderesolve::{Resolution, resolve_project};
-use hifz_core::code_parse::lang::Language;
-use hifz_core::code_parse::langmod::module_path;
-use hifz_core::code_parse::walker::{WalkOpts, walk};
-use hifz_core::embed::Embedder;
+use kernel::code_parse::codegraph::walk_file;
+use kernel::code_parse::coderesolve::{Resolution, resolve_project};
+use kernel::code_parse::lang::Language;
+use kernel::code_parse::langmod::module_path;
+use kernel::code_parse::walker::{WalkOpts, walk};
+use kernel::embed::Embedder;
 use sha2::{Digest, Sha256};
 use surrealdb::types::RecordId;
 
@@ -235,7 +235,7 @@ mod tests {
         )
         .unwrap();
 
-        let db = hifz_core::db::connect_mem().await.unwrap();
+        let db = kernel::db::connect_mem().await.unwrap();
         crate::store::init_atlas_schema(&db, 384).await.unwrap();
         let store = Store::new(db, "demo");
         let emb = Embedder::new().unwrap();

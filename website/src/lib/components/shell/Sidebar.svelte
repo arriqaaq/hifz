@@ -10,6 +10,7 @@
     Boxes,
     GitCommit,
     Coins,
+    History,
     HelpCircle,
   } from 'lucide-svelte';
 
@@ -29,6 +30,7 @@
     { icon: Network, href: '/graph', label: 'Graph', match: (p) => p.startsWith('/graph') },
     { icon: Boxes, href: '/atlas', label: 'Atlas', match: (p) => p.startsWith('/atlas') },
     { icon: GitCommit, href: '/commits', label: 'Commits', match: (p) => p.startsWith('/commits') },
+    { icon: History, href: '/replay', label: 'Replay', match: (p) => p.startsWith('/replay') },
     { icon: Coins, href: '/tokens', label: 'Tokens', match: (p) => p.startsWith('/tokens') },
   ];
 

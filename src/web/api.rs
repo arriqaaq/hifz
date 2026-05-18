@@ -33,14 +33,6 @@ fn json_or_err<T: serde::Serialize>(r: anyhow::Result<T>) -> ApiResult {
     }
 }
 
-/// Same but with a custom `status` envelope for ok cases.
-fn ok_or_err(r: anyhow::Result<()>) -> ApiResult {
-    match r {
-        Ok(()) => Ok(Json(serde_json::json!({"status": "ok"}))),
-        Err(e) => Err(ApiError::from(e)),
-    }
-}
-
 // -----------------------------------------------------------------------
 // Health
 // -----------------------------------------------------------------------
@@ -272,7 +264,7 @@ pub struct ForgetReq {
 }
 
 pub async fn forget(State(state): State<AppState>, AppJson(body): AppJson<ForgetReq>) -> ApiResult {
-    ok_or_err(state.forget(&body.id).await)
+    json_or_err(state.forget(&body.id).await)
 }
 
 pub async fn memories_search(
@@ -284,6 +276,24 @@ pub async fn memories_search(
 
 pub async fn memory_links(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult {
     json_or_err(state.memory_links(&id).await)
+}
+
+pub async fn memory_view(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult {
+    json_or_err(state.memory_view(&id).await)
+}
+
+/// Static render theme tokens (tone → hex). The web UI maps these to CSS
+/// custom properties so terminal and browser share one palette.
+pub async fn render_tokens() -> Json<serde_json::Value> {
+    Json(memdiff::theme::tokens())
+}
+
+pub async fn replays_list(State(state): State<AppState>) -> ApiResult {
+    json_or_err(state.replays_list().await)
+}
+
+pub async fn replay_get(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult {
+    json_or_err(state.replay_get(&id).await)
 }
 
 /// Phase 5: typed graph walk from a memory. Query params:

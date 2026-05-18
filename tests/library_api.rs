@@ -96,7 +96,7 @@ async fn library_round_trip_event_session_observe_memory() {
     // --- Memory ---
     let m = h
         .remember(RememberReq {
-            title: "Library API works".into(),
+            title: Some("Library API works".into()),
             content: "Verified by tests/library_api.rs.".into(),
             category: Some("lesson".into()),
             keywords: Some(vec!["library".into(), "api".into()]),
@@ -464,7 +464,7 @@ async fn phase1_revert_weakens_then_confirm_boosts() {
     .expect("session_start");
 
     h.remember(RememberReq {
-        title: "JWT decision".into(),
+        title: Some("JWT decision".into()),
         content: "Use JWT for auth in src/auth.rs.".into(),
         category: Some("decision".into()),
         files: Some(vec!["src/auth.rs".into()]),
@@ -532,7 +532,7 @@ async fn phase1_revert_suppresses_false_commits_for() {
 
     let bug = h
         .remember(RememberReq {
-            title: "fix the auth token crash".into(),
+            title: Some("fix the auth token crash".into()),
             content: "Auth token parsing panics on empty header.".into(),
             category: Some("bug".into()),
             files: Some(vec!["src/auth.rs".into()]),
@@ -585,7 +585,7 @@ async fn phase1_commit_without_metadata_is_backward_compatible() {
     .await
     .expect("session_start");
     h.remember(RememberReq {
-        title: "old-world memory".into(),
+        title: Some("old-world memory".into()),
         content: "References src/legacy.rs.".into(),
         category: Some("note".into()),
         files: Some(vec!["src/legacy.rs".into()]),

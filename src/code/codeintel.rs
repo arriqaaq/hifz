@@ -183,7 +183,7 @@ pub async fn index_code_graph(
             "UPSERT type::record($rid) SET \
              project=$p, name=$n, qualified=$q, kind=$k, language=$lang, \
              file=$fid, path=$path, start_line=$sl, end_line=$el, \
-             start_byte=$sb, end_byte=$eb, signature=$sig, body_hash=$bh, \
+             start_byte=$sb, end_byte=$eb, signature=$sig, doc=$doc, body_hash=$bh, \
              parent_symbol=$parent, chunk_span=$cs, created_at=$now",
         )
         .bind(("rid", format!("code_symbol:{id}")))
@@ -199,6 +199,7 @@ pub async fn index_code_graph(
         .bind(("sb", d.start_byte as i64))
         .bind(("eb", d.end_byte as i64))
         .bind(("sig", d.signature.clone()))
+        .bind(("doc", d.doc.clone()))
         .bind(("bh", d.body_hash.clone()))
         .bind((
             "parent",

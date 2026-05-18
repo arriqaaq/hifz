@@ -282,7 +282,11 @@ pub struct SearchReq {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct RememberReq {
-    pub title: String,
+    /// Optional descriptive headline. When omitted/blank the server derives
+    /// one from `content` (see `enrich::derive_title`) — memories are keyed by
+    /// RecordId, not title, so this is display/RRF only, never identity.
+    #[serde(default)]
+    pub title: Option<String>,
     pub content: String,
     /// Typed category string (`Category::as_str()`). Defaults to `Note`.
     #[serde(default)]

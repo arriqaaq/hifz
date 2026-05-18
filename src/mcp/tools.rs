@@ -32,6 +32,10 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
         .cloned()
         .unwrap_or(serde_json::json!({}));
 
+    // One uniform, self-correcting `-32602` for every tool's required args —
+    // fails fast before the HTTP round-trip, no per-tool guards.
+    validate_required(name, &args)?;
+
     let result: serde_json::Value = match name {
         "hifz_recall" | "hifz_search" => {
             let query = args.get("query").and_then(|v| v.as_str()).unwrap_or("");
@@ -54,19 +58,9 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
         }
 
         "hifz_save" => {
-            // Pre-validate the two fields RememberReq requires (title,
-            // content: String, no serde default). Mirrors the REST 422
-            // conditions exactly — missing/null/non-string — without being
-            // stricter (empty strings are valid there), so an obviously-bad
-            // call fails fast as -32602 instead of a wasted HTTP round-trip.
-            for key in ["title", "content"] {
-                if args.get(key).and_then(|v| v.as_str()).is_none() {
-                    return Err(crate::mcp::http::ProxyError::BadArgs(format!(
-                        "hifz_save: '{key}' (string) is required"
-                    ))
-                    .into());
-                }
-            }
+            // `content` is the only required field (enforced uniformly by
+            // `validate_required`); `title` is optional and derived
+            // server-side from `content` when omitted. Forward verbatim.
             state
                 .client
                 .post(format!("{}/api/v1/memories", state.base_url))
@@ -593,16 +587,81 @@ fn mcp_content(result: &serde_json::Value) -> Result<Vec<serde_json::Value>> {
     Ok(blocks)
 }
 
+/// Generic pre-dispatch required-argument validator.
+///
+/// Every name in the matched tool's `inputSchema.required` must be present in
+/// `args` with the JSON type its schema declares. This replaces N hand-rolled
+/// per-tool guards with one uniform, self-correcting `-32602` (it names the
+/// offending field, the expected type, and the keys actually received so the
+/// model can fix the call in one retry). Tools with no `required` array — or
+/// an unknown `name`, which the dispatch's `_ =>` arm rejects — pass through.
+fn validate_required(name: &str, args: &serde_json::Value) -> Result<()> {
+    #[allow(unused_mut)]
+    let mut defs = tool_defs();
+    #[cfg(feature = "atlas")]
+    defs.extend(atlas_tool_defs());
+
+    let Some(def) = defs
+        .iter()
+        .find(|d| d.get("name").and_then(|v| v.as_str()) == Some(name))
+    else {
+        return Ok(());
+    };
+    let schema = def.get("inputSchema");
+    let Some(required) = schema
+        .and_then(|s| s.get("required"))
+        .and_then(|r| r.as_array())
+    else {
+        return Ok(());
+    };
+    let props = schema.and_then(|s| s.get("properties"));
+
+    for field in required.iter().filter_map(|f| f.as_str()) {
+        let expected = props
+            .and_then(|p| p.get(field))
+            .and_then(|p| p.get("type"))
+            .and_then(|t| t.as_str());
+        let got = args.get(field);
+        let present = !matches!(got, None | Some(serde_json::Value::Null));
+        let type_ok = match (got, expected) {
+            (Some(v), Some("string")) => v.is_string(),
+            (Some(v), Some("integer")) => v.is_i64() || v.is_u64(),
+            (Some(v), Some("number")) => v.is_number(),
+            (Some(v), Some("boolean")) => v.is_boolean(),
+            (Some(v), Some("array")) => v.is_array(),
+            (Some(v), Some("object")) => v.is_object(),
+            _ => true, // unknown/undeclared type: presence is enough
+        };
+        if !present || !type_ok {
+            let ty = expected.unwrap_or("value");
+            let received: Vec<&str> = args
+                .as_object()
+                .map(|o| o.keys().map(String::as_str).collect())
+                .unwrap_or_default();
+            let reason = if !present {
+                format!("missing required argument '{field}' (expected {ty})")
+            } else {
+                format!("argument '{field}' must be {ty}")
+            };
+            return Err(crate::mcp::http::ProxyError::BadArgs(format!(
+                "{name}: {reason}. Received keys: {received:?}"
+            ))
+            .into());
+        }
+    }
+    Ok(())
+}
+
 fn tool_defs() -> Vec<serde_json::Value> {
     vec![
         serde_json::json!({"name": "hifz_recall", "description": "Search past observations and memories with graph expansion (optionally project-scoped)", "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}, "limit": {"type": "integer", "default": 10}, "project": {"type": "string"}, "session_id": {"type": "string", "description": "Session ID for provenance tracking"}}, "required": ["query"]}}),
         serde_json::json!({
             "name": "hifz_save",
-            "description": "Save a memory to long-term store. REQUIRED: both `title` (short string headline) AND `content` (string) must be present in the call's `arguments` — a save with empty/partial arguments is rejected. Use a typed `category` so retrieval can group/filter by intent. Provide `keywords` and `files` explicitly — they are NOT extracted from the title alone (file paths IN content are auto-detected). For long-form documents (Plan/Design/CodeReview/ShipReport/ContextSlice) put the markdown body in `content_long` and a 1-2 sentence summary in `content` (still required). When LLM enrichment is enabled, the system also generates context_summary, tags, and typed conceptual/argumentative edges with stored reasons.",
+            "description": "Save a memory to long-term store. The ONLY required field is `content` (string). `title` is optional — if you omit it the server derives a headline from the first line of `content`, so never block a save on inventing one. Use a typed `category` so retrieval can group/filter by intent. Provide `keywords` and `files` explicitly — they are NOT extracted from the title alone (file paths IN content are auto-detected). For long-form documents (Plan/Design/CodeReview/ShipReport/ContextSlice) put the markdown body in `content_long` and a 1-2 sentence summary in `content` (still required). When LLM enrichment is enabled, the system also generates context_summary, tags, and typed conceptual/argumentative edges with stored reasons.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "title": {"type": "string", "description": "REQUIRED. Short (<~80 char) human-readable headline. Never omit — every save must set this."},
+                    "title": {"type": "string", "description": "Optional. Short (<~80 char) headline. Omit and the server derives it from the first line of content; supply one only to override."},
                     "content": {"type": "string", "description": "REQUIRED. Short retrieval-friendly form. For long-form categories, also provide content_long (but content is still mandatory)."},
                     "content_long": {"type": "string", "description": "Optional full markdown body for long-form artifact categories (Plan/Design/CodeReview/ShipReport/ContextSlice). Phase 4 will chunk this for retrieval."},
                     "project": {"type": "string", "description": "Project name (defaults to 'global' if omitted)"},
@@ -624,7 +683,7 @@ fn tool_defs() -> Vec<serde_json::Value> {
                     "supersedes_memory_id": {"type": "string", "description": "When this memory replaces another. Writes `supersedes` edge AND marks the old one is_latest=false."},
                     "session_id": {"type": "string", "description": "Session ID for provenance tracking"}
                 },
-                "required": ["title", "content"]
+                "required": ["content"]
             }
         }),
         serde_json::json!({"name": "hifz_search", "description": "Hybrid semantic + keyword search with RRF fusion and graph expansion (optionally project-scoped)", "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}, "limit": {"type": "integer", "default": 10}, "project": {"type": "string"}, "session_id": {"type": "string", "description": "Session ID for provenance tracking"}}, "required": ["query"]}}),
@@ -678,4 +737,64 @@ fn tool_defs() -> Vec<serde_json::Value> {
         #[cfg(feature = "code")]
         serde_json::json!({"name": "hifz_code_gc", "description": "Reconcile code-index against the filesystem: drop chunks/symbols/edges for deleted files; optionally decay cold chunks. Run after large refactors or when stale entries linger.", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "root": {"type": "string"}, "dry_run": {"type": "boolean", "default": false}, "force_decay": {"type": "boolean", "default": false}}, "required": ["project", "root"]}}),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn err_msg(name: &str, args: serde_json::Value) -> String {
+        validate_required(name, &args)
+            .expect_err("expected validation error")
+            .to_string()
+    }
+
+    #[test]
+    fn hifz_save_title_no_longer_required() {
+        // content only, no title — must pass now that title is derived.
+        validate_required("hifz_save", &serde_json::json!({"content": "X happened"}))
+            .expect("content-only hifz_save should validate");
+    }
+
+    #[test]
+    fn hifz_save_missing_content_is_self_correcting_32602() {
+        let m = err_msg("hifz_save", serde_json::json!({"title": "just a title"}));
+        assert!(m.contains("hifz_save"), "{m}");
+        assert!(m.contains("'content'"), "{m}");
+        assert!(m.contains("missing required"), "{m}");
+        // names the keys actually received so the model can self-correct
+        assert!(m.contains("title"), "{m}");
+    }
+
+    #[test]
+    fn hifz_save_content_wrong_type_rejected() {
+        let m = err_msg("hifz_save", serde_json::json!({"content": 42}));
+        assert!(
+            m.contains("'content'") && m.contains("must be string"),
+            "{m}"
+        );
+    }
+
+    #[test]
+    fn generic_layer_covers_other_multi_required_tools() {
+        // hifz_core_edit requires project, field, op, value — `op` omitted.
+        let m = err_msg(
+            "hifz_core_edit",
+            serde_json::json!({"project": "p", "field": "goals", "value": "v"}),
+        );
+        assert!(m.contains("hifz_core_edit") && m.contains("'op'"), "{m}");
+
+        validate_required(
+            "hifz_core_edit",
+            &serde_json::json!({"project": "p", "field": "goals", "op": "add", "value": "v"}),
+        )
+        .expect("fully-specified hifz_core_edit should validate");
+    }
+
+    #[test]
+    fn unknown_tool_and_no_required_pass_through() {
+        validate_required("not_a_tool", &serde_json::json!({})).expect("unknown name passes");
+        // hifz_sessions has no `required` array.
+        validate_required("hifz_sessions", &serde_json::json!({})).expect("no-required passes");
+    }
 }

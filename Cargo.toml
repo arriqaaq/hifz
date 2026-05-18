@@ -124,6 +124,18 @@ path = "benchmark/longmemeval_bench.rs"
 name = "memory-bench"
 path = "benchmark/memory_bench.rs"
 
+[[bin]]
+name = "corpus-code-bench"
+path = "benchmark/corpus_code_bench.rs"
+
+[[bin]]
+name = "corpus-memory-bench"
+path = "benchmark/corpus_memory_bench.rs"
+
+[[bin]]
+name = "parity-bench"
+path = "benchmark/parity_bench.rs"
+
 # For local dev: uncomment to use local SurrealDB checkout instead of git
 # [patch.crates-io]
 # surrealdb = { path = "/path/to/surrealdb/surrealdb" }

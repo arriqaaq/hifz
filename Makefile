@@ -1,4 +1,4 @@
-.PHONY: build frontend backend server dev stop check test smoke status install uninstall sync-ontology check-ontology install-service uninstall-service restart-service service-status
+.PHONY: build frontend backend server dev stop check test smoke status install uninstall sync-ontology check-ontology install-service uninstall-service restart-service service-status install-git-hook backfill-commits
 
 HIFZ_BIN  := ./target/debug/hifz
 DB_PATH   := ~/.hifz/data
@@ -71,6 +71,7 @@ install:
 	@echo "==> hifz registered: marketplace=directory:$(PLUGIN_DIR), enabledPlugins[hifz@hifz]=true"
 	@echo "==> In Claude Code run /reload-plugins (or start a fresh session) to load hooks + /hifz:* skills."
 	@echo "==> For the always-on REST server used by hooks/MCP: make install-service"
+	@echo "==> For commit-grounding on human/terminal commits: make install-git-hook"
 	@echo ""
 	@echo "==> This repo's ./.mcp.json already wires the hifz MCP server. For OTHER projects, add to their .mcp.json:"
 	@echo '    { "mcpServers": { "hifz": { "command": "$(CURDIR)/target/release/hifz", "args": ["mcp"] } } }'
@@ -82,6 +83,18 @@ uninstall:
 	  "$(CLAUDE_SETTINGS)" > "$$T" && mv "$$T" "$(CLAUDE_SETTINGS)" \
 	  || { rm -f "$$T"; echo "ERROR: jq failed; $(CLAUDE_SETTINGS) left unchanged"; exit 1; }
 	@echo "==> hifz unregistered from $(CLAUDE_SETTINGS). Run /reload-plugins (or restart) to fully unload."
+
+# --- Git commit-grounding hook ---
+# Installs a git post-commit hook so EVERY commit (human or Claude) emits a
+# `commit_made` observation. Without this, commit-grounding only sees commits
+# Claude itself runs via its Bash tool. Idempotent; chains any existing hook.
+install-git-hook:
+	@sh scripts/install-git-hook.sh
+
+# Backfill commit-grounding from this repo's real git history (oldest→newest).
+# Mutates the live store (memory strengths); idempotent (observe dedups).
+backfill-commits:
+	@sh scripts/backfill-commits.sh .
 
 # --- Always-on service (macOS launchd LaunchAgent) ---
 # Runs target/release/hifz serve as a background daemon: starts at

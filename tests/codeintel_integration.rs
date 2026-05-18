@@ -196,3 +196,72 @@ async fn e4_codeintel_end_to_end() {
 
     let _ = std::fs::remove_dir_all(&repo);
 }
+
+#[derive(Debug, SurrealValue)]
+struct DocRow {
+    doc: Option<String>,
+}
+
+/// Doc-extraction gate: `code_symbol.doc` must be populated from real source
+/// comments across languages (Rust `///`, Python `"""`, JS `/** */`).
+/// Regression guard for the pipeline gap where `doc` was always NONE.
+#[tokio::test]
+async fn doc_extraction_rust_python_js() {
+    let h = Hifz::open_memory().await.expect("open in-memory hifz");
+    let repo = tmp_repo("docx");
+    std::fs::write(
+        repo.join("src/lib.rs"),
+        "/// Adds two numbers and returns the sum.\n\
+         pub fn add_two(a: i32, b: i32) -> i32 { a + b }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        repo.join("src/util.py"),
+        "def greet(name):\n    \"\"\"Return a friendly greeting for the given name.\"\"\"\n    return name\n",
+    )
+    .unwrap();
+    std::fs::write(
+        repo.join("src/util.js"),
+        "/** Multiplies the input by two. */\nexport function double(x) { return x * 2; }\n",
+    )
+    .unwrap();
+
+    let req = CodeIndexReq {
+        project: "docx".into(),
+        root: repo.to_string_lossy().to_string(),
+        follow_symlinks: None,
+        max_file_bytes: None,
+    };
+    h.code_index(req).await.expect("index docx");
+
+    async fn doc_of(h: &Hifz, name: &str) -> String {
+        let mut r =
+            h.db.query("SELECT doc FROM code_symbol WHERE project='docx' AND name=$n")
+                .bind(("n", name.to_string()))
+                .await
+                .unwrap();
+        let rows: Vec<DocRow> = r.take(0).unwrap_or_default();
+        rows.into_iter()
+            .filter_map(|x| x.doc)
+            .find(|d| !d.trim().is_empty())
+            .unwrap_or_default()
+    }
+
+    let rust_doc = doc_of(&h, "add_two").await;
+    assert!(
+        rust_doc.contains("Adds two numbers"),
+        "Rust /// doc not extracted, got: {rust_doc:?}"
+    );
+    let py_doc = doc_of(&h, "greet").await;
+    assert!(
+        py_doc.contains("friendly greeting"),
+        "Python docstring not extracted, got: {py_doc:?}"
+    );
+    let js_doc = doc_of(&h, "double").await;
+    assert!(
+        js_doc.contains("Multiplies the input"),
+        "JS /** */ doc not extracted, got: {js_doc:?}"
+    );
+
+    let _ = std::fs::remove_dir_all(&repo);
+}

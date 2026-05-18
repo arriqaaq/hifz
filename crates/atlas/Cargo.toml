@@ -31,8 +31,12 @@ pdf-extract = "0.7"
 # CLI (E10)
 clap = { version = "4", features = ["derive", "env"] }
 
-# REST router (E10) — same axum as hifz
-axum = { version = "0.8", features = ["macros"] }
+# REST router (E10) — same axum as hifz; multipart for browser upload (R1)
+axum = { version = "0.8", features = ["macros", "multipart"] }
+
+# Async build-job registry + locating `git` (R1, same versions as hifz)
+dashmap = "6"
+which = "7"
 
 # tree-sitter (code-graph projection reuses kernel's parser)
 tree-sitter = "0.26"

@@ -143,7 +143,7 @@ pub async fn serve(state: Hifz, port: u16) -> Result<()> {
     let atlas_router = atlas::web::router(atlas::web::AtlasState {
         db: state.db.clone(),
         embedder: state.embedder.clone(),
-        project: std::env::var("ATLAS_PROJECT").unwrap_or_else(|_| "default".into()),
+        jobs: Default::default(),
     });
 
     let api = Router::new()

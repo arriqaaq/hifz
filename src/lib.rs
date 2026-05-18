@@ -312,13 +312,25 @@ impl Hifz {
 
         // `&'static str`, so it survives `category` being moved into the call.
         let category_label = category.as_str();
+        // `title` is optional/descriptive (memories are keyed by RecordId).
+        // Use the caller's value only when present and non-blank; otherwise
+        // derive a non-empty headline from `content`. This is the single
+        // chokepoint for both the REST endpoint and the MCP proxy, so the
+        // "LLM forgot title" failure cannot reach storage.
+        let title = req
+            .title
+            .as_deref()
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+            .unwrap_or_else(|| crate::enrich::derive_title(&req.content, category_label));
         let id = crate::enrich::save_enriched(
             &self.db,
             &self.embedder,
             self.ollama.as_deref(),
             self.llm_evolve,
             project,
-            &req.title,
+            &title,
             &req.content,
             category,
             keywords,
@@ -332,7 +344,7 @@ impl Hifz {
         .await?;
         let changes = crate::delta::save_changes(
             &id,
-            &req.title,
+            &title,
             category_label,
             req.supersedes_memory_id.as_deref(),
             req.closes_memory_id.as_deref(),
@@ -342,7 +354,7 @@ impl Hifz {
         let delta = memdiff::delta_from_changes(&changes);
         crate::delta::record_observation(&self.db, req.session_id.as_deref(), &delta).await;
         Ok(crate::delta::attach_delta(
-            serde_json::json!({"status": "ok", "id": id, "title": req.title}),
+            serde_json::json!({"status": "ok", "id": id, "title": title}),
             delta,
         ))
     }

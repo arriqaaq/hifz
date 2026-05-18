@@ -31,6 +31,10 @@ pub struct SymbolDef {
     pub end_line: usize,
     /// First line of the definition (signature line) — best-effort.
     pub signature: Option<String>,
+    /// Doc comment immediately preceding the definition (Rust `///`/`//!`,
+    /// JS/TS/Java `/** */`, Go `//`, C/C++ `/** */`/`//`) or the Python
+    /// docstring (first body string). `None` when undocumented.
+    pub doc: Option<String>,
     /// Stable hash of the definition body — drives structural rename
     /// reconciliation in E4 (qualified changed but body identical → rename).
     pub body_hash: String,
@@ -155,6 +159,7 @@ fn walk_node(
                         start_line: sl,
                         end_line: el,
                         signature: text.lines().next().map(|l| l.trim().to_string()),
+                        doc: cfg.extract_doc(node, src),
                         // Hash the *body* subtree only (not the name/
                         // signature) so a pure rename keeps the same hash →
                         // structural rename reconciliation. Falls back to

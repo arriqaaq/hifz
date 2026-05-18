@@ -23,7 +23,7 @@ fn ops(v: &serde_json::Value) -> Vec<String> {
 
 fn remember_req(title: &str, supersedes: Option<&str>) -> RememberReq {
     RememberReq {
-        title: title.into(),
+        title: Some(title.into()),
         content: "body".into(),
         category: Some("decision".into()),
         keywords: None,

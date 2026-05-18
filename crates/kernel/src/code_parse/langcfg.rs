@@ -38,6 +38,20 @@ impl LanguageConfig {
         }
     }
 
+    /// Doc comment for a definition `node`. Python: the first statement in
+    /// the body if it is a string literal (the docstring). Every other
+    /// language: the contiguous run of comment nodes immediately preceding
+    /// the definition (attribute/annotation/decorator nodes are skipped, a
+    /// blank-line gap stops collection), markers stripped, whitespace
+    /// collapsed. `None` when undocumented.
+    pub fn extract_doc(&self, node: tree_sitter::Node, src: &str) -> Option<String> {
+        if self.lang == Language::Python {
+            python_docstring(node, src)
+        } else {
+            preceding_comment_doc(node, src)
+        }
+    }
+
     pub fn def_kind(&self, node_kind: &str) -> Option<&'static str> {
         self.def_kinds
             .iter()
@@ -443,6 +457,111 @@ fn python_import(
         }
         _ => {}
     }
+}
+
+/// Collapse a list of raw comment node texts (source order) into one line:
+/// strip `///`/`//!`/`//`/`/**`/`*/`/leading-`*`/`/*` markers, drop empty
+/// lines, join with spaces.
+fn clean_comment_lines(raw: &[String]) -> String {
+    let mut out: Vec<String> = Vec::new();
+    for block in raw {
+        for line in block.lines() {
+            let t = line.trim();
+            let t = t
+                .trim_start_matches("/**")
+                .trim_start_matches("///")
+                .trim_start_matches("//!")
+                .trim_start_matches("//")
+                .trim_start_matches("/*")
+                .trim_end_matches("*/")
+                .trim_start_matches('*')
+                .trim();
+            if !t.is_empty() {
+                out.push(t.to_string());
+            }
+        }
+    }
+    out.join(" ")
+}
+
+/// Contiguous comment nodes immediately above `node` (skipping attribute /
+/// annotation / decorator nodes), nearest-first then reversed to source
+/// order. A blank-line gap (>1 line) between elements stops collection so an
+/// unrelated earlier comment is not captured.
+fn preceding_comment_doc(node: tree_sitter::Node, src: &str) -> Option<String> {
+    // Ascend through declaration wrappers so the comment — a sibling of the
+    // OUTER wrapper, not the inner def — is reachable. E.g. JS/TS
+    // `export function f` (def is `function_declaration` inside
+    // `export_statement`; the `/** */` precedes the export_statement),
+    // Python `@deco def f` (`decorated_definition`), C++ `template<...>`.
+    let mut anchor = node;
+    while let Some(p) = anchor.parent() {
+        if matches!(
+            p.kind(),
+            "export_statement"
+                | "decorated_definition"
+                | "declaration"
+                | "template_declaration"
+                | "ambient_declaration"
+                | "labeled_statement"
+        ) {
+            anchor = p;
+        } else {
+            break;
+        }
+    }
+    let mut blocks: Vec<String> = Vec::new();
+    let mut expect_row = anchor.start_position().row;
+    let mut cur = anchor.prev_sibling();
+    while let Some(n) = cur {
+        let k = n.kind();
+        if n.end_position().row + 1 < expect_row {
+            break; // blank-line gap → not attached to the definition
+        }
+        if k.contains("attribute") || k.contains("annotation") || k == "decorator" {
+            expect_row = n.start_position().row;
+            cur = n.prev_sibling();
+            continue;
+        }
+        if k.contains("comment") {
+            blocks.push(n.utf8_text(src.as_bytes()).unwrap_or("").to_string());
+            expect_row = n.start_position().row;
+            cur = n.prev_sibling();
+            continue;
+        }
+        break;
+    }
+    if blocks.is_empty() {
+        return None;
+    }
+    blocks.reverse();
+    let s = clean_comment_lines(&blocks);
+    let s = s.split_whitespace().collect::<Vec<_>>().join(" ");
+    (!s.is_empty()).then_some(s)
+}
+
+/// Python docstring: the first statement of the definition body when it is a
+/// bare string literal. Quotes/prefixes stripped, whitespace collapsed.
+fn python_docstring(node: tree_sitter::Node, src: &str) -> Option<String> {
+    let body = node.child_by_field_name("body")?;
+    let mut c = body.walk();
+    let stmt = body.named_children(&mut c).next()?;
+    if stmt.kind() != "expression_statement" {
+        return None;
+    }
+    let mut cc = stmt.walk();
+    let s = stmt.named_children(&mut cc).next()?;
+    if s.kind() != "string" {
+        return None;
+    }
+    let raw = s.utf8_text(src.as_bytes()).unwrap_or("");
+    let t = raw
+        .trim()
+        .trim_start_matches(['r', 'R', 'b', 'B', 'f', 'F', 'u', 'U'])
+        .trim_matches(|ch| ch == '"' || ch == '\'')
+        .trim();
+    let t = t.split_whitespace().collect::<Vec<_>>().join(" ");
+    (!t.is_empty()).then_some(t)
 }
 
 const PYTHON: LanguageConfig = LanguageConfig {

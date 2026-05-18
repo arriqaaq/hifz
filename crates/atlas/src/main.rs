@@ -104,7 +104,7 @@ async fn main() -> Result<()> {
             let state = atlas::web::AtlasState {
                 db,
                 embedder: Arc::new(embedder),
-                project: cli.project,
+                jobs: Default::default(),
             };
             let app = atlas::web::router(state);
             let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await?;

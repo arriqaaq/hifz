@@ -479,14 +479,68 @@ export interface AtlasHit {
   snippet?: string;
 }
 
-export function getAtlasInsights(): Promise<AtlasInsights> {
-  return get(`${ATLAS}/insights`);
+export interface AtlasStatus {
+  project: string;
+  running: boolean;
+  step: string;
+  last_report: unknown;
+  error: string | null;
 }
-export function getAtlasGraph(): Promise<AtlasGraph> {
-  return get(`${ATLAS}/graph`);
+
+const pj = (p: string) => `project=${encodeURIComponent(p)}`;
+
+export function getAtlasInsights(project: string): Promise<AtlasInsights> {
+  return get(`${ATLAS}/insights?${pj(project)}`);
 }
-export function atlasQuery(q: string, limit = 20): Promise<{ hits: AtlasHit[] }> {
-  return get(`${ATLAS}/query?q=${encodeURIComponent(q)}&limit=${limit}`);
+export function getAtlasGraph(project: string): Promise<AtlasGraph> {
+  return get(`${ATLAS}/graph?${pj(project)}`);
+}
+export function atlasQuery(
+  project: string,
+  q: string,
+  limit = 20,
+): Promise<{ hits: AtlasHit[] }> {
+  return get(`${ATLAS}/query?q=${encodeURIComponent(q)}&limit=${limit}&${pj(project)}`);
+}
+
+// Build endpoints are async: they return `{ started: true }` (or
+// `{ error }` if a job is already running). Poll `atlasStatus`.
+export function atlasStatus(project: string): Promise<AtlasStatus> {
+  return get(`${ATLAS}/status?${pj(project)}`);
+}
+export function atlasBuildAll(
+  project: string,
+  src: { path?: string; git?: string; docs?: string },
+): Promise<{ started?: boolean; error?: string }> {
+  return post(`${ATLAS}/build?${pj(project)}`, { ...src, project });
+}
+export function atlasCode(
+  project: string,
+  src: { path?: string; git?: string },
+): Promise<{ started?: boolean; error?: string }> {
+  return post(`${ATLAS}/code?${pj(project)}`, { ...src, project });
+}
+export function atlasIngest(
+  project: string,
+  path: string,
+): Promise<{ started?: boolean; error?: string }> {
+  return post(`${ATLAS}/ingest?${pj(project)}`, { path, project });
+}
+export function atlasExtract(project: string): Promise<{ started?: boolean; error?: string }> {
+  return post(`${ATLAS}/extract?${pj(project)}`);
+}
+export function atlasCluster(project: string): Promise<{ started?: boolean; error?: string }> {
+  return post(`${ATLAS}/cluster?${pj(project)}`);
+}
+export async function atlasUpload(
+  project: string,
+  files: FileList | File[],
+): Promise<{ started?: boolean; error?: string }> {
+  const fd = new FormData();
+  for (const f of Array.from(files)) fd.append('file', f, f.name);
+  const res = await fetch(`${ATLAS}/upload?${pj(project)}`, { method: 'POST', body: fd });
+  if (!res.ok) throw new Error(`POST ${ATLAS}/upload: ${res.status}`);
+  return res.json();
 }
 
 // --- Renderer / replay (memdiff) ---

@@ -136,6 +136,71 @@ fn default_score() -> f64 {
 }
 
 // ---------------------------------------------------------------------------
+// Title derivation
+// ---------------------------------------------------------------------------
+
+/// Strip leading markdown heading / blockquote / bullet / ordered-list markers
+/// from a line so a derived headline reads cleanly (`## Foo` → `Foo`,
+/// `1. Bar` → `Bar`). Returns the slice after the markers (may be empty).
+fn strip_md_markers(line: &str) -> &str {
+    let s = line.trim_start_matches(['#', '>', '-', '*', '+', ' ', '\t']);
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() && bytes[i].is_ascii_digit() {
+        i += 1;
+    }
+    if i > 0 && i < bytes.len() && (bytes[i] == b'.' || bytes[i] == b')') {
+        s[i + 1..].trim_start()
+    } else {
+        s
+    }
+}
+
+/// Derive a non-empty display headline from `content` when the caller omits
+/// `title`. Mirrors the universal note-app pattern (first line = title; Apple
+/// Notes / Joplin / basic-memory). `title` in hifz is descriptive only
+/// (memories are keyed by RecordId), so a derived headline is fully adequate.
+///
+/// Rules: first non-blank line, stripped of leading markdown markers; cut at
+/// the first sentence terminator (`.!?` followed by whitespace/EOL) when that
+/// shortens it; truncated to ≤80 chars on a UTF-8 char boundary with an
+/// ellipsis. If `content` is entirely blank the title is `"<category>
+/// <YYYY-MM-DD>"` so the stored title is *never* empty.
+pub fn derive_title(content: &str, category: &str) -> String {
+    const MAX: usize = 80;
+
+    let Some(line) = content.lines().map(str::trim).find(|l| !l.is_empty()) else {
+        let date = chrono::Utc::now().format("%Y-%m-%d");
+        return format!("{category} {date}");
+    };
+
+    let stripped = strip_md_markers(line);
+    let base = if stripped.is_empty() { line } else { stripped };
+
+    // Sentence end = `.!?` followed by whitespace or end-of-line only, so
+    // version strings ("v1.2.3") and decimals aren't split mid-token.
+    let term = base.char_indices().find(|&(i, c)| {
+        matches!(c, '.' | '!' | '?')
+            && base[i + c.len_utf8()..]
+                .chars()
+                .next()
+                .map(char::is_whitespace)
+                .unwrap_or(true)
+    });
+    let sentence = match term {
+        Some((i, c)) => &base[..i + c.len_utf8()],
+        None => base,
+    };
+    let sentence = sentence.trim();
+
+    if sentence.chars().count() <= MAX {
+        return sentence.to_string();
+    }
+    let truncated: String = sentence.chars().take(MAX).collect();
+    format!("{}…", truncated.trim_end())
+}
+
+// ---------------------------------------------------------------------------
 // Public entry point
 // ---------------------------------------------------------------------------
 
@@ -920,5 +985,60 @@ mod tests {
     fn parse_enrich_rejects_no_object() {
         let raw = "I refuse to comply";
         assert!(parse_enrich_json(raw).is_err());
+    }
+
+    #[test]
+    fn derive_title_uses_first_nonblank_line() {
+        assert_eq!(
+            derive_title("\n\n  Fixed the auth race  \nmore detail here", "fix"),
+            "Fixed the auth race"
+        );
+    }
+
+    #[test]
+    fn derive_title_strips_markdown_markers() {
+        assert_eq!(
+            derive_title("## Plan: rework cache", "plan"),
+            "Plan: rework cache"
+        );
+        assert_eq!(derive_title("- a bullet point", "note"), "a bullet point");
+        assert_eq!(
+            derive_title("1. first step of the plan", "plan"),
+            "first step of the plan"
+        );
+        assert_eq!(derive_title("> quoted insight", "note"), "quoted insight");
+    }
+
+    #[test]
+    fn derive_title_cuts_at_sentence_but_not_versions() {
+        assert_eq!(
+            derive_title("The bug was a deadlock. It only repro'd under load.", "bug"),
+            "The bug was a deadlock."
+        );
+        // version/decimal must NOT split (terminator not followed by space)
+        assert_eq!(
+            derive_title("v1.2.3 released to prod", "note"),
+            "v1.2.3 released to prod"
+        );
+    }
+
+    #[test]
+    fn derive_title_truncates_on_char_boundary_with_ellipsis() {
+        let long = "x".repeat(200);
+        let t = derive_title(&long, "note");
+        assert_eq!(t.chars().count(), 81); // 80 + ellipsis
+        assert!(t.ends_with('…'));
+        // multibyte content must not panic and must stay on a char boundary
+        let multi = "é".repeat(200);
+        let mt = derive_title(&multi, "note");
+        assert!(mt.ends_with('…'));
+        assert_eq!(mt.chars().filter(|&c| c == 'é').count(), 80);
+    }
+
+    #[test]
+    fn derive_title_blank_content_falls_back_never_empty() {
+        let t = derive_title("   \n\t  \n", "lesson");
+        assert!(t.starts_with("lesson "), "got {t:?}");
+        assert!(!t.trim().is_empty());
     }
 }

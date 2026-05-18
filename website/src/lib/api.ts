@@ -431,3 +431,56 @@ export function fetchSessionTotals(
     : `${AGENT}/usage/sessions`;
   return get(url);
 }
+
+// --- atlas (corpus knowledge graph) ---
+const ATLAS = '/api/v1/atlas';
+
+export interface AtlasHubNode {
+  id: string;
+  label: string;
+  kind: string;
+  weighted_degree: number;
+  clusters_touched: number;
+}
+export interface AtlasSurprisingLink {
+  from: string;
+  to: string;
+  relation: string;
+  score: number;
+  surprise: number;
+  why: string;
+}
+export interface AtlasIsolatedNode {
+  id: string;
+  label: string;
+  kind: string;
+  weighted_degree: number;
+}
+export interface AtlasInsights {
+  nodes: number;
+  edges: number;
+  clusters: number;
+  hub_nodes: AtlasHubNode[];
+  surprising_links: AtlasSurprisingLink[];
+  isolated_nodes: AtlasIsolatedNode[];
+}
+export interface AtlasGraph {
+  nodes: Array<Record<string, unknown>>;
+  edges: Array<Record<string, unknown>>;
+}
+export interface AtlasHit {
+  id: string;
+  kind: string;
+  label: string;
+  snippet?: string;
+}
+
+export function getAtlasInsights(): Promise<AtlasInsights> {
+  return get(`${ATLAS}/insights`);
+}
+export function getAtlasGraph(): Promise<AtlasGraph> {
+  return get(`${ATLAS}/graph`);
+}
+export function atlasQuery(q: string, limit = 20): Promise<{ hits: AtlasHit[] }> {
+  return get(`${ATLAS}/query?q=${encodeURIComponent(q)}&limit=${limit}`);
+}

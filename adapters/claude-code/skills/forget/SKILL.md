@@ -11,14 +11,13 @@ The user wants to remove data from hifz: $ARGUMENTS
 
 Steps:
 
-1. First search for matching observations with the `memory_smart_search` MCP tool (provided by the hifz server this plugin wires up via `.mcp.json`). Use the user's input as the `query` with `limit: 20`.
-2. Show the user what was found — session IDs, observation IDs, titles — and ask for explicit confirmation before deleting.
-3. Once confirmed, call `memory_governance_delete` with:
-   - `memoryIds: [<id>, ...]` — an array (or comma-separated string) of the memory IDs returned by the search in step 1
-   - `reason: "<short reason>"` — optional, defaults to `"plugin skill request"`
+1. First search for matching memories with the `hifz_search` MCP tool (provided by the hifz server this plugin wires up via `.mcp.json`). Use the user's input as the `query` with `limit: 20`.
+2. Show the user what was found — session IDs, memory IDs, titles — and ask for explicit confirmation before deleting.
+3. Once confirmed, delete each memory by calling `hifz_delete` **once per memory id**:
+   - `id` — a single memory id string like `"memory:<key>"` (from the search results in step 1)
 
-   If the user wants to drop an entire session's observations, collect every memory ID in that session from the search results and pass them all via `memoryIds`. The standalone MCP doesn't accept a bare `sessionId` argument — it deletes by memory ID only.
-4. Confirm the deletion count back to the user.
+   `hifz_delete` removes one memory per call and takes no other arguments (no `reason`, no batch array). To drop several memories — or an entire session's memories — collect every relevant `memory:<key>` from the search results and call `hifz_delete` once for each. There is no bare-`sessionId` delete; deletion is by memory id only.
+4. Confirm the number of memories deleted back to the user.
 
 **Never delete without explicit user confirmation.** If the MCP tools aren't available, the stdio MCP shim didn't start — tell the user to:
 1. Run `/plugin list` in Claude Code and confirm `hifz` shows as enabled.

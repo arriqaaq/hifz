@@ -1,0 +1,62 @@
+[package]
+name = "hifz-core"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# Database — shared git-rev pin via workspace (mismatch = type incompat)
+surrealdb = { workspace = true }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Embeddings (local, free)
+fastembed = "5"
+
+# HTTP client (Ollama)
+reqwest = { version = "0.12", features = ["json", "stream"] }
+
+# Hashing
+sha2 = "0.10"
+hex = "0.4"
+
+# Text processing
+regex = "1"
+
+# Error handling
+anyhow = "1"
+
+# Logging
+tracing = "0.1"
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Code parsing (gated by `code-parse`, default-on). Pin minors — grammar
+# API drifts across versions.
+ignore                 = { version = "0.4",  optional = true }
+tree-sitter            = { version = "0.26", optional = true }
+tree-sitter-rust       = { version = "0.24", optional = true }
+tree-sitter-python     = { version = "0.25", optional = true }
+tree-sitter-javascript = { version = "0.25", optional = true }
+tree-sitter-typescript = { version = "0.23", optional = true }
+tree-sitter-go         = { version = "0.25", optional = true }
+tree-sitter-java       = { version = "0.23", optional = true }
+tree-sitter-c          = { version = "0.24", optional = true }
+tree-sitter-cpp        = { version = "0.23", optional = true }
+
+[features]
+default = ["code-parse"]
+code-parse = [
+    "dep:ignore",
+    "dep:tree-sitter",
+    "dep:tree-sitter-rust",
+    "dep:tree-sitter-python",
+    "dep:tree-sitter-javascript",
+    "dep:tree-sitter-typescript",
+    "dep:tree-sitter-go",
+    "dep:tree-sitter-java",
+    "dep:tree-sitter-c",
+    "dep:tree-sitter-cpp",
+]

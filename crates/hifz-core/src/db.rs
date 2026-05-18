@@ -128,7 +128,7 @@ DEFINE FIELD IF NOT EXISTS context_summary  ON memory TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS evolution_history ON memory TYPE array<object> DEFAULT [];
 DEFINE FIELD IF NOT EXISTS strength         ON memory TYPE float;
 DEFINE FIELD IF NOT EXISTS retrieval_count  ON memory TYPE int DEFAULT 0;
-DEFINE FIELD IF NOT EXISTS last_accessed_at ON memory TYPE string DEFAULT time::now();
+DEFINE FIELD IF NOT EXISTS last_accessed_at ON memory TYPE string DEFAULT <string>time::now();
 DEFINE FIELD IF NOT EXISTS embedding        ON memory TYPE option<array<float>>;
 DEFINE FIELD IF NOT EXISTS version          ON memory TYPE int DEFAULT 1;
 DEFINE FIELD IF NOT EXISTS parent_id        ON memory TYPE option<record<memory>>;
@@ -215,6 +215,9 @@ DEFINE FIELD IF NOT EXISTS score      ON edge TYPE float DEFAULT 1.0;
 DEFINE FIELD IF NOT EXISTS reason     ON edge TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS metadata   ON edge TYPE option<object>;
 DEFINE FIELD IF NOT EXISTS created_at ON edge TYPE string;
+-- Phase 0b: code-edge resolution provenance — resolved|external|ambiguous.
+-- Optional (legacy edges have none); set by the code-intel core (E4).
+DEFINE FIELD IF NOT EXISTS resolution ON edge TYPE option<string>;
 DEFINE INDEX IF NOT EXISTS edge_relation ON TABLE edge FIELDS relation;
 DEFINE INDEX IF NOT EXISTS edge_via      ON TABLE edge FIELDS via;
 DEFINE INDEX IF NOT EXISTS edge_in       ON TABLE edge FIELDS in;
@@ -262,7 +265,7 @@ DEFINE FIELD IF NOT EXISTS content_hash       ON code_chunk TYPE string;
 DEFINE FIELD IF NOT EXISTS embedding          ON code_chunk TYPE option<array<float>>;
 DEFINE FIELD IF NOT EXISTS symbols            ON code_chunk TYPE array<string> DEFAULT [];  -- qualified names defined here
 DEFINE FIELD IF NOT EXISTS strength           ON code_chunk TYPE float DEFAULT 1.0;
-DEFINE FIELD IF NOT EXISTS last_referenced_at ON code_chunk TYPE string DEFAULT time::now();
+DEFINE FIELD IF NOT EXISTS last_referenced_at ON code_chunk TYPE string DEFAULT <string>time::now();
 DEFINE FIELD IF NOT EXISTS created_at         ON code_chunk TYPE string;
 DEFINE INDEX IF NOT EXISTS code_chunk_file    ON TABLE code_chunk FIELDS file;
 DEFINE INDEX IF NOT EXISTS code_chunk_project ON TABLE code_chunk FIELDS project;
@@ -290,22 +293,40 @@ DEFINE FIELD IF NOT EXISTS kind               ON code_symbol TYPE string;       
 DEFINE FIELD IF NOT EXISTS language           ON code_symbol TYPE string;
 DEFINE FIELD IF NOT EXISTS file               ON code_symbol TYPE record<code_file>;
 DEFINE FIELD IF NOT EXISTS path               ON code_symbol TYPE string;            -- denorm
-DEFINE FIELD IF NOT EXISTS primary_chunk      ON code_symbol TYPE option<record<code_chunk>>;
 DEFINE FIELD IF NOT EXISTS start_line         ON code_symbol TYPE int;
 DEFINE FIELD IF NOT EXISTS end_line           ON code_symbol TYPE int;
 DEFINE FIELD IF NOT EXISTS signature          ON code_symbol TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS doc                ON code_symbol TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS embedding          ON code_symbol TYPE option<array<float>>;
-DEFINE FIELD IF NOT EXISTS last_referenced_at ON code_symbol TYPE string DEFAULT time::now();
+DEFINE FIELD IF NOT EXISTS last_referenced_at ON code_symbol TYPE string DEFAULT <string>time::now();
 DEFINE FIELD IF NOT EXISTS created_at         ON code_symbol TYPE string;
--- Not UNIQUE: re-indexing wipes all symbols for a file before re-creating them,
--- so duplicates are prevented by the indexer, not the DB. Two free functions
--- with the same name in different `mod` blocks are legitimate.
-DEFINE INDEX IF NOT EXISTS code_symbol_lookup ON TABLE code_symbol FIELDS project, qualified, file;
+-- Phase 0b additive superset (optional → old .scm extractor still valid under
+-- SCHEMAFULL; populated by the code-intel core in E4):
+DEFINE FIELD IF NOT EXISTS start_byte         ON code_symbol TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS end_byte           ON code_symbol TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS parent_symbol      ON code_symbol TYPE option<record<code_symbol>>;  -- explicit containment
+DEFINE FIELD IF NOT EXISTS body_hash          ON code_symbol TYPE option<string>;               -- structural rename detection
+DEFINE FIELD IF NOT EXISTS visibility         ON code_symbol TYPE option<string>;               -- pub|exported|private
+DEFINE FIELD IF NOT EXISTS chunk_span         ON code_symbol TYPE option<array<record<code_chunk>>> DEFAULT [];  -- replaces primary_chunk
+-- E4: semantic qualified path is globally unique within a project (the
+-- code-intel core guarantees it), so identity is `(project, qualified)`
+-- UNIQUE → deterministic stable-id UPSERT, no wipe-recreate. `primary_chunk`
+-- dropped (superseded by `chunk_span`).
+DEFINE INDEX IF NOT EXISTS code_symbol_lookup ON TABLE code_symbol FIELDS project, qualified UNIQUE;
 DEFINE INDEX IF NOT EXISTS code_symbol_name   ON TABLE code_symbol FIELDS project, name;
 DEFINE INDEX IF NOT EXISTS code_symbol_kind   ON TABLE code_symbol FIELDS project, kind;
 DEFINE INDEX IF NOT EXISTS code_symbol_vec    ON TABLE code_symbol
   FIELDS embedding HNSW DIMENSION 384 DIST COSINE;
+
+-- Phase 0b: explicit node for call/import targets outside the indexed set
+-- (stdlib / third-party / dynamic). Keyed by canonical import path so the
+-- same external is one node. Unused until E4 wires the resolver.
+DEFINE TABLE IF NOT EXISTS external_symbol SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS project    ON external_symbol TYPE string;
+DEFINE FIELD IF NOT EXISTS canonical  ON external_symbol TYPE string;   -- e.g. "std::fmt::Display", "react#useState"
+DEFINE FIELD IF NOT EXISTS language   ON external_symbol TYPE string;
+DEFINE FIELD IF NOT EXISTS created_at ON external_symbol TYPE string;
+DEFINE INDEX IF NOT EXISTS external_symbol_key ON TABLE external_symbol FIELDS project, canonical UNIQUE;
 
 -- === AGENT USAGE (generic, adapter-populated) ===
 -- One row per LLM inference call. Vendor-neutral: adapters map their own

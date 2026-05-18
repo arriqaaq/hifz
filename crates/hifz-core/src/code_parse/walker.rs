@@ -16,7 +16,7 @@ use std::time::SystemTime;
 use anyhow::Result;
 use ignore::WalkBuilder;
 
-use crate::code::lang::is_supported_extension;
+use crate::code_parse::lang::is_supported_extension;
 
 /// One walked file ready for indexing. `mtime_ns` and `size_bytes` are used by
 /// `code_file` rows to short-circuit unchanged files on re-index.

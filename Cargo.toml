@@ -1,3 +1,12 @@
+[workspace]
+members = [".", "crates/hifz-core", "crates/atlas"]
+
+# Shared deps that MUST share one resolution across the workspace.
+# surrealdb is a git-rev pin (not on crates.io) — a rev mismatch between
+# hifz and hifz-core produces incompatible duplicate types.
+[workspace.dependencies]
+surrealdb = { git = "https://github.com/surrealdb/surrealdb", rev = "876df15b11fabd36b43eeba923f53c4d5ffa59a6", features = ["kv-surrealkv", "kv-mem"] }
+
 [package]
 name = "hifz"
 version = "0.1.0"
@@ -5,6 +14,10 @@ edition = "2024"
 default-run = "hifz"
 
 [dependencies]
+hifz-core = { path = "crates/hifz-core", default-features = false }
+# atlas corpus-graph product, mounted under /api/v1/atlas behind the
+# `atlas` feature. Optional → default build is byte-identical without it.
+atlas = { path = "crates/atlas", optional = true }
 # Web
 axum = { version = "0.8", features = ["macros"] }
 tokio = { version = "1", features = ["full"] }
@@ -12,9 +25,9 @@ tower-http = { version = "0.6", features = ["fs", "cors"] }
 # Binary resolution
 which = "7"
 
-# Database — pinned to specific commit from main (3.1.0-alpha, not yet on crates.io)
-# To update: cargo update surrealdb
-surrealdb = { git = "https://github.com/surrealdb/surrealdb", rev = "876df15b11fabd36b43eeba923f53c4d5ffa59a6", features = ["kv-surrealkv", "kv-mem"] }
+# Database — shared git-rev pin via [workspace.dependencies].
+# To update: edit the rev in [workspace.dependencies] then `cargo update surrealdb`.
+surrealdb = { workspace = true }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
@@ -81,7 +94,11 @@ notify-debouncer-mini  = { version = "0.6",  optional = true }
 
 [features]
 default = ["code"]
+# atlas: mount the corpus-graph product under /api/v1/atlas. Not in
+# `default` → standard builds/daemon are unaffected.
+atlas = ["dep:atlas", "code"]
 code = [
+    "hifz-core/code-parse",
     "dep:ignore",
     "dep:text-splitter",
     "dep:tree-sitter",

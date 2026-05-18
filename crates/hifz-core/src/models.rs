@@ -642,6 +642,17 @@ pub enum EdgeRelation {
     /// as a `code_symbol` row. Survives chunk re-splitting and reformatting.
     ReferencesSymbol,
 
+    /// Phase 0b code-graph relations (symbol→symbol / symbol→external),
+    /// produced by the code-intelligence core. The edge carries
+    /// `resolution ∈ {resolved, external, ambiguous}`.
+    /// Caller symbol invokes callee symbol.
+    Calls,
+    /// A file/module imports another module or symbol.
+    Imports,
+    /// Structural containment (file→class→method); not `part_of` (that is
+    /// chunk/symbol→file), this is symbol→symbol.
+    Contains,
+
     /// Catch-all for forward/backward compat. Validation accepts.
     #[serde(other)]
     Other,
@@ -675,6 +686,9 @@ impl EdgeRelation {
             Self::Tests => "tests",
             Self::References => "references",
             Self::ReferencesSymbol => "references_symbol",
+            Self::Calls => "calls",
+            Self::Imports => "imports",
+            Self::Contains => "contains",
             Self::Other => "other",
         }
     }
@@ -707,6 +721,9 @@ impl EdgeRelation {
             "tests" => Self::Tests,
             "references" => Self::References,
             "references_symbol" => Self::ReferencesSymbol,
+            "calls" => Self::Calls,
+            "imports" => Self::Imports,
+            "contains" => Self::Contains,
             _ => Self::Other,
         }
     }

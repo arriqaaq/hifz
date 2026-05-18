@@ -12,14 +12,14 @@ pub mod chunk;
 pub mod code;
 pub mod commits;
 pub mod compress;
-pub mod config;
+pub use hifz_core::config;
 pub mod consolidate;
 pub mod context;
 pub mod core_mem;
-pub mod db;
+pub use hifz_core::db;
 pub mod dedup;
 pub mod digest;
-pub mod embed;
+pub use hifz_core::embed;
 pub mod enrich;
 pub mod error;
 pub mod evolve;
@@ -31,9 +31,9 @@ pub mod link;
 pub mod llm_rerank;
 pub mod markdown;
 pub mod mcp;
-pub mod models;
+pub use hifz_core::models;
 pub mod observe;
-pub mod ollama;
+pub use hifz_core::ollama;
 pub mod plans;
 pub mod prompts;
 pub mod rank;
@@ -979,25 +979,8 @@ impl Hifz {
     }
 }
 
-/// Resolve a `"memory:abc"` / `"abc"` string to a SurrealDB `RecordId`.
-/// Canonical `table:key` string for a SurrealDB [`RecordId`].
-///
-/// `RecordId`'s `Debug`/`Display` renders as
-/// `RecordId { table: Table("memory"), key: String("...") }`, which is
-/// useless to API consumers (they can't feed it back to delete/evolve/link).
-/// This produces the canonical `memory:<key>` form instead. Mirrors the
-/// private helpers in `observe.rs` / `trace.rs` — centralized here so the
-/// save path can reuse it.
-pub(crate) fn rid_to_string(rid: &surrealdb::types::RecordId) -> String {
-    use surrealdb::types::RecordIdKey;
-    let key = match &rid.key {
-        RecordIdKey::String(s) => s.clone(),
-        RecordIdKey::Number(n) => n.to_string(),
-        RecordIdKey::Uuid(u) => u.to_string(),
-        other => format!("{other:?}"),
-    };
-    format!("{}:{key}", rid.table)
-}
+// `rid_to_string` moved to `hifz_core::ids`; re-exported at crate root
+// (below) so `crate::rid_to_string` / `hifz::rid_to_string` still resolve.
 
 /// Returns `None` if the row doesn't exist. Used by `Hifz::memory_markdown_put`
 /// to clear stale chunks before writing the new version.
@@ -1023,18 +1006,6 @@ async fn resolve_memory_record_id(
     rows.into_iter().next().and_then(|r| r.id)
 }
 
-/// Truncate a string at the largest char boundary `<= max_bytes`.
-///
-/// Plain `&s[..max_bytes]` panics when `max_bytes` lands inside a multi-byte
-/// UTF-8 codepoint (e.g. shell-prompt glyphs `✗`, `➜`, box-drawing `─`).
-/// Use this anywhere you'd otherwise byte-slice user-supplied text.
-pub fn truncate_at_char_boundary(s: &str, max_bytes: usize) -> &str {
-    if s.len() <= max_bytes {
-        return s;
-    }
-    let mut end = max_bytes;
-    while end > 0 && !s.is_char_boundary(end) {
-        end -= 1;
-    }
-    &s[..end]
-}
+// `truncate_at_char_boundary` moved to `hifz_core::ids`; re-exported at
+// crate root (below).
+pub use hifz_core::ids::{rid_to_string, truncate_at_char_boundary};

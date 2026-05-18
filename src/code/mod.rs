@@ -22,12 +22,14 @@
 //! ## M2+ adds
 //! - `index`, `search`, `link`, `gc`, `watcher`
 
+pub mod codeintel;
 pub mod gc;
 pub mod index;
-pub mod lang;
 pub mod link;
 pub mod search;
 pub mod splitter;
-pub mod symbols;
-pub mod walker;
 pub mod watcher;
+
+// `lang` + `walker` moved to `hifz_core::code_parse`; re-exported so
+// `crate::code::lang::*` / `crate::code::walker::*` resolve unchanged.
+pub use hifz_core::code_parse::{lang, walker};

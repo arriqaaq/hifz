@@ -5,9 +5,23 @@ use crate::mcp::http::RequestBuilderExt;
 
 /// List all available MCP tools.
 pub fn list_tools() -> Result<serde_json::Value> {
-    Ok(serde_json::json!({
-        "tools": tool_defs()
-    }))
+    #[allow(unused_mut)]
+    let mut tools = tool_defs();
+    #[cfg(feature = "atlas")]
+    tools.extend(atlas_tool_defs());
+    Ok(serde_json::json!({ "tools": tools }))
+}
+
+#[cfg(feature = "atlas")]
+fn atlas_tool_defs() -> Vec<serde_json::Value> {
+    vec![
+        serde_json::json!({"name": "atlas_ingest", "description": "Ingest PDFs/markdown/txt under a path into the atlas corpus graph", "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}),
+        serde_json::json!({"name": "atlas_code", "description": "Project a repo's code graph (scope-qualified symbols + calls/imports/contains with resolution) into atlas", "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}),
+        serde_json::json!({"name": "atlas_extract", "description": "LLM concept-graph extraction over ingested docs (no-LLM embedding fallback if no backend)", "inputSchema": {"type": "object", "properties": {}}}),
+        serde_json::json!({"name": "atlas_cluster", "description": "Modularity clustering + >25% re-split over the atlas graph", "inputSchema": {"type": "object", "properties": {}}}),
+        serde_json::json!({"name": "atlas_insights", "description": "Hub nodes / surprising cross-cluster links / isolated nodes (JSON)", "inputSchema": {"type": "object", "properties": {}}}),
+        serde_json::json!({"name": "atlas_query", "description": "Hybrid text query over the atlas corpus graph", "inputSchema": {"type": "object", "properties": {"q": {"type": "string"}}, "required": ["q"]}}),
+    ]
 }
 
 /// Dispatch a tool call — proxies to the REST server via HTTP.
@@ -426,6 +440,62 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                 .await?
         }
 
+        // --- atlas corpus-graph tools (feature-gated, proxied to REST) ---
+        #[cfg(feature = "atlas")]
+        "atlas_ingest" => {
+            state
+                .client
+                .post(format!("{}/api/v1/atlas/ingest", state.base_url))
+                .json(&args)
+                .send_decode()
+                .await?
+        }
+        #[cfg(feature = "atlas")]
+        "atlas_code" => {
+            state
+                .client
+                .post(format!("{}/api/v1/atlas/code", state.base_url))
+                .json(&args)
+                .send_decode()
+                .await?
+        }
+        #[cfg(feature = "atlas")]
+        "atlas_extract" => {
+            state
+                .client
+                .post(format!("{}/api/v1/atlas/extract", state.base_url))
+                .json(&args)
+                .send_decode()
+                .await?
+        }
+        #[cfg(feature = "atlas")]
+        "atlas_cluster" => {
+            state
+                .client
+                .post(format!("{}/api/v1/atlas/cluster", state.base_url))
+                .json(&args)
+                .send_decode()
+                .await?
+        }
+        #[cfg(feature = "atlas")]
+        "atlas_insights" => {
+            state
+                .client
+                .get(format!("{}/api/v1/atlas/insights", state.base_url))
+                .send_decode()
+                .await?
+        }
+        #[cfg(feature = "atlas")]
+        "atlas_query" => {
+            let q = args.get("q").and_then(|v| v.as_str()).unwrap_or("");
+            state
+                .client
+                .get(format!("{}/api/v1/atlas/query", state.base_url))
+                .query(&[("q", q)])
+                .send_decode()
+                .await?
+        }
+
         "hifz_usage" => {
             let mode = args.get("mode").and_then(|v| v.as_str()).unwrap_or("");
             match mode {
@@ -487,12 +557,12 @@ fn tool_defs() -> Vec<serde_json::Value> {
         serde_json::json!({"name": "hifz_recall", "description": "Search past observations and memories with graph expansion (optionally project-scoped)", "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}, "limit": {"type": "integer", "default": 10}, "project": {"type": "string"}, "session_id": {"type": "string", "description": "Session ID for provenance tracking"}}, "required": ["query"]}}),
         serde_json::json!({
             "name": "hifz_save",
-            "description": "Save a memory to long-term store. Use a typed `category` so retrieval can group/filter by intent. Provide `keywords` and `files` explicitly — they are NOT extracted from the title alone (file paths IN content are auto-detected). For long-form documents (Plan/Design/CodeReview/ShipReport/ContextSlice) put the markdown body in `content_long` and a 1-2 sentence summary in `content`. When LLM enrichment is enabled, the system also generates context_summary, tags, and typed conceptual/argumentative edges with stored reasons.",
+            "description": "Save a memory to long-term store. REQUIRED: both `title` (short string headline) AND `content` (string) must be present in the call's `arguments` — a save with empty/partial arguments is rejected. Use a typed `category` so retrieval can group/filter by intent. Provide `keywords` and `files` explicitly — they are NOT extracted from the title alone (file paths IN content are auto-detected). For long-form documents (Plan/Design/CodeReview/ShipReport/ContextSlice) put the markdown body in `content_long` and a 1-2 sentence summary in `content` (still required). When LLM enrichment is enabled, the system also generates context_summary, tags, and typed conceptual/argumentative edges with stored reasons.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "title": {"type": "string"},
-                    "content": {"type": "string", "description": "Short retrieval-friendly form. For long-form categories, also provide content_long."},
+                    "title": {"type": "string", "description": "REQUIRED. Short (<~80 char) human-readable headline. Never omit — every save must set this."},
+                    "content": {"type": "string", "description": "REQUIRED. Short retrieval-friendly form. For long-form categories, also provide content_long (but content is still mandatory)."},
                     "content_long": {"type": "string", "description": "Optional full markdown body for long-form artifact categories (Plan/Design/CodeReview/ShipReport/ContextSlice). Phase 4 will chunk this for retrieval."},
                     "project": {"type": "string", "description": "Project name (defaults to 'global' if omitted)"},
                     "category": {

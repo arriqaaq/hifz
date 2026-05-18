@@ -18,7 +18,6 @@ use surrealdb::types::{RecordId, SurrealValue};
 
 use crate::code::lang::Language;
 use crate::code::splitter::{CodeSplitter, RawChunk};
-use crate::code::symbols::{RawSymbol, extract_symbols};
 use crate::code::walker::{WalkOpts, WalkedFile, walk};
 use crate::db::Db;
 use crate::embed::Embedder;
@@ -55,7 +54,7 @@ pub struct IndexReport {
 #[derive(Debug)]
 pub enum IndexFileOutcome {
     Skipped,
-    Indexed { chunks: usize, symbols: usize },
+    Indexed { chunks: usize },
 }
 
 #[derive(Debug, SurrealValue)]
@@ -95,10 +94,9 @@ pub async fn index_repo(
     for f in &files {
         match index_walked(db, embedder, project, f).await {
             Ok(IndexFileOutcome::Skipped) => report.skipped_unchanged += 1,
-            Ok(IndexFileOutcome::Indexed { chunks, symbols }) => {
+            Ok(IndexFileOutcome::Indexed { chunks }) => {
                 report.indexed += 1;
                 report.chunks += chunks;
-                report.symbols += symbols;
             }
             Err(e) => {
                 tracing::warn!("index_file failed for {}: {e}", f.rel);
@@ -107,6 +105,17 @@ pub async fn index_repo(
         }
         // Yield to let memory_search/memory_save interleave (G2).
         tokio::task::yield_now().await;
+    }
+
+    // Project-wide code-intelligence pass: semantic scope-qualified
+    // symbols + calls/imports/contains graph with `resolution`. Runs once,
+    // after every file's chunks exist, so symbol↔chunk spans bind.
+    match crate::code::codeintel::index_code_graph(db, project, root).await {
+        Ok(cg) => report.symbols = cg.symbols,
+        Err(e) => {
+            tracing::warn!("codeintel::index_code_graph failed: {e}");
+            report.errors += 1;
+        }
     }
 
     Ok(report)
@@ -173,7 +182,8 @@ async fn index_walked(
     if chunks.is_empty() {
         return Ok(IndexFileOutcome::Skipped);
     }
-    let symbols: Vec<RawSymbol> = extract_symbols(lang, &source).unwrap_or_default();
+    // Symbols + the code graph are built project-wide by `codeintel`
+    // (called once at the end of `index_repo`), not per-file here.
 
     // -- Step 4: embed ----------------------------------------------------
     let texts: Vec<String> = chunks.iter().map(|c| c.content.clone()).collect();
@@ -234,29 +244,24 @@ async fn index_walked(
         }
     };
 
-    // -- Step 6a: snapshot inbound references for re-anchoring (G6) -------
+    // -- Step 6a: snapshot inbound chunk references for re-anchoring (G6).
+    // (Symbol-level re-anchoring is gone — `codeintel` keeps symbol ids
+    // stable across reindex and reconciles renames structurally.)
     let archived_chunks = crate::code::link::snapshot_references(db, &file_id)
         .await
         .unwrap_or_default();
-    let archived_symbols = crate::code::link::snapshot_symbol_references(db, &file_id)
-        .await
-        .unwrap_or_default();
 
-    // -- Step 6b: wipe old chunks/symbols/structural edges ----------------
+    // -- Step 6b: wipe old chunks + their part_of edges (symbols are
+    // owned by `codeintel` via stable-id UPSERT, not wiped per file).
     let _ = db
         .query(
             "DELETE edge WHERE relation = 'part_of' AND \
-             (in IN (SELECT VALUE id FROM code_chunk WHERE file = $fid) \
-              OR in IN (SELECT VALUE id FROM code_symbol WHERE file = $fid))",
+             in IN (SELECT VALUE id FROM code_chunk WHERE file = $fid)",
         )
         .bind(("fid", file_id.clone()))
         .await;
     let _ = db
         .query("DELETE code_chunk WHERE file = $fid")
-        .bind(("fid", file_id.clone()))
-        .await;
-    let _ = db
-        .query("DELETE code_symbol WHERE file = $fid")
         .bind(("fid", file_id.clone()))
         .await;
 
@@ -303,69 +308,18 @@ async fn index_walked(
         chunk_ids.push(cid);
     }
 
-    // -- Step 8: write symbols (find primary_chunk by line overlap) -------
-    let mut symbol_count = 0usize;
-    for s in &symbols {
-        // Pick the chunk whose line range best contains the symbol.
-        let primary = chunks
-            .iter()
-            .enumerate()
-            .find(|(_, c)| c.start_line <= s.start_line && c.end_line >= s.start_line);
-        let primary_chunk_id = primary.and_then(|(i, _)| chunk_ids.get(i).cloned());
+    // -- Step 8: symbols + code graph are built project-wide by
+    // `codeintel::index_code_graph` (called once from `index_repo` after
+    // all chunks exist), keyed on a deterministic `(project,qualified)` id
+    // so `references_symbol` edges survive reindex by construction.
 
-        let mut resp = db
-            .query(
-                "CREATE code_symbol SET project = $p, name = $name, qualified = $qual, \
-                 kind = $kind, language = $lang, file = $fid, path = $path, \
-                 primary_chunk = $primary, start_line = $sl, end_line = $el, \
-                 created_at = $now RETURN id",
-            )
-            .bind(("p", project.to_string()))
-            .bind(("name", s.name.clone()))
-            .bind(("qual", s.qualified.clone()))
-            .bind(("kind", s.kind.clone()))
-            .bind(("lang", lang.as_str().to_string()))
-            .bind(("fid", file_id.clone()))
-            .bind(("path", f.rel.clone()))
-            .bind(("primary", primary_chunk_id.clone()))
-            .bind(("sl", s.start_line as i64))
-            .bind(("el", s.end_line as i64))
-            .bind(("now", now.clone()))
-            .await?;
-        let created: Vec<CreatedId> = resp.take(0).unwrap_or_default();
-        let Some(sid) = created.into_iter().next().and_then(|c| c.id) else {
-            continue;
-        };
-        let _ = link::upsert_edge(
-            db,
-            &sid,
-            &file_id,
-            "part_of",
-            "system",
-            1.0,
-            Some("code_symbol part of code_file"),
-        )
-        .await;
-        symbol_count += 1;
-    }
-
-    // -- Step 9: re-anchor archived references to new chunks/symbols (G6)
+    // -- Step 9: re-anchor archived *chunk* references to new chunks (G6).
     if !archived_chunks.is_empty() {
         let _ = crate::code::link::re_anchor_references(db, project, &archived_chunks).await;
-    }
-    if !archived_symbols.is_empty() {
-        let _ = crate::code::link::re_anchor_symbol_references(
-            db,
-            project,
-            &file_id,
-            &archived_symbols,
-        )
-        .await;
     }
 
     Ok(IndexFileOutcome::Indexed {
         chunks: chunk_ids.len(),
-        symbols: symbol_count,
     })
 }
 

@@ -279,6 +279,18 @@ pub fn is_allowed_relation(rel: EdgeRelation, from: RecordKind, to: RecordKind) 
         R::References => from == K::Memory && (to == K::CodeChunk || to == K::CodeFile),
         R::ReferencesSymbol => from == K::Memory && to == K::CodeSymbol,
 
+        // Phase 0b code-graph: symbol→symbol structural / call / import edges
+        // from the code-intelligence core. External targets (`external_symbol`
+        // table) ride the `to == K::Other` passthrough at the top of this fn
+        // until E4 promotes `ExternalSymbol` to a first-class `RecordKind`
+        // (mirrors the MemoryChunk precedent in the `PartOf` arm above).
+        R::Calls => from == K::CodeSymbol && to == K::CodeSymbol,
+        R::Imports => {
+            (from == K::CodeFile || from == K::CodeSymbol)
+                && (to == K::CodeFile || to == K::CodeSymbol)
+        }
+        R::Contains => (from == K::CodeFile || from == K::CodeSymbol) && to == K::CodeSymbol,
+
         R::Other => true,
     }
 }

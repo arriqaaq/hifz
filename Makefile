@@ -1,4 +1,4 @@
-.PHONY: build frontend backend server dev stop check test smoke status install sync-ontology check-ontology install-service uninstall-service restart-service service-status
+.PHONY: build frontend backend server dev stop check test smoke status install uninstall sync-ontology check-ontology install-service uninstall-service restart-service service-status
 
 HIFZ_BIN  := ./target/debug/hifz
 DB_PATH   := ~/.hifz/data
@@ -51,24 +51,37 @@ smoke:
 status:
 	@curl -s http://localhost:$(PORT)/hifz/health | python3 -m json.tool 2>/dev/null || echo "Server not running"
 
-# --- Install (symlinks plugin + MCP into Claude Code) ---
+# --- Install (registers the repo plugin as a local directory marketplace) ---
+# Claude Code does NOT auto-discover symlinked dirs under ~/.claude/plugins.
+# The supported, scriptable mechanism is a directory-source marketplace plus
+# enabledPlugins in ~/.claude/settings.json (the exact config that makes hifz
+# work today). Idempotent + atomic: settings.json is never clobbered on error.
+PLUGIN_DIR      := $(CURDIR)/adapters/claude-code
+CLAUDE_SETTINGS := $(HOME)/.claude/settings.json
 
 install:
-	@echo "==> Installing Claude Code plugin hooks..."
-	@mkdir -p ~/.claude/plugins/hifz
-	@ln -sfn $(CURDIR)/plugin/hooks/hooks.json ~/.claude/plugins/hifz/hooks.json
-	@ln -sfn $(CURDIR)/plugin/scripts ~/.claude/plugins/hifz/scripts
-	@echo "==> Plugin installed at ~/.claude/plugins/hifz"
+	@command -v jq >/dev/null || { echo "ERROR: jq required (brew install jq)"; exit 1; }
+	@[ -f "$(PLUGIN_DIR)/.claude-plugin/plugin.json" ] || { echo "ERROR: $(PLUGIN_DIR)/.claude-plugin/plugin.json not found"; exit 1; }
+	@mkdir -p "$(dir $(CLAUDE_SETTINGS))"
+	@[ -f "$(CLAUDE_SETTINGS)" ] || echo '{}' > "$(CLAUDE_SETTINGS)"
+	@T=$$(mktemp); jq --arg p "$(PLUGIN_DIR)" \
+	  '.extraKnownMarketplaces.hifz.source = {source:"directory", path:$$p} | .enabledPlugins."hifz@hifz" = true' \
+	  "$(CLAUDE_SETTINGS)" > "$$T" && mv "$$T" "$(CLAUDE_SETTINGS)" \
+	  || { rm -f "$$T"; echo "ERROR: jq failed; $(CLAUDE_SETTINGS) left unchanged"; exit 1; }
+	@echo "==> hifz registered: marketplace=directory:$(PLUGIN_DIR), enabledPlugins[hifz@hifz]=true"
+	@echo "==> In Claude Code run /reload-plugins (or start a fresh session) to load hooks + /hifz:* skills."
+	@echo "==> For the always-on REST server used by hooks/MCP: make install-service"
 	@echo ""
-	@echo "==> Add this to .mcp.json in each project that should use hifz:"
-	@echo '    {'
-	@echo '      "mcpServers": {'
-	@echo '        "hifz": {'
-	@echo '          "command": "$(CURDIR)/target/debug/hifz",'
-	@echo '          "args": ["mcp"]'
-	@echo '        }'
-	@echo '      }'
-	@echo '    }'
+	@echo "==> This repo's ./.mcp.json already wires the hifz MCP server. For OTHER projects, add to their .mcp.json:"
+	@echo '    { "mcpServers": { "hifz": { "command": "$(CURDIR)/target/release/hifz", "args": ["mcp"] } } }'
+
+uninstall:
+	@command -v jq >/dev/null || { echo "ERROR: jq required"; exit 1; }
+	@[ -f "$(CLAUDE_SETTINGS)" ] || { echo "==> nothing to do ($(CLAUDE_SETTINGS) absent)"; exit 0; }
+	@T=$$(mktemp); jq 'del(.enabledPlugins."hifz@hifz") | del(.extraKnownMarketplaces.hifz)' \
+	  "$(CLAUDE_SETTINGS)" > "$$T" && mv "$$T" "$(CLAUDE_SETTINGS)" \
+	  || { rm -f "$$T"; echo "ERROR: jq failed; $(CLAUDE_SETTINGS) left unchanged"; exit 1; }
+	@echo "==> hifz unregistered from $(CLAUDE_SETTINGS). Run /reload-plugins (or restart) to fully unload."
 
 # --- Always-on service (macOS launchd LaunchAgent) ---
 # Runs target/release/hifz serve as a background daemon: starts at

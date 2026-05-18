@@ -4,7 +4,7 @@ description: Show what happened in recent past sessions on this project. Use whe
 user-invocable: true
 ---
 
-Fetch recent session history using the `memory_sessions` MCP tool (provided by the hifz server that this plugin wires up automatically via `.mcp.json`). Pass `limit: 20` to get a meaningful window.
+Fetch recent session history using the `hifz_sessions` MCP tool (provided by the hifz server that this plugin wires up automatically via `.mcp.json`). Pass `limit: 20` to get a meaningful window.
 
 Present the returned sessions in reverse chronological order:
 - Show the session ID (first 8 chars), project, start time, and status
@@ -12,7 +12,7 @@ Present the returned sessions in reverse chronological order:
 - Note the total observation count per session
 - If a session summary exists, surface the title and the key decisions
 
-Format as a clean timeline. **Do NOT make up sessions** — only show what the MCP tool actually returned. If `memory_sessions` isn't available, the stdio MCP shim didn't start — tell the user to:
+Format as a clean timeline. **Do NOT make up sessions** — only show what the MCP tool actually returned. If `hifz_sessions` isn't available, the stdio MCP shim didn't start — tell the user to:
 1. Run `/plugin list` in Claude Code and confirm `hifz` shows as enabled.
 2. Restart Claude Code (the plugin's `.mcp.json` is only read on startup).
 3. Check `/mcp` to see whether the `hifz` MCP server is connected.

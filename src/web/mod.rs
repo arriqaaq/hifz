@@ -19,6 +19,12 @@ pub async fn serve(state: Hifz, port: u16) -> Result<()> {
         .allow_methods(Any)
         .allow_headers(Any);
 
+    // atlas (feature-gated): ensure its tables exist in the shared store.
+    #[cfg(feature = "atlas")]
+    if let Err(e) = atlas::store::init_atlas_schema(&state.db, state.embedder.dimension()).await {
+        tracing::error!("atlas schema init failed: {e}");
+    }
+
     // --- Core Memory API (no session/hook/git dependency, scoped by project) ---
     let core_api = Router::new()
         .route("/health", axum::routing::get(api::health))
@@ -127,10 +133,23 @@ pub async fn serve(state: Hifz, port: u16) -> Result<()> {
             axum::routing::get(api::usage_project),
         );
 
+    // atlas router carries its own state (→ `Router<()>` after `with_state`);
+    // build it before `state` is consumed below.
+    #[cfg(feature = "atlas")]
+    let atlas_router = atlas::web::router(atlas::web::AtlasState {
+        db: state.db.clone(),
+        embedder: state.embedder.clone(),
+        project: std::env::var("ATLAS_PROJECT").unwrap_or_else(|_| "default".into()),
+    });
+
     let api = Router::new()
         .nest("/api/v1", core_api)
         .nest("/api/v1/agent", agent_api)
         .with_state(state);
+
+    // Both are now `Router<()>` → composes cleanly.
+    #[cfg(feature = "atlas")]
+    let api = api.nest("/api/v1/atlas", atlas_router);
 
     // Serve frontend static files with SPA fallback
     let spa_fallback = ServeFile::new("website/build/index.html");

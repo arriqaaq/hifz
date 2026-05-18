@@ -251,15 +251,9 @@ async fn apply_symbol_link(
         tracing::warn!("upsert references_symbol edge failed: {e}");
         return;
     }
-    let _ = db
-        .query(
-            "UPDATE edge SET metadata = { matched_symbol: $q, anchor_version: 1 } \
-             WHERE in = $from AND out = $to AND relation = 'references_symbol'",
-        )
-        .bind(("from", memory_id.clone()))
-        .bind(("to", s.id.clone()))
-        .bind(("q", qualified.to_string()))
-        .await;
+    // No `matched_symbol`/`anchor_version` metadata (E4): the symbol's
+    // record id is now deterministic and stable across reindex, so the
+    // edge needs no re-anchor breadcrumb.
     report.edges_created += 1;
 }
 
@@ -466,35 +460,11 @@ pub async fn snapshot_references(db: &Surreal<Db>, file_id: &RecordId) -> Result
         .collect())
 }
 
-/// Snapshot `references_symbol` edges to symbols of `file_id`.
-pub async fn snapshot_symbol_references(
-    db: &Surreal<Db>,
-    file_id: &RecordId,
-) -> Result<Vec<(RecordId, RecordId, Option<String>, Option<i64>)>> {
-    #[derive(Debug, SurrealValue)]
-    struct Row {
-        edge_id: RecordId,
-        from: RecordId,
-        matched_symbol: Option<String>,
-        anchor_version: Option<i64>,
-    }
-    let mut resp = db
-        .query(
-            "SELECT id AS edge_id, in AS from, \
-                    metadata.matched_symbol AS matched_symbol, \
-                    metadata.anchor_version AS anchor_version \
-             FROM edge \
-             WHERE relation = 'references_symbol' \
-               AND out IN (SELECT VALUE id FROM code_symbol WHERE file = $fid)",
-        )
-        .bind(("fid", file_id.clone()))
-        .await?;
-    let rows: Vec<Row> = resp.take(0).unwrap_or_default();
-    Ok(rows
-        .into_iter()
-        .map(|r| (r.edge_id, r.from, r.matched_symbol, r.anchor_version))
-        .collect())
-}
+// `snapshot_symbol_references` / `re_anchor_symbol_references` removed in
+// E4. Symbol identity is now a deterministic `(project,qualified)` id
+// (`codeintel`), so `references_symbol` edges survive reindex by
+// construction; symbol renames are reconciled structurally there. Chunk
+// re-anchoring (`snapshot_references`/`re_anchor_references`) is unchanged.
 
 /// After new chunks are written, retarget archived edges to whichever new
 /// chunk overlaps the original line range. If none overlap, mark the edge
@@ -564,67 +534,6 @@ pub async fn re_anchor_references(
             .bind(("ver", new_version))
             .await;
         rewritten += 1;
-    }
-    Ok(rewritten)
-}
-
-/// Re-anchor `references_symbol` edges. If the target qualified symbol is
-/// still defined in the file, point at the new symbol record; otherwise drop.
-pub async fn re_anchor_symbol_references(
-    db: &Surreal<Db>,
-    project: &str,
-    file_id: &RecordId,
-    archived: &[(RecordId, RecordId, Option<String>, Option<i64>)],
-) -> Result<usize> {
-    let mut rewritten = 0usize;
-    for (edge_id, _from, qual_opt, anchor_ver) in archived {
-        let Some(qual) = qual_opt.as_deref() else {
-            let _ = db
-                .query("DELETE type::record($id)")
-                .bind(("id", edge_id.clone()))
-                .await;
-            continue;
-        };
-        // Symbol match in the same file.
-        let mut resp = db
-            .query(
-                "SELECT id FROM code_symbol \
-                 WHERE project = $p AND file = $fid \
-                   AND (qualified = $q OR name = $q) LIMIT 1",
-            )
-            .bind(("p", project.to_string()))
-            .bind(("fid", file_id.clone()))
-            .bind(("q", qual.to_string()))
-            .await?;
-        let rows: Vec<SymbolRow> = resp.take(0).unwrap_or_default();
-        if let Some(s) = rows.into_iter().next() {
-            let new_version = anchor_ver.unwrap_or(0) + 1;
-            let _ = db
-                .query(
-                    "UPDATE type::record($id) SET out = $new_out, \
-                     metadata.anchor_version = $ver",
-                )
-                .bind(("id", edge_id.clone()))
-                .bind(("new_out", s.id))
-                .bind(("ver", new_version))
-                .await;
-            rewritten += 1;
-        } else {
-            let now = chrono::Utc::now().to_rfc3339();
-            let _ = db
-                .query(
-                    "UPDATE type::record($id) SET \
-                     metadata.dropped_at = $now, \
-                     metadata.dropped_reason = 'symbol_removed'",
-                )
-                .bind(("id", edge_id.clone()))
-                .bind(("now", now))
-                .await;
-            let _ = db
-                .query("DELETE type::record($id)")
-                .bind(("id", edge_id.clone()))
-                .await;
-        }
     }
     Ok(rewritten)
 }

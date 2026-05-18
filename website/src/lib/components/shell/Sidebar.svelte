@@ -7,6 +7,7 @@
     Activity,
     Brain,
     Network,
+    Boxes,
     GitCommit,
     Coins,
     HelpCircle,
@@ -26,6 +27,7 @@
     { icon: Activity, href: '/observations', label: 'Observations', match: (p) => p.startsWith('/observations') },
     { icon: Brain, href: '/memories', label: 'Memories', match: (p) => p.startsWith('/memories') },
     { icon: Network, href: '/graph', label: 'Graph', match: (p) => p.startsWith('/graph') },
+    { icon: Boxes, href: '/atlas', label: 'Atlas', match: (p) => p.startsWith('/atlas') },
     { icon: GitCommit, href: '/commits', label: 'Commits', match: (p) => p.startsWith('/commits') },
     { icon: Coins, href: '/tokens', label: 'Tokens', match: (p) => p.startsWith('/tokens') },
   ];

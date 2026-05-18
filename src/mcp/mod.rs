@@ -1,3 +1,4 @@
+pub mod http;
 pub mod tools;
 
 use anyhow::Result;
@@ -72,7 +73,7 @@ pub async fn serve_stdio(state: McpState) -> Result<()> {
             Err(e) => serde_json::json!({
                 "jsonrpc": "2.0",
                 "id": id,
-                "error": {"code": -32603, "message": e.to_string()},
+                "error": {"code": http::rpc_code(&e), "message": e.to_string()},
             }),
         };
 

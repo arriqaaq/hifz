@@ -1,4 +1,5 @@
 pub mod api;
+pub mod error;
 
 use anyhow::Result;
 use axum::Router;

@@ -2234,6 +2234,7 @@ dependencies = [
  "streaming-iterator",
  "surrealdb",
  "text-splitter",
+ "thiserror 2.0.18",
  "tokio",
  "tower-http",
  "tracing",

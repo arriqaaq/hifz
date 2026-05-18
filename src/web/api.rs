@@ -17,25 +17,27 @@ use crate::models::{
     TraceReq,
 };
 use crate::web::AppState;
+use crate::web::error::{ApiError, ApiResult, AppJson};
 
 // -----------------------------------------------------------------------
 // Helper macros to keep the dispatch boilerplate uniform.
 // -----------------------------------------------------------------------
 
-/// `Result<Value, anyhow::Error>` -> Json — pass through Ok value, error as
-/// `{"error": "..."}`. For methods that already produce the legacy wire shape.
-fn json_or_err<T: serde::Serialize>(r: anyhow::Result<T>) -> Json<serde_json::Value> {
+/// `anyhow::Result<T>` -> `ApiResult` — pass the value through as JSON, or
+/// surface the error with a real HTTP status (`ApiError::from` classifies
+/// `HifzError::NotFound`→404 / `InvalidInput`→400 / else→500).
+fn json_or_err<T: serde::Serialize>(r: anyhow::Result<T>) -> ApiResult {
     match r {
-        Ok(v) => Json(serde_json::to_value(v).unwrap_or_default()),
-        Err(e) => Json(serde_json::json!({"error": e.to_string()})),
+        Ok(v) => Ok(Json(serde_json::to_value(v).unwrap_or_default())),
+        Err(e) => Err(ApiError::from(e)),
     }
 }
 
 /// Same but with a custom `status` envelope for ok cases.
-fn ok_or_err(r: anyhow::Result<()>) -> Json<serde_json::Value> {
+fn ok_or_err(r: anyhow::Result<()>) -> ApiResult {
     match r {
-        Ok(()) => Json(serde_json::json!({"status": "ok"})),
-        Err(e) => Json(serde_json::json!({"error": e.to_string()})),
+        Ok(()) => Ok(Json(serde_json::json!({"status": "ok"}))),
+        Err(e) => Err(ApiError::from(e)),
     }
 }
 
@@ -43,7 +45,7 @@ fn ok_or_err(r: anyhow::Result<()>) -> Json<serde_json::Value> {
 // Health
 // -----------------------------------------------------------------------
 
-pub async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {
+pub async fn health(State(state): State<AppState>) -> ApiResult {
     json_or_err(state.health().await)
 }
 
@@ -57,8 +59,8 @@ pub async fn livez() -> &'static str {
 
 pub async fn session_start(
     State(state): State<AppState>,
-    Json(body): Json<SessionStartReq>,
-) -> Json<serde_json::Value> {
+    AppJson(body): AppJson<SessionStartReq>,
+) -> ApiResult {
     json_or_err(state.session_start(body).await)
 }
 
@@ -70,15 +72,12 @@ pub struct SessionEndReq {
 
 pub async fn session_end(
     State(state): State<AppState>,
-    Json(body): Json<SessionEndReq>,
-) -> Json<serde_json::Value> {
+    AppJson(body): AppJson<SessionEndReq>,
+) -> ApiResult {
     json_or_err(state.session_end(&body.session_id).await)
 }
 
-pub async fn session_get(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> Json<serde_json::Value> {
+pub async fn session_get(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult {
     json_or_err(state.session_get(&id).await)
 }
 
@@ -88,7 +87,7 @@ pub async fn session_warmup(
     State(state): State<AppState>,
     Path(id): Path<String>,
     Query(params): Query<std::collections::HashMap<String, String>>,
-) -> Json<serde_json::Value> {
+) -> ApiResult {
     let project = params.get("project").map(String::as_str);
     let top_n = params
         .get("top_n")
@@ -100,7 +99,7 @@ pub async fn session_warmup(
 pub async fn sessions_list(
     State(state): State<AppState>,
     Query(params): Query<std::collections::HashMap<String, String>>,
-) -> Json<serde_json::Value> {
+) -> ApiResult {
     let limit: usize = params
         .get("limit")
         .and_then(|v| v.parse().ok())
@@ -114,12 +113,12 @@ pub async fn sessions_list(
 
 pub async fn observe(
     State(state): State<AppState>,
-    Json(payload): Json<HookPayload>,
-) -> Json<serde_json::Value> {
+    AppJson(payload): AppJson<HookPayload>,
+) -> ApiResult {
     match state.observe(payload).await {
-        Ok(Some(obs_id)) => Json(serde_json::json!({"status": "ok", "obs_id": obs_id})),
-        Ok(None) => Json(serde_json::json!({"status": "duplicate"})),
-        Err(e) => Json(serde_json::json!({"status": "error", "error": e.to_string()})),
+        Ok(Some(obs_id)) => Ok(Json(serde_json::json!({"status": "ok", "obs_id": obs_id}))),
+        Ok(None) => Ok(Json(serde_json::json!({"status": "duplicate"}))),
+        Err(e) => Err(ApiError::from(e)),
     }
 }
 
@@ -129,15 +128,15 @@ pub async fn observe(
 
 pub async fn smart_search(
     State(state): State<AppState>,
-    Json(body): Json<SearchReq>,
-) -> Json<serde_json::Value> {
+    AppJson(body): AppJson<SearchReq>,
+) -> ApiResult {
     json_or_err(state.smart_search(body).await)
 }
 
 pub async fn search_agentic(
     State(state): State<AppState>,
-    Json(body): Json<SearchReq>,
-) -> Json<serde_json::Value> {
+    AppJson(body): AppJson<SearchReq>,
+) -> ApiResult {
     // Note: search_agentic preserves the legacy run-linkage side effect:
     // when sessionId is supplied AND a run is open AND any results are
     // memories, append them to the run's recall trail and create
@@ -151,7 +150,7 @@ pub async fn search_agentic(
             .await
         {
             Ok(r) => r,
-            Err(e) => return Json(serde_json::json!({"error": e.to_string()})),
+            Err(e) => return Err(ApiError::from(e)),
         };
 
     if let Some(ref sid) = body.session_id {
@@ -182,16 +181,18 @@ pub async fn search_agentic(
     }
 
     let count = results.len();
-    Json(serde_json::json!({"results": results, "count": count}))
+    Ok(Json(
+        serde_json::json!({"results": results, "count": count}),
+    ))
 }
 
 pub async fn context(
     State(state): State<AppState>,
-    Json(body): Json<ContextReq>,
-) -> Json<serde_json::Value> {
+    AppJson(body): AppJson<ContextReq>,
+) -> ApiResult {
     match state.context(body).await {
-        Ok(s) => Json(serde_json::json!({"context": s})),
-        Err(e) => Json(serde_json::json!({"error": e.to_string()})),
+        Ok(s) => Ok(Json(serde_json::json!({"context": s}))),
+        Err(e) => Err(ApiError::from(e)),
     }
 }
 
@@ -201,8 +202,8 @@ pub async fn context(
 
 pub async fn remember(
     State(state): State<AppState>,
-    Json(body): Json<RememberReq>,
-) -> Json<serde_json::Value> {
+    AppJson(body): AppJson<RememberReq>,
+) -> ApiResult {
     let llm_evolve = state.llm_evolve;
     let ollama_clone = state.ollama.clone();
     let db_clone = state.db.clone();
@@ -259,9 +260,9 @@ pub async fn remember(
                     }
                 }
             }
-            Json(v)
+            Ok(Json(v))
         }
-        Err(e) => Json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => Err(ApiError::from(e)),
     }
 }
 
@@ -270,24 +271,18 @@ pub struct ForgetReq {
     pub id: String,
 }
 
-pub async fn forget(
-    State(state): State<AppState>,
-    Json(body): Json<ForgetReq>,
-) -> Json<serde_json::Value> {
+pub async fn forget(State(state): State<AppState>, AppJson(body): AppJson<ForgetReq>) -> ApiResult {
     ok_or_err(state.forget(&body.id).await)
 }
 
 pub async fn memories_search(
     State(state): State<AppState>,
     Query(params): Query<MemoriesReq>,
-) -> Json<serde_json::Value> {
+) -> ApiResult {
     json_or_err(state.memories_search(params).await)
 }
 
-pub async fn memory_links(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> Json<serde_json::Value> {
+pub async fn memory_links(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult {
     json_or_err(state.memory_links(&id).await)
 }
 
@@ -297,7 +292,7 @@ pub async fn memory_neighbors(
     State(state): State<AppState>,
     Path(id): Path<String>,
     Query(params): Query<std::collections::HashMap<String, String>>,
-) -> Json<serde_json::Value> {
+) -> ApiResult {
     let relations = params.get("relations").map(|s| {
         s.split(',')
             .map(|p| p.trim().to_string())
@@ -314,7 +309,7 @@ pub async fn project_digest(
     State(state): State<AppState>,
     Path(project): Path<String>,
     Query(params): Query<std::collections::HashMap<String, String>>,
-) -> Json<serde_json::Value> {
+) -> ApiResult {
     let days = params.get("days").and_then(|v| v.parse::<i64>().ok());
     json_or_err(state.project_digest(&project, days).await)
 }
@@ -324,7 +319,7 @@ pub async fn project_digest(
 pub async fn project_accumulators(
     State(state): State<AppState>,
     Path(project): Path<String>,
-) -> Json<serde_json::Value> {
+) -> ApiResult {
     json_or_err(state.project_accumulators(&project).await)
 }
 
@@ -333,7 +328,7 @@ pub async fn memory_backlinks(
     State(state): State<AppState>,
     Path(id): Path<String>,
     Query(params): Query<std::collections::HashMap<String, String>>,
-) -> Json<serde_json::Value> {
+) -> ApiResult {
     let relation = params.get("relation").map(String::as_str);
     json_or_err(state.memory_backlinks(&id, relation).await)
 }
@@ -357,11 +352,7 @@ pub async fn memory_markdown_get(
             s,
         )
             .into_response(),
-        Err(e) => (
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({"error": e.to_string()})),
-        )
-            .into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -371,22 +362,16 @@ pub async fn memory_markdown_put(
     State(state): State<AppState>,
     Path(id): Path<String>,
     body: String,
-) -> Json<serde_json::Value> {
+) -> ApiResult {
     json_or_err(state.memory_markdown_put(&id, &body).await)
 }
 
-pub async fn evolve_by_id(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> Json<serde_json::Value> {
+pub async fn evolve_by_id(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult {
     json_or_err(state.evolve(&id).await)
 }
 
 /// Body-based variant — keeps the legacy POST `/memories/{id}/evolve` shape.
-pub async fn evolve(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> Json<serde_json::Value> {
+pub async fn evolve(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult {
     json_or_err(state.evolve(&id).await)
 }
 
@@ -396,22 +381,16 @@ pub async fn evolve(
 
 pub async fn runs_search(
     State(state): State<AppState>,
-    Json(body): Json<RunsReq>,
-) -> Json<serde_json::Value> {
+    AppJson(body): AppJson<RunsReq>,
+) -> ApiResult {
     json_or_err(state.runs_search(body).await)
 }
 
-pub async fn run_detail(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> Json<serde_json::Value> {
+pub async fn run_detail(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult {
     json_or_err(state.run_detail(&id).await)
 }
 
-pub async fn session_tree(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> Json<serde_json::Value> {
+pub async fn session_tree(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult {
     json_or_err(state.session_tree(&id).await)
 }
 
@@ -422,7 +401,7 @@ pub async fn session_tree(
 pub async fn observations_search(
     State(state): State<AppState>,
     Query(params): Query<ObservationsReq>,
-) -> Json<serde_json::Value> {
+) -> ApiResult {
     json_or_err(state.observations_search(params).await)
 }
 
@@ -433,7 +412,7 @@ pub async fn observations_search(
 pub async fn core_get(
     State(state): State<AppState>,
     Query(params): Query<std::collections::HashMap<String, String>>,
-) -> Json<serde_json::Value> {
+) -> ApiResult {
     let project = params
         .get("project")
         .map(|s| s.as_str())
@@ -443,8 +422,8 @@ pub async fn core_get(
 
 pub async fn core_edit(
     State(state): State<AppState>,
-    Json(body): Json<CoreEditReq>,
-) -> Json<serde_json::Value> {
+    AppJson(body): AppJson<CoreEditReq>,
+) -> ApiResult {
     let project = body.project.clone();
     json_or_err(state.core_edit(&project, body).await)
 }
@@ -452,15 +431,15 @@ pub async fn core_edit(
 pub async fn core_get_by_project(
     State(state): State<AppState>,
     Path(project): Path<String>,
-) -> Json<serde_json::Value> {
+) -> ApiResult {
     json_or_err(state.core_get(&project).await)
 }
 
 pub async fn core_edit_by_project(
     State(state): State<AppState>,
     Path(project): Path<String>,
-    Json(body): Json<CoreEditReq>,
-) -> Json<serde_json::Value> {
+    AppJson(body): AppJson<CoreEditReq>,
+) -> ApiResult {
     json_or_err(state.core_edit(&project, body).await)
 }
 
@@ -470,8 +449,8 @@ pub async fn core_edit_by_project(
 
 pub async fn trace_graph(
     State(state): State<AppState>,
-    Json(body): Json<TraceReq>,
-) -> Json<serde_json::Value> {
+    AppJson(body): AppJson<TraceReq>,
+) -> ApiResult {
     json_or_err(state.trace(body).await)
 }
 
@@ -482,7 +461,7 @@ pub async fn trace_graph(
 pub async fn digest(
     State(state): State<AppState>,
     Query(params): Query<std::collections::HashMap<String, String>>,
-) -> Json<serde_json::Value> {
+) -> ApiResult {
     let project = params.get("project").map(|s| s.as_str());
     json_or_err(state.digest(project).await)
 }
@@ -490,7 +469,7 @@ pub async fn digest(
 pub async fn timeline(
     State(state): State<AppState>,
     Query(params): Query<std::collections::HashMap<String, String>>,
-) -> Json<serde_json::Value> {
+) -> ApiResult {
     let req = TimelineReq {
         session_id: params.get("session_id").cloned(),
         limit: params.get("limit").and_then(|v| v.parse().ok()),
@@ -501,7 +480,7 @@ pub async fn timeline(
 pub async fn commits_list(
     State(state): State<AppState>,
     Query(params): Query<std::collections::HashMap<String, String>>,
-) -> Json<serde_json::Value> {
+) -> ApiResult {
     let req = CommitsReq {
         project: params.get("project").cloned(),
         branch: params.get("branch").cloned(),
@@ -511,10 +490,7 @@ pub async fn commits_list(
     json_or_err(state.commits_list(req).await)
 }
 
-pub async fn commit_diff(
-    State(state): State<AppState>,
-    Path(sha): Path<String>,
-) -> Json<serde_json::Value> {
+pub async fn commit_diff(State(state): State<AppState>, Path(sha): Path<String>) -> ApiResult {
     json_or_err(state.commit_diff(&sha).await)
 }
 
@@ -525,7 +501,7 @@ pub async fn commit_diff(
 pub async fn plans_list(
     State(state): State<AppState>,
     Query(params): Query<std::collections::HashMap<String, String>>,
-) -> Json<serde_json::Value> {
+) -> ApiResult {
     let req = PlansListReq {
         project: params.get("project").cloned(),
         status: params.get("status").cloned(),
@@ -537,7 +513,7 @@ pub async fn plans_list(
 pub async fn plan_current(
     State(state): State<AppState>,
     Query(params): Query<std::collections::HashMap<String, String>>,
-) -> Json<serde_json::Value> {
+) -> ApiResult {
     let project = params.get("project").map(|s| s.as_str());
     json_or_err(state.plan_current(project).await)
 }
@@ -545,22 +521,19 @@ pub async fn plan_current(
 pub async fn plan_complete(
     State(state): State<AppState>,
     Path(id): Path<String>,
-    Json(_body): Json<serde_json::Value>,
-) -> Json<serde_json::Value> {
+    AppJson(_body): AppJson<serde_json::Value>,
+) -> ApiResult {
     json_or_err(state.plan_complete(&id).await)
 }
 
-pub async fn plan_abandon(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> Json<serde_json::Value> {
+pub async fn plan_abandon(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult {
     json_or_err(state.plan_abandon(&id).await)
 }
 
 pub async fn plan_activate(
     State(state): State<AppState>,
-    Json(body): Json<PlanActivateReq>,
-) -> Json<serde_json::Value> {
+    AppJson(body): AppJson<PlanActivateReq>,
+) -> ApiResult {
     json_or_err(state.plan_activate(body).await)
 }
 
@@ -568,18 +541,15 @@ pub async fn plan_activate(
 // Maintenance
 // -----------------------------------------------------------------------
 
-pub async fn forget_gc(State(state): State<AppState>) -> Json<serde_json::Value> {
+pub async fn forget_gc(State(state): State<AppState>) -> ApiResult {
     json_or_err(state.forget_gc(false).await)
 }
 
-pub async fn consolidate(State(state): State<AppState>) -> Json<serde_json::Value> {
+pub async fn consolidate(State(state): State<AppState>) -> ApiResult {
     json_or_err(state.consolidate().await)
 }
 
-pub async fn export(
-    State(state): State<AppState>,
-    Query(params): Query<ExportReq>,
-) -> Json<serde_json::Value> {
+pub async fn export(State(state): State<AppState>, Query(params): Query<ExportReq>) -> ApiResult {
     json_or_err(state.export(params).await)
 }
 
@@ -589,8 +559,8 @@ pub async fn export(
 
 pub async fn usage_record(
     State(state): State<AppState>,
-    Json(body): Json<crate::models::AgentUsageRecord>,
-) -> Json<serde_json::Value> {
+    AppJson(body): AppJson<crate::models::AgentUsageRecord>,
+) -> ApiResult {
     json_or_err(state.usage_record(body).await)
 }
 
@@ -601,15 +571,15 @@ pub struct UsageBatchReq {
 
 pub async fn usage_record_batch(
     State(state): State<AppState>,
-    Json(body): Json<UsageBatchReq>,
-) -> Json<serde_json::Value> {
+    AppJson(body): AppJson<UsageBatchReq>,
+) -> ApiResult {
     json_or_err(state.usage_record_batch(body.records).await)
 }
 
 pub async fn usage_session(
     State(state): State<AppState>,
     Path(session_id): Path<String>,
-) -> Json<serde_json::Value> {
+) -> ApiResult {
     json_or_err(state.usage_for_session(&session_id).await)
 }
 
@@ -617,7 +587,7 @@ pub async fn usage_project(
     State(state): State<AppState>,
     Path(project): Path<String>,
     Query(params): Query<std::collections::HashMap<String, String>>,
-) -> Json<serde_json::Value> {
+) -> ApiResult {
     let filters = crate::usage::ProjectFilters {
         from: params.get("from").cloned(),
         to: params.get("to").cloned(),
@@ -632,11 +602,11 @@ pub async fn usage_project(
 pub async fn usage_sessions(
     State(state): State<AppState>,
     Query(params): Query<std::collections::HashMap<String, String>>,
-) -> Json<serde_json::Value> {
+) -> ApiResult {
     let project = params.get("project").map(|s| s.as_str());
     match state.usage_session_totals(project).await {
-        Ok(sessions) => Json(serde_json::json!({ "sessions": sessions })),
-        Err(e) => Json(serde_json::json!({ "error": e.to_string() })),
+        Ok(sessions) => Ok(Json(serde_json::json!({ "sessions": sessions }))),
+        Err(e) => Err(ApiError::from(e)),
     }
 }
 
@@ -647,39 +617,39 @@ pub async fn usage_sessions(
 #[cfg(feature = "code")]
 pub async fn code_index(
     State(state): State<AppState>,
-    Json(body): Json<CodeIndexReq>,
-) -> Json<serde_json::Value> {
+    AppJson(body): AppJson<CodeIndexReq>,
+) -> ApiResult {
     json_or_err(state.code_index(body).await)
 }
 
 #[cfg(feature = "code")]
 pub async fn code_search(
     State(state): State<AppState>,
-    Json(body): Json<CodeSearchReq>,
-) -> Json<serde_json::Value> {
+    AppJson(body): AppJson<CodeSearchReq>,
+) -> ApiResult {
     json_or_err(state.code_search(body).await)
 }
 
 #[cfg(feature = "code")]
 pub async fn code_link(
     State(state): State<AppState>,
-    Json(body): Json<CodeLinkReq>,
-) -> Json<serde_json::Value> {
+    AppJson(body): AppJson<CodeLinkReq>,
+) -> ApiResult {
     json_or_err(state.code_link(body).await)
 }
 
 #[cfg(feature = "code")]
 pub async fn code_link_symbol(
     State(state): State<AppState>,
-    Json(body): Json<CodeLinkSymReq>,
-) -> Json<serde_json::Value> {
+    AppJson(body): AppJson<CodeLinkSymReq>,
+) -> ApiResult {
     json_or_err(state.code_link_symbol(body).await)
 }
 
 #[cfg(feature = "code")]
 pub async fn code_gc(
     State(state): State<AppState>,
-    Json(body): Json<CodeGcReq>,
-) -> Json<serde_json::Value> {
+    AppJson(body): AppJson<CodeGcReq>,
+) -> ApiResult {
     json_or_err(state.code_gc(body).await)
 }

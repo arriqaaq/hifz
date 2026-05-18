@@ -216,8 +216,16 @@ async fn async_main(cli: Cli) -> Result<()> {
         }
 
         Command::Mcp { url } => {
+            // Fail-fast timeouts so a hung/slow REST server can't freeze the
+            // MCP client. Real ops (fastembed + SurrealKV writes) finish in
+            // seconds; enrichment is post-response/spawned, not inline here.
+            let client = reqwest::Client::builder()
+                .connect_timeout(std::time::Duration::from_secs(5))
+                .timeout(std::time::Duration::from_secs(30))
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new());
             let state = hifz::mcp::McpState {
-                client: reqwest::Client::new(),
+                client,
                 base_url: url.clone(),
             };
 

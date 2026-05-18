@@ -21,6 +21,7 @@ pub mod dedup;
 pub mod digest;
 pub mod embed;
 pub mod enrich;
+pub mod error;
 pub mod evolve;
 pub mod export;
 pub mod forget;
@@ -359,7 +360,7 @@ impl Hifz {
         }
         let rows: Vec<Row> = resp.take(0).unwrap_or_default();
         let Some(rid) = rows.into_iter().next().and_then(|r| r.id) else {
-            return Err(anyhow::anyhow!("memory not found"));
+            return Err(crate::error::HifzError::NotFound("memory not found".into()).into());
         };
         let report = crate::evolve::evolve_one(&self.db, ollama, &rid).await?;
         Ok(serde_json::to_value(report).unwrap_or_default())
@@ -394,7 +395,9 @@ impl Hifz {
             .await?;
         let rows: Vec<Row> = resp.take(0).unwrap_or_default();
         let Some(rid) = rows.into_iter().next().and_then(|r| r.id) else {
-            return Err(anyhow::anyhow!("memory not found: {id}"));
+            return Err(
+                crate::error::HifzError::NotFound(format!("memory not found: {id}")).into(),
+            );
         };
 
         let cfg = crate::link::GraphExpandConfig {

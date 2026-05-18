@@ -1,6 +1,7 @@
 use anyhow::Result;
 
 use crate::mcp::McpState;
+use crate::mcp::http::RequestBuilderExt;
 
 /// List all available MCP tools.
 pub fn list_tools() -> Result<serde_json::Value> {
@@ -34,20 +35,29 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                 .client
                 .post(format!("{}/api/v1/search/agentic", state.base_url))
                 .json(&body)
-                .send()
-                .await?
-                .json()
+                .send_decode()
                 .await?
         }
 
         "hifz_save" => {
+            // Pre-validate the two fields RememberReq requires (title,
+            // content: String, no serde default). Mirrors the REST 422
+            // conditions exactly — missing/null/non-string — without being
+            // stricter (empty strings are valid there), so an obviously-bad
+            // call fails fast as -32602 instead of a wasted HTTP round-trip.
+            for key in ["title", "content"] {
+                if args.get(key).and_then(|v| v.as_str()).is_none() {
+                    return Err(crate::mcp::http::ProxyError::BadArgs(format!(
+                        "hifz_save: '{key}' (string) is required"
+                    ))
+                    .into());
+                }
+            }
             state
                 .client
                 .post(format!("{}/api/v1/memories", state.base_url))
                 .json(&args)
-                .send()
-                .await?
-                .json()
+                .send_decode()
                 .await?
         }
 
@@ -59,9 +69,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                     "{}/api/v1/agent/sessions?limit={limit}",
                     state.base_url
                 ))
-                .send()
-                .await?
-                .json()
+                .send_decode()
                 .await?
         }
 
@@ -73,9 +81,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                     "{}/api/v1/agent/digest?project={project}",
                     state.base_url
                 ))
-                .send()
-                .await?
-                .json()
+                .send_decode()
                 .await?
         }
 
@@ -91,9 +97,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                     "{}/api/v1/agent/timeline?session_id={session_id}&limit={limit}",
                     state.base_url
                 ))
-                .send()
-                .await?
-                .json()
+                .send_decode()
                 .await?
         }
 
@@ -101,9 +105,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
             state
                 .client
                 .get(format!("{}/api/v1/export", state.base_url))
-                .send()
-                .await?
-                .json()
+                .send_decode()
                 .await?
         }
 
@@ -115,9 +117,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
             state
                 .client
                 .get(format!("{}/api/v1/core/{project}", state.base_url))
-                .send()
-                .await?
-                .json()
+                .send_decode()
                 .await?
         }
 
@@ -130,9 +130,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                 .client
                 .patch(format!("{}/api/v1/core/{project}", state.base_url))
                 .json(&args)
-                .send()
-                .await?
-                .json()
+                .send_decode()
                 .await?
         }
 
@@ -141,9 +139,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                 .client
                 .post(format!("{}/api/v1/agent/runs", state.base_url))
                 .json(&args)
-                .send()
-                .await?
-                .json()
+                .send_decode()
                 .await?
         }
 
@@ -164,7 +160,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                 url.push_str(&format!("&sha={s}"));
             }
 
-            state.client.get(&url).send().await?.json().await?
+            state.client.get(&url).send_decode().await?
         }
 
         "hifz_evolve" => {
@@ -173,9 +169,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
             state
                 .client
                 .post(format!("{}/api/v1/memories/{id}/evolve", state.base_url))
-                .send()
-                .await?
-                .json()
+                .send_decode()
                 .await?
         }
 
@@ -185,9 +179,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                 .client
                 .delete(format!("{}/api/v1/memories", state.base_url))
                 .json(&serde_json::json!({"id": id}))
-                .send()
-                .await?
-                .json()
+                .send_decode()
                 .await?
         }
 
@@ -199,9 +191,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                     "{}/api/v1/agent/plans/current?project={project}",
                     state.base_url
                 ))
-                .send()
-                .await?
-                .json()
+                .send_decode()
                 .await?
         }
 
@@ -215,9 +205,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                     "{}/api/v1/agent/plans?project={project}&status={status}&limit={limit}",
                     state.base_url
                 ))
-                .send()
-                .await?
-                .json()
+                .send_decode()
                 .await?
         }
 
@@ -229,9 +217,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                     "{}/api/v1/agent/plans/current?project={project}",
                     state.base_url
                 ))
-                .send()
-                .await?
-                .json()
+                .send_decode()
                 .await?;
 
             if let Some(plan_id) = plan.get("id").and_then(|v| v.as_str()) {
@@ -243,9 +229,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                         state.base_url
                     ))
                     .json(&serde_json::json!({}))
-                    .send()
-                    .await?
-                    .json()
+                    .send_decode()
                     .await?
             } else {
                 serde_json::json!({"status": "no_active_plan"})
@@ -257,9 +241,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                 .client
                 .post(format!("{}/api/v1/agent/plans/activate", state.base_url))
                 .json(&args)
-                .send()
-                .await?
-                .json()
+                .send_decode()
                 .await?
         }
 
@@ -268,9 +250,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                 .client
                 .post(format!("{}/api/v1/trace", state.base_url))
                 .json(&args)
-                .send()
-                .await?
-                .json()
+                .send_decode()
                 .await?
         }
 
@@ -278,7 +258,9 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
             let memory_id = args
                 .get("memory_id")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("memory_id required"))?;
+                .ok_or_else(|| {
+                    crate::mcp::http::ProxyError::BadArgs("memory_id required".into())
+                })?;
             let mut params = vec![];
             if let Some(rels) = args.get("relations").and_then(|v| v.as_array()) {
                 let s = rels
@@ -305,9 +287,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                     state.base_url,
                     urlencoding::encode(memory_id)
                 ))
-                .send()
-                .await?
-                .json()
+                .send_decode()
                 .await?
         }
 
@@ -315,7 +295,9 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
             let memory_id = args
                 .get("memory_id")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("memory_id required"))?;
+                .ok_or_else(|| {
+                    crate::mcp::http::ProxyError::BadArgs("memory_id required".into())
+                })?;
             let qs = match args.get("relation").and_then(|v| v.as_str()) {
                 Some(r) => format!("?relation={}", urlencoding::encode(r)),
                 None => String::new(),
@@ -327,9 +309,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                     state.base_url,
                     urlencoding::encode(memory_id)
                 ))
-                .send()
-                .await?
-                .json()
+                .send_decode()
                 .await?
         }
 
@@ -337,7 +317,9 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
             let session_id = args
                 .get("session_id")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("session_id required"))?;
+                .ok_or_else(|| {
+                    crate::mcp::http::ProxyError::BadArgs("session_id required".into())
+                })?;
             let mut params = vec![];
             if let Some(p) = args.get("project").and_then(|v| v.as_str()) {
                 params.push(format!("project={}", urlencoding::encode(p)));
@@ -357,9 +339,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                     state.base_url,
                     urlencoding::encode(session_id)
                 ))
-                .send()
-                .await?
-                .json()
+                .send_decode()
                 .await?
         }
 
@@ -367,7 +347,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
             let project = args
                 .get("project")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("project required"))?;
+                .ok_or_else(|| crate::mcp::http::ProxyError::BadArgs("project required".into()))?;
             state
                 .client
                 .get(format!(
@@ -375,9 +355,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                     state.base_url,
                     urlencoding::encode(project)
                 ))
-                .send()
-                .await?
-                .json()
+                .send_decode()
                 .await?
         }
 
@@ -385,7 +363,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
             let project = args
                 .get("project")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("project required"))?;
+                .ok_or_else(|| crate::mcp::http::ProxyError::BadArgs("project required".into()))?;
             let days = args.get("days").and_then(|v| v.as_u64()).unwrap_or(30);
             state
                 .client
@@ -394,9 +372,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                     state.base_url,
                     urlencoding::encode(project)
                 ))
-                .send()
-                .await?
-                .json()
+                .send_decode()
                 .await?
         }
 
@@ -406,9 +382,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                 .client
                 .post(format!("{}/api/v1/code/index", state.base_url))
                 .json(&args)
-                .send()
-                .await?
-                .json()
+                .send_decode()
                 .await?
         }
 
@@ -418,9 +392,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                 .client
                 .post(format!("{}/api/v1/code/search", state.base_url))
                 .json(&args)
-                .send()
-                .await?
-                .json()
+                .send_decode()
                 .await?
         }
 
@@ -430,9 +402,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                 .client
                 .post(format!("{}/api/v1/code/link", state.base_url))
                 .json(&args)
-                .send()
-                .await?
-                .json()
+                .send_decode()
                 .await?
         }
 
@@ -442,9 +412,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                 .client
                 .post(format!("{}/api/v1/code/link/symbol", state.base_url))
                 .json(&args)
-                .send()
-                .await?
-                .json()
+                .send_decode()
                 .await?
         }
 
@@ -454,9 +422,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                 .client
                 .post(format!("{}/api/v1/code/gc", state.base_url))
                 .json(&args)
-                .send()
-                .await?
-                .json()
+                .send_decode()
                 .await?
         }
 
@@ -474,9 +440,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                             "{}/api/v1/agent/usage/session/{sid}",
                             state.base_url
                         ))
-                        .send()
-                        .await?
-                        .json()
+                        .send_decode()
                         .await?
                 }
                 "project" => {
@@ -497,12 +461,13 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                         url.push('?');
                         url.push_str(&qs.join("&"));
                     }
-                    state.client.get(url).send().await?.json().await?
+                    state.client.get(url).send_decode().await?
                 }
                 other => {
-                    return Err(anyhow::anyhow!(
+                    return Err(crate::mcp::http::ProxyError::BadArgs(format!(
                         "hifz_usage: unknown mode '{other}' (expected 'session' or 'project')"
-                    ));
+                    ))
+                    .into());
                 }
             }
         }

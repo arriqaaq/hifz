@@ -41,3 +41,11 @@ regression). Saved to hifz `ship_report` memory.
 
 ## STATUS: COMPLETE. Both phases shipped & verified. Nothing committed
 (no commit requested). plan-commit-grounding.md = scratch.
+
+## Phase 3 — commits viewer fix: DONE & VERIFIED
+Root cause: commits.rs diff()/list() read `observation.project` (dead column,
+same family as K1) → every commit's diff = "commit not found". Fix: traverse
+`session_id.project` (proven observe.rs:597 pattern); 2 query-string edits in
+src/commits.rs, no schema/migration. Verified live: real HEAD ingest → diff
+renders (35KB); project-filtered list → 3 rows; fabricated sha → honest git
+error; health stable. Build clean, restarted.

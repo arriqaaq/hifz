@@ -280,12 +280,17 @@ async fn tier_procedural(db: &Surreal<Db>, ollama: &OllamaClient) -> Result<usiz
 }
 
 async fn tier_decay(db: &Surreal<Db>, decay_days: i64) -> Result<usize> {
-    // Apply exponential decay: strength *= 0.9 for each decay period elapsed
+    // Apply exponential decay: strength *= 0.9 for each decay period elapsed.
+    // Recently-committed memories are exempt — committed work persists despite
+    // disuse (mirrors forget.rs COMMIT_PROTECT_DAYS = 90).
+    let commit_cutoff = (chrono::Utc::now() - chrono::Duration::days(90)).to_rfc3339();
     let mut resp = db
         .query(
             "SELECT id, strength, last_accessed_at FROM memory \
-             WHERE category = 'semantic_fact' AND strength > 0.1",
+             WHERE category = 'semantic_fact' AND strength > 0.1 \
+               AND (last_committed_at IS NONE OR last_committed_at < $commit_cutoff)",
         )
+        .bind(("commit_cutoff", commit_cutoff.clone()))
         .await?;
     let memories: Vec<serde_json::Value> = resp.take(0)?;
 
@@ -324,8 +329,10 @@ async fn tier_decay(db: &Surreal<Db>, decay_days: i64) -> Result<usize> {
         .query(
             "SELECT id, strength, last_accessed_at FROM memory \
              WHERE strength > 0.1 AND is_latest = true AND pinned = false \
-                AND category NOT IN ['semantic_fact', 'procedure']",
+                AND category NOT IN ['semantic_fact', 'procedure'] \
+                AND (last_committed_at IS NONE OR last_committed_at < $commit_cutoff)",
         )
+        .bind(("commit_cutoff", commit_cutoff.clone()))
         .await?;
     let memory_memories: Vec<serde_json::Value> = resp.take(0)?;
 

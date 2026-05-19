@@ -136,6 +136,12 @@ DEFINE FIELD IF NOT EXISTS supersedes       ON memory TYPE option<array<record<m
 DEFINE FIELD IF NOT EXISTS is_latest        ON memory TYPE bool DEFAULT true;
 DEFINE FIELD IF NOT EXISTS pinned           ON memory TYPE bool DEFAULT false;
 DEFINE FIELD IF NOT EXISTS forget_after     ON memory TYPE option<string>;
+-- Outcome-grounding watermark: RFC3339 timestamp of the last commit that
+-- touched this memory's files (any origin: Claude tool, terminal, PR-pull,
+-- rebase). Mirrors `code_file.last_committed_at`. Memories with this set are
+-- exempt from disuse decay / weak-strength GC (committed work persists).
+-- option<string>, defaults to NONE — no backfill required.
+DEFINE FIELD IF NOT EXISTS last_committed_at ON memory TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS created_at       ON memory TYPE string;
 DEFINE FIELD IF NOT EXISTS updated_at       ON memory TYPE string;
 DEFINE INDEX IF NOT EXISTS mem_title_ft     ON TABLE memory

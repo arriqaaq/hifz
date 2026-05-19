@@ -498,7 +498,13 @@ async fn search_memories(
 /// - Always project-scopes when `project` is provided.
 /// - Applies Rust-side `strength · recency · access` boost to the fused score,
 ///   unless `cfg.skip_recency_access` is set (bench ablation).
-async fn search_memories_with_config(
+// `pub(crate)`: structural prep for the future subject-aware, all-category
+// commit→memory matcher (plan §5). The behavioral swap of the commit matcher
+// is a deliberate pre-merge SHIP-GATE — it needs an empirically-tuned
+// confidence threshold on real data and must not be shipped untuned (it would
+// risk over-/under-grounding on hifz's defensible axis). This visibility
+// change just makes the existing all-category hybrid reusable for it.
+pub(crate) async fn search_memories_with_config(
     db: &Surreal<Db>,
     query_vec: Option<&Vec<f32>>,
     query: &str,

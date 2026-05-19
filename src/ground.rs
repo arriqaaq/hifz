@@ -18,6 +18,62 @@ const GROUND_BOOST: f64 = 1.15;
 /// no flag.
 const GROUND_WEAKEN: f64 = 0.5;
 
+/// Files referenced by more than this many memories are "structural"
+/// (e.g. `Cargo.toml`, `mod.rs`, `lib.rs`) — they do not discriminate which
+/// memory a commit is *about*, so they must not confer watermark protection
+/// (over-protection) nor blanket-weaken on revert. Mirrors the shipped
+/// hot-file cap in `observe.rs::link_observation_files_to_memories`
+/// ("so a hot file (e.g. `Cargo.toml`) doesn't link to every memory"). It is
+/// a count cap, not a tuned score — deterministic, no empirical gate needed.
+const HOT_FILE_MAX: i64 = 20;
+
+/// Drop hot/structural files (referenced by > `HOT_FILE_MAX` memories) from a
+/// committed file set. Per-file: specific files survive; only structural ones
+/// are removed. A commit touching *only* structural files yields an empty set
+/// (correctly grounds nothing — e.g. a pure version-bump commit).
+async fn discriminating_files(db: &Surreal<Db>, project: &str, files: &[String]) -> Vec<String> {
+    #[derive(Debug, SurrealValue)]
+    struct CountRow {
+        c: Option<i64>,
+    }
+    let mut keep = Vec::new();
+    for f in files {
+        let trimmed = f.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let count = match db
+            .query(
+                "SELECT count() AS c FROM memory \
+                 WHERE is_latest = true AND project = $project AND $file IN files \
+                 GROUP ALL",
+            )
+            .bind(("project", project.to_string()))
+            .bind(("file", trimmed.to_string()))
+            .await
+        {
+            Ok(mut r) => r
+                .take::<Vec<CountRow>>(0)
+                .ok()
+                .and_then(|v| v.into_iter().next())
+                .and_then(|r| r.c)
+                .unwrap_or(0),
+            Err(e) => {
+                tracing::debug!("ground: hot-file count failed for '{trimmed}': {e}");
+                0
+            }
+        };
+        if count > HOT_FILE_MAX {
+            tracing::debug!(
+                "ground: skipping structural file '{trimmed}' ({count} memories reference it, > {HOT_FILE_MAX})"
+            );
+        } else {
+            keep.push(trimmed.to_string());
+        }
+    }
+    keep
+}
+
 /// Polarity-aware view of a `commit_made` observation, parsed from the
 /// adapter `metadata`. Backward-compatible: a payload without `metadata`
 /// (older adapter / queued observation) yields all-add / no-revert, which
@@ -108,6 +164,15 @@ pub async fn on_commit_observation(
         return Ok(0);
     }
 
+    // Hot-file dampening: a structural file (Cargo.toml/mod.rs/…) touched by
+    // an unrelated commit must not immortalize every memory that ever
+    // mentioned it. Drop those before grounding (per-file; specific files
+    // still confer protection).
+    let files = discriminating_files(db, project, files_changed).await;
+    if files.is_empty() {
+        return Ok(0);
+    }
+
     #[derive(Debug, SurrealValue)]
     struct Row {
         id: Option<RecordId>,
@@ -122,19 +187,31 @@ pub async fn on_commit_observation(
              LIMIT 50",
         )
         .bind(("project", project.to_string()))
-        .bind(("files", files_changed.to_vec()))
+        .bind(("files", files.clone()))
         .await?;
     let rows: Vec<Row> = resp.take(0).unwrap_or_default();
 
+    // Outcome-grounding watermark: stamp the commit time and clear any pending
+    // fade. `last_committed_at` (not the soft strength nudge) is what makes the
+    // memory persist — set on the existing *synchronous* commit path, so it is
+    // crash-safe with no spawn/ledger. Idempotent by algebra: re-applying the
+    // same commit just rewrites the timestamp and re-clears NONE — safe under
+    // replay / Claude+git-hook dual delivery with zero dedup. Reverts never
+    // reach here (on_commit_signal only calls this on the non-revert confirm
+    // set), so a reverted memory simply loses protection and fades normally.
+    let committed_at = chrono::Utc::now().to_rfc3339();
     let mut strengthened = 0;
     for row in rows {
         let Some(id) = row.id else { continue };
         db.query(
             "UPDATE type::record($id) SET \
-             strength = math::min([strength * $boost, 1.0])",
+             strength = math::min([strength * $boost, 1.0]), \
+             last_committed_at = $committed_at, \
+             forget_after = NONE",
         )
         .bind(("id", id))
         .bind(("boost", GROUND_BOOST))
+        .bind(("committed_at", committed_at.clone()))
         .await?;
         strengthened += 1;
     }
@@ -157,7 +234,7 @@ pub async fn on_commit_observation(
                  WHERE project = $project AND path IN $files",
             )
             .bind(("project", project.to_string()))
-            .bind(("files", files_changed.to_vec()))
+            .bind(("files", files.clone()))
             .bind(("now", now.clone()))
             .await;
         let _ = db
@@ -166,7 +243,7 @@ pub async fn on_commit_observation(
                  WHERE project = $project AND path IN $files",
             )
             .bind(("project", project.to_string()))
-            .bind(("files", files_changed.to_vec()))
+            .bind(("files", files.clone()))
             .bind(("now", now))
             .await;
     }
@@ -204,8 +281,14 @@ pub async fn on_commit_signal(
         report.strengthened = on_commit_observation(db, project, &sig.files_added_modified).await?;
     }
 
-    // Contradict path: revert or deletion.
+    // Contradict path: revert or deletion. Same hot-file dampening as the
+    // confirm path — a structural-file revert must not blanket-weaken every
+    // memory that mentioned it.
     let contradicted = sig.contradicted_files();
+    if contradicted.is_empty() {
+        return Ok(report);
+    }
+    let contradicted = discriminating_files(db, project, &contradicted).await;
     if contradicted.is_empty() {
         return Ok(report);
     }
@@ -326,16 +409,19 @@ pub async fn decay_uncommitted(db: &Surreal<Db>, session_id: &str) -> Result<usi
 
     let mut resp = db
         .query(
+            // Protection is now the memory's own `last_committed_at`
+            // watermark. The old correlated subquery filtered
+            // `observation.project` — a column that does not exist on the
+            // SCHEMAFULL `observation` table — so it never matched and the
+            // guard was silently dead (the long-standing K1 bug). Deleted,
+            // not patched: a memory that was ever committed (anywhere) has
+            // `last_committed_at` set and is not eligible to fade.
             "SELECT id FROM memory \
              WHERE is_latest = true \
                AND pinned = false \
                AND forget_after IS NONE \
+               AND last_committed_at IS NONE \
                AND array::intersect(files, $files) != [] \
-               AND (SELECT count() FROM observation \
-                    WHERE obs_type = 'commit_made' \
-                      AND project = $parent.project \
-                      AND array::intersect(files, $parent.files) != [] \
-                    GROUP ALL)[0].count = 0 \
              LIMIT 50",
         )
         .bind(("files", written_files))

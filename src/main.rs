@@ -46,6 +46,12 @@ enum Command {
     },
     /// Show health status
     Status,
+    /// Manage the git-hook adapter for out-of-band commit detection
+    /// (commits made in a terminal / PR-pull / rebase, not via Claude).
+    Hook {
+        #[command(subcommand)]
+        action: hifz::githook::HookAction,
+    },
     /// Backfill schema upgrades (embeddings, project, ...) for existing memories
     Reindex {
         /// SurrealDB data directory
@@ -348,6 +354,10 @@ async fn async_main(cli: Cli) -> Result<()> {
                     std::process::exit(1);
                 }
             }
+        }
+
+        Command::Hook { action } => {
+            hifz::githook::run(action).await?;
         }
 
         #[cfg(feature = "code")]

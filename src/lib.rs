@@ -26,6 +26,7 @@ pub mod error;
 pub mod evolve;
 pub mod export;
 pub mod forget;
+pub mod githook;
 pub mod ground;
 pub mod health;
 pub mod link;

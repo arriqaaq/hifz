@@ -88,14 +88,22 @@ pub struct ForgetResult {
     pub weak_memories_cleaned: usize,
 }
 
+/// Memories committed within this window are exempt from disuse/TTL/weak GC —
+/// "committed work persists" (same shape as the universal `pinned = false`
+/// exemption). Older committed memories may still eventually age out.
+const COMMIT_PROTECT_DAYS: i64 = 90;
+
 async fn find_expired_memories(db: &Surreal<Db>) -> Result<Vec<String>> {
     let now = chrono::Utc::now().to_rfc3339();
+    let cutoff = (chrono::Utc::now() - chrono::Duration::days(COMMIT_PROTECT_DAYS)).to_rfc3339();
     let mut resp = db
         .query(
             "SELECT id FROM memory \
-             WHERE forget_after IS NOT NONE AND forget_after < $now",
+             WHERE forget_after IS NOT NONE AND forget_after < $now \
+               AND (last_committed_at IS NONE OR last_committed_at < $cutoff)",
         )
         .bind(("now", now.clone()))
+        .bind(("cutoff", cutoff))
         .await?;
     let rows: Vec<serde_json::Value> = resp.take(0)?;
     Ok(rows
@@ -174,9 +182,18 @@ fn jaccard_similarity(a: &str, b: &str) -> f64 {
 }
 
 async fn find_weak_memories(db: &Surreal<Db>) -> Result<Vec<String>> {
-    // Memories with strength decayed below 0.1
+    // Memories with strength decayed below 0.1 — but never reap one that was
+    // recently committed: `strength` is a shared composite (consolidation
+    // access-decay co-owns it), so a genuinely-committed-but-disused memory
+    // can fall < 0.1; the watermark exemption is what makes "committed work
+    // persists" structurally true despite that.
+    let cutoff = (chrono::Utc::now() - chrono::Duration::days(COMMIT_PROTECT_DAYS)).to_rfc3339();
     let mut resp = db
-        .query("SELECT id FROM memory WHERE strength < 0.1 AND pinned = false LIMIT 100")
+        .query(
+            "SELECT id FROM memory WHERE strength < 0.1 AND pinned = false \
+               AND (last_committed_at IS NONE OR last_committed_at < $cutoff) LIMIT 100",
+        )
+        .bind(("cutoff", cutoff))
         .await?;
     let rows: Vec<serde_json::Value> = resp.take(0)?;
     Ok(rows

@@ -332,8 +332,26 @@ pub async fn observe(
             // A revert ("Revert \"fix X\"") must NOT BM25-match and falsely
             // `commits_for`/close the very bug/plan it undoes (Burhan
             // Claim 3). Skip the linker entirely on reverts.
+            // Author gate: a `git pull` of a merged PR ingests teammates'
+            // commits (git-hook adapter). Their messages must not BM25-link
+            // `commits_for` into *your* open bug/plan/decision memories
+            // (semantic-graph pollution). The git-hook sets
+            // `metadata.authored_locally`; absent (`.mjs` / old payloads) →
+            // treat as local (backward-compatible). Watermark/persistence
+            // already ran above for *all* authors — only this semantic edge
+            // is gated.
+            let authored_locally = compressed
+                .metadata
+                .as_ref()
+                .and_then(|m| m.get("authored_locally"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
             if sig.is_revert {
                 tracing::debug!("commit is a revert; skipping commits_for linking");
+            } else if !authored_locally {
+                tracing::debug!(
+                    "commit not locally authored (pulled/merged); skipping commits_for linking"
+                );
             } else {
                 let commit_msg = compressed
                     .narrative

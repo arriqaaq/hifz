@@ -52,3 +52,9 @@ graphify's breadth/export/multimodal surface; its defensible axis is
 commit-grounding + cross-session memory, which graphify explicitly does not
 have. Where hifz is genuinely behind and it matters: **language breadth** —
 tracked by `parity-bench`'s language-coverage gate.
+
+> **See also:** [code-retrieval.md](code-retrieval.md) — a single-corpus
+> token-efficiency benchmark (atlas vs code-search vs the grep baseline an
+> agent uses with no tool). Fullerenes is the TypeScript analogue of graphify;
+> a Burhan debate established an unbiased hifz-vs-Fullerenes head-to-head is a
+> category error, so that comparison is intentionally *not* run.

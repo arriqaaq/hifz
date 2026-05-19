@@ -8,7 +8,7 @@ This project has a persistent memory system via the hifz MCP server.
 At the start of work or when context seems missing, use `hifz_recall` or `hifz_search` to find relevant memories and observations. Do this proactively — don't wait to be asked. Search for terms related to the current task (e.g. file names, concepts, module names).
 
 ### Auto-save
-When you learn something important during a session, use `hifz_save` to persist it **without asking the user**. Save things like:
+When you learn something important during a session, persist it **without asking the user**. **Preferred: the `hifz save` CLI** (`hifz save --content "…" [--title …] [--project …] [--category …] [--keyword …] [--file …]`), run via Bash — it POSTs to the REST server directly and is serialization-proof. The `hifz_save` MCP tool is equivalent but Claude Code has a known arg-drop bug (`anthropics/claude-code#3966`-class) where the call can arrive with empty args; **if `hifz_save` returns `-32602` / "Received keys: []", fall back to `hifz save` — do not retry the MCP tool or skip the save.** Save things like:
 - Architectural decisions and patterns
 - Bug root causes and fixes
 - Workflows and processes

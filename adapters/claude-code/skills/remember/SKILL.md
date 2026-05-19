@@ -7,7 +7,12 @@ user-invocable: true
 
 The user wants to save this to long-term memory: $ARGUMENTS
 
-Use the `hifz_save` MCP tool (provided by the hifz server that this plugin wires up automatically via `.mcp.json`) to persist it.
+Persist it via hifz. **Preferred path: the `hifz save` CLI** (run through Bash) — it
+POSTs straight to the REST server and is serialization-proof. Claude Code has a known
+arg-drop bug (`anthropics/claude-code#3966`-class) where an MCP `tools/call` can arrive
+with empty arguments; the `mcp__hifz__hifz_save` tool is otherwise equivalent (same
+`POST /api/v1/memories`). **If the MCP tool returns `-32602` / "Received keys: []", fall
+back to `hifz save` — never retry the MCP tool repeatedly and never skip the save.**
 
 **`content` is the only required field. `title` is optional — if you omit it the server derives a headline from the first line of `content`. Never block or skip a save just to invent a title.**
 
@@ -16,16 +21,18 @@ Steps:
 2. Optionally write a short (`<~80` char) `title` headline. Skip it if nothing better than the first line of the content comes to mind — the server will derive one.
 3. Extract 2-5 searchable `keywords` (lowercased keyword phrases) that capture what the memory is about. Prefer specific terms over generic ones (`"jwt-refresh-rotation"` beats `"auth"`).
 4. Extract any relevant `files` — absolute or repo-relative paths the memory references.
-5. Call `hifz_save` with the fields:
-   - `content` — **REQUIRED**, the full text to remember (preserve the user's phrasing as much as possible)
-   - `title` — optional headline; omit to let the server derive it from `content`
-   - `keywords` — the extracted concept list
-   - `files` — the extracted file list (empty array if none apply)
-   - `category` — optional typed bucket (defaults to `note`); use e.g. `decision`, `lesson`, `gotcha`, `convention` when it fits
-   - `project` — optional project name (defaults to `global`)
+5. Save it. Preferred — the CLI (quote multi-line content with `$'…'` or a heredoc):
+   ```
+   hifz save --content "<text>" [--title "<t>"] [--project <p>] \
+             [--category decision|lesson|gotcha|convention|…] \
+             [--keyword k1 --keyword k2] [--file path1 --file path2]
+   ```
+   Or call the `hifz_save` MCP tool with the same fields (`content` required;
+   `title`/`keywords`/`files`/`category`/`project` optional). On `-32602`, switch to
+   the CLI form above.
 6. Confirm to the user that the memory was saved and show the title (as stored — yours or the derived one) + keywords you tagged so they know what terms will retrieve it later.
 
-If `hifz_save` isn't available, the stdio MCP shim didn't start — tell the user to:
-1. Run `/plugin list` in Claude Code and confirm `hifz` shows as enabled.
-2. Restart Claude Code (the plugin's `.mcp.json` is only read on startup).
-3. Check `/mcp` to see whether the `hifz` MCP server is connected.
+If neither path works: the REST server may be down. Tell the user to check
+`make service-status` (the always-on daemon on :3111), and that for the MCP tool
+specifically `/plugin list` shows `hifz` enabled and `/mcp` shows it connected
+(the plugin's `.mcp.json` is only read on Claude Code startup).

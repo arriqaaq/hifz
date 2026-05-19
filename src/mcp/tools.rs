@@ -3,12 +3,46 @@ use anyhow::Result;
 use crate::mcp::McpState;
 use crate::mcp::http::RequestBuilderExt;
 
-/// List all available MCP tools.
+/// Tools advertised to MCP clients — a deliberately small "model-intent" core
+/// (recall/save/search/delete, sessions, the plan lifecycle, code grounding).
+///
+/// The other ~17 tools (analytics/admin/graph/context-injection) stay fully
+/// functional: dispatch (`call_tool`) and `validate_required` keep using the
+/// FULL `tool_defs()`, and everything is reachable via the REST API /
+/// dashboard. They are simply not *advertised*, so the advertised schema stays
+/// small (context-bloat reduction + the recognised hybrid best practice).
+///
+/// This is NOT a fix for the Claude Code empty-arguments arg-drop
+/// (`anthropics/claude-code#3966`-class): that is a verified *client* bug,
+/// reproducible with a single tool. The serialization-proof save path is the
+/// `hifz save` CLI (`Command::Save`) → `POST /api/v1/memories`.
+const CORE_TOOLS: &[&str] = &[
+    "hifz_recall",
+    "hifz_save",
+    "hifz_search",
+    "hifz_delete",
+    "hifz_sessions",
+    "hifz_current_plan",
+    "hifz_plans",
+    "hifz_activate_plan",
+    "hifz_complete_plan",
+    "hifz_code_index",
+    "hifz_code_search",
+    "hifz_link_code",
+    "hifz_link_symbol",
+];
+
+/// List the advertised MCP tools (the `CORE_TOOLS` allowlist). Atlas tools are
+/// never core. Hidden tools remain dispatchable — see `CORE_TOOLS`.
 pub fn list_tools() -> Result<serde_json::Value> {
-    #[allow(unused_mut)]
-    let mut tools = tool_defs();
-    #[cfg(feature = "atlas")]
-    tools.extend(atlas_tool_defs());
+    let tools: Vec<serde_json::Value> = tool_defs()
+        .into_iter()
+        .filter(|t| {
+            t.get("name")
+                .and_then(|v| v.as_str())
+                .is_some_and(|n| CORE_TOOLS.contains(&n))
+        })
+        .collect();
     Ok(serde_json::json!({ "tools": tools }))
 }
 
@@ -657,14 +691,14 @@ fn tool_defs() -> Vec<serde_json::Value> {
         serde_json::json!({"name": "hifz_recall", "description": "Search past observations and memories with graph expansion (optionally project-scoped)", "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}, "limit": {"type": "integer", "default": 10}, "project": {"type": "string"}, "session_id": {"type": "string", "description": "Session ID for provenance tracking"}}, "required": ["query"]}}),
         serde_json::json!({
             "name": "hifz_save",
-            "description": "Save a memory to long-term store. The ONLY required field is `content` (string). `title` is optional — if you omit it the server derives a headline from the first line of `content`, so never block a save on inventing one. Use a typed `category` so retrieval can group/filter by intent. Provide `keywords` and `files` explicitly — they are NOT extracted from the title alone (file paths IN content are auto-detected). For long-form documents (Plan/Design/CodeReview/ShipReport/ContextSlice) put the markdown body in `content_long` and a 1-2 sentence summary in `content` (still required). When LLM enrichment is enabled, the system also generates context_summary, tags, and typed conceptual/argumentative edges with stored reasons.",
+            "description": "Save a memory to long-term store; only `content` is required (title is derived from it if omitted).",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "title": {"type": "string", "description": "Optional. Short (<~80 char) headline. Omit and the server derives it from the first line of content; supply one only to override."},
-                    "content": {"type": "string", "description": "REQUIRED. Short retrieval-friendly form. For long-form categories, also provide content_long (but content is still mandatory)."},
-                    "content_long": {"type": "string", "description": "Optional full markdown body for long-form artifact categories (Plan/Design/CodeReview/ShipReport/ContextSlice). Phase 4 will chunk this for retrieval."},
-                    "project": {"type": "string", "description": "Project name (defaults to 'global' if omitted)"},
+                    "title": {"type": "string"},
+                    "content": {"type": "string"},
+                    "content_long": {"type": "string", "description": "Full markdown body for long-form categories."},
+                    "project": {"type": "string"},
                     "category": {
                         "type": "string",
                         "enum": [
@@ -673,15 +707,14 @@ fn tool_defs() -> Vec<serde_json::Value> {
                             "plan", "design", "code_review", "ship_report", "context_slice",
                             "observation", "note"
                         ],
-                        "default": "note",
-                        "description": "Typed category. Long-form: plan/design/code_review/ship_report/context_slice. Lifecycle pairs: bug↔fix (use closes_memory_id)."
+                        "default": "note"
                     },
-                    "keywords": {"type": "array", "items": {"type": "string"}, "description": "Caller-supplied salient terms. NOT extracted from text — be explicit. Lowercase preferred."},
-                    "files": {"type": "array", "items": {"type": "string"}, "description": "Caller-supplied file paths. Server also regex-extracts file paths from content."},
-                    "tags": {"type": "array", "items": {"type": "string"}, "description": "Optional coarse buckets (e.g. \"auth\", \"perf\"). LLM enrichment may add more."},
-                    "closes_memory_id": {"type": "string", "description": "When this memory closes/resolves another (e.g. fix→bug). Writes a `closes` edge."},
-                    "supersedes_memory_id": {"type": "string", "description": "When this memory replaces another. Writes `supersedes` edge AND marks the old one is_latest=false."},
-                    "session_id": {"type": "string", "description": "Session ID for provenance tracking"}
+                    "keywords": {"type": "array", "items": {"type": "string"}},
+                    "files": {"type": "array", "items": {"type": "string"}},
+                    "tags": {"type": "array", "items": {"type": "string"}},
+                    "closes_memory_id": {"type": "string", "description": "Memory id this closes (fix→bug)."},
+                    "supersedes_memory_id": {"type": "string", "description": "Memory id this replaces."},
+                    "session_id": {"type": "string"}
                 },
                 "required": ["content"]
             }
@@ -727,7 +760,7 @@ fn tool_defs() -> Vec<serde_json::Value> {
         }),
         // Code dimension (M2+) — gated by `code` Cargo feature.
         #[cfg(feature = "code")]
-        serde_json::json!({"name": "hifz_code_index", "description": "Walk a repo (gitignore-honest) and chunk + embed source files for semantic code search. Idempotent — unchanged files (matching mtime + sha256) are skipped.", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "root": {"type": "string", "description": "Absolute path to repo root"}, "follow_symlinks": {"type": "boolean", "default": false}, "max_file_bytes": {"type": "integer", "default": 2097152}}, "required": ["project", "root"]}}),
+        serde_json::json!({"name": "hifz_code_index", "description": "Index a repo: chunk + embed source files for semantic code search (idempotent).", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "root": {"type": "string", "description": "Absolute path to repo root"}, "follow_symlinks": {"type": "boolean", "default": false}, "max_file_bytes": {"type": "integer", "default": 2097152}}, "required": ["project", "root"]}}),
         #[cfg(feature = "code")]
         serde_json::json!({"name": "hifz_code_search", "description": "Hybrid (vector + BM25) search over indexed code chunks. Returns paths with line ranges and snippets.", "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}, "project": {"type": "string"}, "language": {"type": "string", "description": "Filter by language: rust|python|typescript|javascript|go|java|c|cpp"}, "path": {"type": "string", "description": "Substring filter against code_chunk.path"}, "limit": {"type": "integer", "default": 10}, "group_by_file": {"type": "boolean", "default": false}}, "required": ["query"]}}),
         #[cfg(feature = "code")]
@@ -796,5 +829,60 @@ mod tests {
         validate_required("not_a_tool", &serde_json::json!({})).expect("unknown name passes");
         // hifz_sessions has no `required` array.
         validate_required("hifz_sessions", &serde_json::json!({})).expect("no-required passes");
+    }
+
+    #[test]
+    fn list_tools_advertises_only_core() {
+        let v = list_tools().expect("list_tools");
+        let names: Vec<String> = v["tools"]
+            .as_array()
+            .expect("tools array")
+            .iter()
+            .map(|t| t["name"].as_str().unwrap().to_string())
+            .collect();
+        assert!(!names.is_empty());
+        for n in &names {
+            assert!(
+                CORE_TOOLS.contains(&n.as_str()),
+                "advertised non-core tool: {n}"
+            );
+        }
+        assert!(
+            !names.iter().any(|n| n.starts_with("atlas_")),
+            "atlas tools must not be advertised"
+        );
+        // feature-independent core members are all present
+        for must in [
+            "hifz_recall",
+            "hifz_save",
+            "hifz_search",
+            "hifz_delete",
+            "hifz_sessions",
+            "hifz_current_plan",
+            "hifz_plans",
+            "hifz_activate_plan",
+            "hifz_complete_plan",
+        ] {
+            assert!(names.iter().any(|n| n == must), "missing core tool: {must}");
+        }
+    }
+
+    #[test]
+    fn hidden_tools_still_defined_for_dispatch_and_validate() {
+        // Hidden ≠ disabled: not advertised, but still in tool_defs() so
+        // call_tool + validate_required keep working (also reachable via REST).
+        let defs = tool_defs();
+        let all: Vec<&str> = defs.iter().filter_map(|t| t["name"].as_str()).collect();
+        for hidden in [
+            "hifz_timeline",
+            "hifz_usage",
+            "hifz_core_edit",
+            "hifz_trace",
+        ] {
+            assert!(all.contains(&hidden), "hidden tool dropped: {hidden}");
+            assert!(!CORE_TOOLS.contains(&hidden), "{hidden} unexpectedly core");
+        }
+        let m = err_msg("hifz_trace", serde_json::json!({}));
+        assert!(m.contains("hifz_trace") && m.contains("'id'"), "{m}");
     }
 }

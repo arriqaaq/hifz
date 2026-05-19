@@ -1,4 +1,4 @@
-.PHONY: build frontend backend server dev stop check test smoke status install uninstall sync-ontology check-ontology install-service uninstall-service restart-service service-status install-git-hook backfill-commits
+.PHONY: build frontend backend server dev stop check test smoke status install uninstall sync-ontology check-ontology install-service uninstall-service restart-service service-status install-git-hook backfill-commits code-retrieval-bench
 
 HIFZ_BIN  := ./target/debug/hifz
 DB_PATH   := ~/.hifz/data
@@ -121,4 +121,9 @@ restart-service:
 service-status:
 	@launchctl print "gui/$$(id -u)/$(LABEL)" 2>/dev/null | grep -E "state|pid|last exit" || echo "service not loaded — run 'make install-service'"
 	@curl -fsS --max-time 2 http://127.0.0.1:$(PORT)/api/v1/livez 2>/dev/null && echo " <- /livez OK" || echo "/livez FAILED"
+
+# Code-retrieval token-efficiency: atlas vs code-search vs grep on the whole
+# tree. Needs the non-default `atlas` feature. See docs/eval/code-retrieval.md.
+code-retrieval-bench:
+	cargo run --release --features atlas --bin code-retrieval-bench -- --root .
 

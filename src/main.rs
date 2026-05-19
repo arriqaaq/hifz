@@ -44,6 +44,47 @@ enum Command {
         #[arg(long, env = "HIFZ_URL", default_value = "http://localhost:3111")]
         url: String,
     },
+    /// Save a memory via the REST API directly.
+    ///
+    /// Serialization-proof path that bypasses the MCP client entirely
+    /// (Anthropic CC #3966-class arg-drop is a client bug, not a hifz one).
+    /// Hits the same `POST /api/v1/memories` the MCP `hifz_save` tool proxies
+    /// to, so behaviour is identical — only the transport is reliable.
+    Save {
+        /// Memory text (required)
+        #[arg(long)]
+        content: String,
+        /// Optional headline; derived from content if omitted
+        #[arg(long)]
+        title: Option<String>,
+        /// Full markdown body for long-form categories
+        #[arg(long)]
+        content_long: Option<String>,
+        /// Project name (defaults to 'global')
+        #[arg(long)]
+        project: Option<String>,
+        /// Memory category (lesson/decision/bug/fix/gotcha/convention/…/note)
+        #[arg(long)]
+        category: Option<String>,
+        /// Salient keyword (repeatable: --keyword a --keyword b)
+        #[arg(long = "keyword")]
+        keywords: Vec<String>,
+        /// Related file path (repeatable)
+        #[arg(long = "file")]
+        files: Vec<String>,
+        /// Coarse tag (repeatable)
+        #[arg(long = "tag")]
+        tags: Vec<String>,
+        /// Memory id this closes/resolves (fix→bug)
+        #[arg(long)]
+        closes_memory_id: Option<String>,
+        /// Memory id this supersedes/replaces
+        #[arg(long)]
+        supersedes_memory_id: Option<String>,
+        /// REST server URL
+        #[arg(long, env = "HIFZ_URL", default_value = "http://localhost:3111")]
+        url: String,
+    },
     /// Show health status
     Status,
     /// Manage the git-hook adapter for out-of-band commit detection
@@ -237,6 +278,72 @@ async fn async_main(cli: Cli) -> Result<()> {
 
             eprintln!("[hifz] MCP proxy → {url}");
             hifz::mcp::serve_stdio(state).await?;
+        }
+
+        Command::Save {
+            content,
+            title,
+            content_long,
+            project,
+            category,
+            keywords,
+            files,
+            tags,
+            closes_memory_id,
+            supersedes_memory_id,
+            url,
+        } => {
+            // Build the same body the MCP `hifz_save` arm forwards verbatim to
+            // `/api/v1/memories`; omit absent optionals so server defaults apply.
+            let mut body = serde_json::json!({ "content": content });
+            for (k, v) in [
+                ("title", title),
+                ("content_long", content_long),
+                ("project", project),
+                ("category", category),
+                ("closes_memory_id", closes_memory_id),
+                ("supersedes_memory_id", supersedes_memory_id),
+            ] {
+                if let Some(v) = v {
+                    body[k] = serde_json::Value::String(v);
+                }
+            }
+            if !keywords.is_empty() {
+                body["keywords"] = serde_json::Value::from(keywords);
+            }
+            if !files.is_empty() {
+                body["files"] = serde_json::Value::from(files);
+            }
+            if !tags.is_empty() {
+                body["tags"] = serde_json::Value::from(tags);
+            }
+
+            // Fail-fast timeouts, mirroring the MCP proxy client.
+            let client = reqwest::Client::builder()
+                .connect_timeout(std::time::Duration::from_secs(5))
+                .timeout(std::time::Duration::from_secs(30))
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new());
+            match client
+                .post(format!("{url}/api/v1/memories"))
+                .json(&body)
+                .send()
+                .await
+            {
+                Ok(resp) => {
+                    let status = resp.status();
+                    let text = resp.text().await.unwrap_or_default();
+                    println!("{text}");
+                    if !status.is_success() {
+                        eprintln!("hifz save failed: HTTP {status}");
+                        std::process::exit(1);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("hifz save failed (is the server running on {url}?): {e}");
+                    std::process::exit(1);
+                }
+            }
         }
 
         Command::Reindex {

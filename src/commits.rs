@@ -34,7 +34,9 @@ pub async fn list(db: &Surreal<Db>, params: CommitsReq) -> Result<serde_json::Va
 
     let mut conditions = vec!["obs_type = 'commit_made'".to_string()];
     if !project.is_empty() {
-        conditions.push("project = $project".to_string());
+        // `observation` has no `project` field — it lives on the linked
+        // `session`. Traverse the record link (same pattern as observe.rs).
+        conditions.push("session_id.project = $project".to_string());
     }
     if branch.is_some() {
         conditions.push("metadata.branch = $branch".to_string());
@@ -64,9 +66,14 @@ pub async fn diff(
     git_path: Option<&PathBuf>,
     sha: &str,
 ) -> Result<serde_json::Value> {
+    // `observation` is SCHEMAFULL with no `project` field — project lives on
+    // the linked `session` (set by `ensure_session` from `payload.project`).
+    // Traverse the record link, same proven pattern as `observe.rs`
+    // (`session_id.project`). The old flat `SELECT project` was always NULL,
+    // so every commit's diff returned "commit not found".
     let mut resp = db
         .query(
-            "SELECT project FROM observation \
+            "SELECT session_id.project AS project FROM observation \
              WHERE obs_type = 'commit_made' AND metadata.sha = $sha LIMIT 1",
         )
         .bind(("sha", sha.to_string()))

@@ -13,14 +13,13 @@ This document is an operator's guide. For the architectural design, see the **Co
 
 ## Build
 
-The feature is gated behind the default-on `code` Cargo feature.
+Code indexing is compiled into every hifz build — there is no feature flag.
 
 ```sh
-cargo build                          # default — code feature on
-cargo build --no-default-features    # slim binary, no tree-sitter grammars
+cargo build                          # tree-sitter + 8 grammars always included
 ```
 
-The full build pulls in tree-sitter + 8 grammar crates (~5–10 MB binary growth). Disable if you don't need code indexing.
+The build pulls in tree-sitter + 8 grammar crates (~5–10 MB binary growth); this is unconditional.
 
 ## Index a repo
 

@@ -10,7 +10,7 @@
 //! to point at the new chunk that overlaps the same line range — keeping the
 //! "memory references a precise point in code" graph durable across edits.
 //!
-//! All gated behind the `code` Cargo feature (default-on).
+//! Compiled into every hifz build — no feature flag.
 //!
 //! ## M1 surface (this module set)
 //! - `lang`     — extension → tree-sitter `Language` mapping

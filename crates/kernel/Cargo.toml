@@ -33,30 +33,15 @@ tracing = "0.1"
 # Time
 chrono = { version = "0.4", features = ["serde"] }
 
-# Code parsing (gated by `code-parse`, default-on). Pin minors — grammar
+# Code parsing (always compiled in). Pin minors — grammar
 # API drifts across versions.
-ignore                 = { version = "0.4",  optional = true }
-tree-sitter            = { version = "0.26", optional = true }
-tree-sitter-rust       = { version = "0.24", optional = true }
-tree-sitter-python     = { version = "0.25", optional = true }
-tree-sitter-javascript = { version = "0.25", optional = true }
-tree-sitter-typescript = { version = "0.23", optional = true }
-tree-sitter-go         = { version = "0.25", optional = true }
-tree-sitter-java       = { version = "0.23", optional = true }
-tree-sitter-c          = { version = "0.24", optional = true }
-tree-sitter-cpp        = { version = "0.23", optional = true }
-
-[features]
-default = ["code-parse"]
-code-parse = [
-    "dep:ignore",
-    "dep:tree-sitter",
-    "dep:tree-sitter-rust",
-    "dep:tree-sitter-python",
-    "dep:tree-sitter-javascript",
-    "dep:tree-sitter-typescript",
-    "dep:tree-sitter-go",
-    "dep:tree-sitter-java",
-    "dep:tree-sitter-c",
-    "dep:tree-sitter-cpp",
-]
+ignore                 = "0.4"
+tree-sitter            = "0.26"
+tree-sitter-rust       = "0.24"
+tree-sitter-python     = "0.25"
+tree-sitter-javascript = "0.25"
+tree-sitter-typescript = "0.23"
+tree-sitter-go         = "0.25"
+tree-sitter-java       = "0.23"
+tree-sitter-c          = "0.24"
+tree-sitter-cpp        = "0.23"

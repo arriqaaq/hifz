@@ -19,6 +19,12 @@ LOG_DIR="$HOME/.hifz/logs"
 PLIST_SRC="$REPO/deploy/launchd/$LABEL.plist.template"
 PLIST_DST="$HOME/Library/LaunchAgents/$LABEL.plist"
 DOMAIN="gui/$(id -u)"
+# LLM backend for the daemon (atlas "Ask" RAG + compression/consolidation).
+# Env-overridable; defaults to a local Ollama. The model must be pulled
+# (`ollama pull <model>`) or completions fail and atlas degrades to
+# sources-only. `qwen3:8b` is the locally-available default.
+OLLAMA_URL="${OLLAMA_URL:-http://127.0.0.1:11434}"
+OLLAMA_MODEL="${OLLAMA_MODEL:-qwen3:8b}"
 
 # 1. Release binary is required — no fallback.
 if [ ! -x "$BIN" ]; then
@@ -35,12 +41,23 @@ sed -e "s|__HIFZ_BIN__|$BIN|g" \
     -e "s|__PORT__|$PORT|g" \
     -e "s|__WORKDIR__|$REPO|g" \
     -e "s|__LOG_DIR__|$LOG_DIR|g" \
+    -e "s|__OLLAMA_URL__|$OLLAMA_URL|g" \
+    -e "s|__OLLAMA_MODEL__|$OLLAMA_MODEL|g" \
     "$PLIST_SRC" > "$PLIST_DST"
 
 # 4. (Re)bootstrap. The pre-clean bootout is the ONLY allow-fail line: on a
 #    first install the service is legitimately not loaded yet (idempotency,
 #    not error-masking). Everything after this is hard-fail.
 launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
+# `bootout` is asynchronous: launchd tears the job down in the background.
+# Running `bootstrap` before teardown finishes fails with
+# "Bootstrap failed: 5: Input/output error" AND leaves nothing loaded.
+# Wait (bounded) until the label is actually gone before bootstrapping.
+i=0
+while launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1 && [ "$i" -lt 20 ]; do
+    sleep 0.5
+    i=$((i + 1))
+done
 launchctl bootstrap "$DOMAIN" "$PLIST_DST"
 launchctl kickstart -k "$DOMAIN/$LABEL"
 

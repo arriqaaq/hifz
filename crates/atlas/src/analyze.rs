@@ -76,10 +76,7 @@ pub async fn analyze(store: &Store) -> Result<Insights> {
     let nodes: Vec<N> = nr.take(0).unwrap_or_default();
     let mut er = store
         .db
-        .query(
-            "SELECT in, out, relation, score FROM atlas_edge WHERE \
-             in IN (SELECT VALUE id FROM atlas_node WHERE project=$p)",
-        )
+        .query("SELECT in, out, relation, score FROM atlas_edge WHERE project=$p")
         .bind(("p", p.clone()))
         .await?;
     let edges: Vec<E> = er.take(0).unwrap_or_default();
@@ -235,7 +232,7 @@ mod tests {
     async fn rel(store: &Store, a: &str, b: &str) {
         store
             .db
-            .query("RELATE $a->atlas_edge->$b SET relation='related', via='t', score=1.0, created_at='2026-01-01'")
+            .query("RELATE $a->atlas_edge->$b SET project='demo', relation='related', via='t', score=1.0, created_at='2026-01-01'")
             .bind(("a", RecordId::new("atlas_node", a.to_string())))
             .bind(("b", RecordId::new("atlas_node", b.to_string())))
             .await

@@ -407,7 +407,6 @@ pub async fn save_enriched(
     // memory text and create `references` / `references_symbol` edges to
     // already-indexed code chunks/symbols. Failure is logged + swallowed so
     // a code-link bug never blocks memory persistence.
-    #[cfg(feature = "code")]
     {
         let long_text = content_long.as_deref().unwrap_or("");
         let texts: [&str; 3] = [title, content, long_text];

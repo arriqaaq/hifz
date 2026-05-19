@@ -43,6 +43,17 @@ pub fn compress_synthetic(payload: &HookPayload) -> CompressResult {
         } else {
             "Prompt".to_string()
         }
+    } else if payload.hook_type == "post_compact" {
+        // post_compact has no tool_name/file_path; the actual signal is in
+        // `data.summary` (+ `data.trigger`). Without a dedicated arm here
+        // and in `build_narrative`, the row lands as "unknown call" /
+        // "Hook post_compact fired for unknown." and the summary is dropped.
+        let trigger = data.get("trigger").and_then(|v| v.as_str()).unwrap_or("");
+        if trigger.is_empty() {
+            "Compaction summary".to_string()
+        } else {
+            format!("Compaction summary ({trigger})")
+        }
     } else {
         build_title(tool_name, data)
     };
@@ -385,6 +396,24 @@ fn build_narrative(tool_name: &str, hook_type: &str, data: &serde_json::Value) -
                 prompt.to_string()
             }
         }
+        "post_compact" => {
+            // The compaction summary itself is the narrative. Without this
+            // arm the catch-all writes "Hook post_compact fired for unknown."
+            // and the actual summary in `data.summary` is silently dropped.
+            //
+            // No length cap: the narrative field is `TYPE string` (unbounded)
+            // and a compaction summary is the irreducible distillation of a
+            // whole conversation window — truncating defeats the point.
+            // The embedder (fastembed MiniLM, 256-token window) truncates
+            // internally when computing the vector; the *stored* text stays
+            // complete and re-renders fully in the UI on recall.
+            let summary = data.get("summary").and_then(|v| v.as_str()).unwrap_or("");
+            if summary.is_empty() {
+                "Conversation was compacted (no summary provided).".to_string()
+            } else {
+                summary.to_string()
+            }
+        }
         _ => format!("Hook {hook_type} fired for {tool_name}."),
     }
 }
@@ -394,6 +423,10 @@ fn infer_importance(hook_type: &str, tool_name: &str) -> i64 {
         "post_tool_failure" => 7,
         "session_start" | "session_end" => 3,
         "prompt_submit" => 4,
+        // A compaction summary distils a whole conversation window — it is
+        // strictly higher-signal than a single Read/Edit and deserves to
+        // surface in recall ahead of those.
+        "post_compact" => 6,
         _ => match tool_name {
             "Write" => 6,
             "Edit" => 6,
@@ -401,5 +434,91 @@ fn infer_importance(hook_type: &str, tool_name: &str) -> i64 {
             "Read" | "Glob" | "Grep" => 2,
             _ => 3,
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn payload(hook_type: &str, data: serde_json::Value) -> HookPayload {
+        HookPayload {
+            hook_type: hook_type.to_string(),
+            session_id: "s".into(),
+            project: "p".into(),
+            cwd: "/tmp".into(),
+            timestamp: "2026-01-01T00:00:00Z".into(),
+            source: None,
+            obs_type: None,
+            parent_obs_id: None,
+            data,
+            metadata: None,
+        }
+    }
+
+    /// Regression fence: post_compact must not produce
+    /// "unknown call" / "Hook post_compact fired for unknown." — the
+    /// failure mode that silently dropped every compaction summary.
+    #[test]
+    fn post_compact_compresses_summary_into_title_and_narrative() {
+        let summary = "Refactored atlas_edge to denormalize project; tests 25/25 green.";
+        let p = payload(
+            "post_compact",
+            json!({ "trigger": "manual", "custom_instructions": "", "summary": summary }),
+        );
+        let r = compress_synthetic(&p);
+
+        assert_eq!(r.obs_type, "compaction_summary");
+        assert!(
+            r.title.starts_with("Compaction summary"),
+            "title was {:?}",
+            r.title
+        );
+        assert!(r.title.contains("manual"), "title was {:?}", r.title);
+        assert_eq!(r.narrative, summary);
+        // Stays above per-tool noise (Read=2) so compactions surface in recall.
+        assert!(r.importance >= 5, "importance was {}", r.importance);
+
+        // Anti-pattern: the broken placeholders must never appear.
+        assert_ne!(r.title, "unknown call");
+        assert!(
+            !r.narrative.starts_with("Hook post_compact fired"),
+            "narrative leaked the catch-all: {:?}",
+            r.narrative
+        );
+    }
+
+    /// Empty-summary edge case: a malformed compaction event must still
+    /// yield a usable placeholder, not "unknown call".
+    #[test]
+    fn post_compact_with_missing_summary_still_has_usable_title_and_narrative() {
+        let p = payload("post_compact", json!({ "trigger": "" }));
+        let r = compress_synthetic(&p);
+        assert_eq!(r.obs_type, "compaction_summary");
+        assert_eq!(r.title, "Compaction summary");
+        assert!(r.narrative.contains("compacted"), "{:?}", r.narrative);
+        assert_ne!(r.title, "unknown call");
+    }
+
+    /// A real Claude Code compaction summary is multi-kilobyte. The narrative
+    /// field is `TYPE string` (unbounded) and the summary is the irreducible
+    /// signal — it must be stored byte-for-byte, not truncated. Embedding
+    /// happens downstream and may truncate the *vector* input, but the
+    /// stored text stays whole so recall renders the full summary.
+    #[test]
+    fn post_compact_stores_full_multi_kilobyte_summary_verbatim() {
+        let big = "x".repeat(8192) + "<<END_MARKER>>";
+        let p = payload(
+            "post_compact",
+            json!({ "trigger": "auto", "summary": big.clone() }),
+        );
+        let r = compress_synthetic(&p);
+        assert_eq!(r.narrative.len(), big.len(), "narrative was truncated");
+        assert!(
+            r.narrative.ends_with("<<END_MARKER>>"),
+            "tail of summary was dropped"
+        );
+        assert_eq!(r.narrative, big);
     }
 }

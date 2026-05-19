@@ -528,6 +528,11 @@ export function atlasAnswer(
 ): Promise<AtlasAnswer> {
   return get(`${ATLAS}/answer?q=${encodeURIComponent(q)}&limit=${limit}&${pj(project)}`);
 }
+/** Distinct atlas projects (any project with ≥1 atlas_node). Atlas-only
+ *  projects appear here even when they have no hifz session. */
+export function getAtlasProjects(): Promise<{ projects: string[] }> {
+  return get(`${ATLAS}/projects`);
+}
 
 // Build endpoints are async: they return `{ started: true }` (or
 // `{ error }` if a job is already running). Poll `atlasStatus`.

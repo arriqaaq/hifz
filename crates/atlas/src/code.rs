@@ -52,11 +52,7 @@ pub async fn project_code_graph(
     // Wipe prior derived code graph for this project (doc/concept untouched).
     let _ = store
         .db
-        .query(
-            "DELETE atlas_edge WHERE via='code' AND in IN \
-             (SELECT VALUE id FROM atlas_node WHERE project=$p \
-              AND kind IN ['code_symbol','external','file'])",
-        )
+        .query("DELETE atlas_edge WHERE project=$p AND via='code'")
         .bind(("p", p.clone()))
         .await;
     let _ = store
@@ -188,11 +184,12 @@ pub async fn project_code_graph(
             let _ = store
                 .db
                 .query(
-                    "RELATE $f->atlas_edge->$t SET relation=$rel, via='code', \
-                     score=$s, resolution=$res, created_at=$now",
+                    "RELATE $f->atlas_edge->$t SET project=$p, relation=$rel, \
+                     via='code', score=$s, resolution=$res, created_at=$now",
                 )
                 .bind(("f", from.clone()))
                 .bind(("t", to))
+                .bind(("p", p.clone()))
                 .bind(("rel", e.relation.to_string()))
                 .bind(("s", score))
                 .bind(("res", e.resolution.as_str().to_string()))

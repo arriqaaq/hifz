@@ -82,7 +82,6 @@ pub async fn serve(state: Hifz, port: u16) -> Result<()> {
         .route("/replays/{id}", axum::routing::get(api::replay_get))
         .route("/export", axum::routing::get(api::export));
 
-    #[cfg(feature = "code")]
     let core_api = core_api
         .route("/code/index", axum::routing::post(api::code_index))
         .route("/code/search", axum::routing::post(api::code_search))
@@ -159,9 +158,11 @@ pub async fn serve(state: Hifz, port: u16) -> Result<()> {
     #[cfg(feature = "atlas")]
     let api = api.nest("/api/v1/atlas", atlas_router);
 
-    // Serve frontend static files with SPA fallback
-    let spa_fallback = ServeFile::new("website/build/index.html");
-    let static_files = ServeDir::new("website/build").not_found_service(spa_fallback);
+    // Serve frontend static files with SPA fallback. A plain
+    // `ServeFile` not_found_service returns the shell body but a 404 status,
+    // so deep links / refresh on client-routed pages (/atlas, /sessions, …)
+    // 404. A handler returns the SvelteKit shell with an explicit 200.
+    let static_files = ServeDir::new("website/build").not_found_service(get(spa_index));
 
     let app = api.fallback_service(static_files).layer(cors);
 
@@ -171,4 +172,14 @@ pub async fn serve(state: Hifz, port: u16) -> Result<()> {
     let listener = TcpListener::bind(&addr).await?;
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+/// SPA fallback handler: serve the SvelteKit shell with an explicit **200**
+/// so client-routed deep links / refresh (e.g. `/atlas`) work. Path is
+/// relative to the daemon `WorkingDirectory` (the repo root).
+async fn spa_index() -> impl IntoResponse {
+    match tokio::fs::read("website/build/index.html").await {
+        Ok(bytes) => Html(bytes).into_response(),
+        Err(_) => (StatusCode::NOT_FOUND, "frontend not built").into_response(),
+    }
 }

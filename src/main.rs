@@ -134,7 +134,6 @@ enum Command {
     /// Index a code repo into the persistent store (M2+).
     /// Walks the root, chunks every supported file, embeds the chunks, and
     /// extracts named symbols. Idempotent — unchanged files are skipped.
-    #[cfg(feature = "code")]
     Index {
         /// SurrealDB data directory
         #[arg(long, default_value = "db_data")]
@@ -152,7 +151,6 @@ enum Command {
     /// Reconcile the code-index against the filesystem (M5+).
     /// Drops chunks/symbols/edges for files no longer on disk and (optionally)
     /// decays cold chunks.
-    #[cfg(feature = "code")]
     CodeGc {
         #[arg(long, default_value = "db_data")]
         db_path: String,
@@ -229,7 +227,6 @@ async fn async_main(cli: Cli) -> Result<()> {
                 );
             }
 
-            #[cfg(feature = "code")]
             {
                 if std::env::var("HIFZ_CODE_WATCH").as_deref() == Ok("1") {
                     if let Ok(roots) = std::env::var("HIFZ_CODE_WATCH_ROOTS") {
@@ -467,7 +464,6 @@ async fn async_main(cli: Cli) -> Result<()> {
             hifz::githook::run(action).await?;
         }
 
-        #[cfg(feature = "code")]
         Command::Index {
             db_path,
             project,
@@ -489,7 +485,6 @@ async fn async_main(cli: Cli) -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&report)?);
         }
 
-        #[cfg(feature = "code")]
         Command::CodeGc {
             db_path,
             project,

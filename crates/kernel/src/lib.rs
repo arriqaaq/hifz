@@ -14,5 +14,4 @@ pub mod models;
 pub mod ollama;
 pub mod text;
 
-#[cfg(feature = "code-parse")]
 pub mod code_parse;

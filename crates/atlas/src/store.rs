@@ -97,6 +97,16 @@ DEFINE INDEX IF NOT EXISTS atlas_node_vec ON TABLE atlas_node
 -- (preserved from the hifz-core code-intel core, E8); concept/doc edges
 -- carry the LLM/heuristic channel in `via`.
 DEFINE TABLE IF NOT EXISTS atlas_edge SCHEMAFULL TYPE RELATION;
+-- `project` is denormalized onto every edge (both endpoints belong to one
+-- project by construction at every RELATE site — see code.rs / extract.rs).
+-- This + the single-col `atlas_edge_project` index is the ONLY query shape
+-- the planner reliably indexes for project-scoped edge reads in this surreal
+-- rev — empirically proven: `atlas_chunk WHERE project=$p` (this exact
+-- pattern) returns in 0.42 s on the same project where the prior
+-- `WHERE in IN (SELECT id FROM atlas_node WHERE project=$p)` shape hung
+-- >18 s, even with `FIELDS in` indexes present. The denormalization is the
+-- mechanism, not the index name. See the plan file.
+DEFINE FIELD IF NOT EXISTS project    ON atlas_edge TYPE string;
 DEFINE FIELD IF NOT EXISTS relation   ON atlas_edge TYPE string;
 DEFINE FIELD IF NOT EXISTS via        ON atlas_edge TYPE string DEFAULT 'atlas';
 DEFINE FIELD IF NOT EXISTS score      ON atlas_edge TYPE float DEFAULT 1.0;
@@ -104,7 +114,12 @@ DEFINE FIELD IF NOT EXISTS resolution ON atlas_edge TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS reason     ON atlas_edge TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS metadata   ON atlas_edge TYPE option<object>;
 DEFINE FIELD IF NOT EXISTS created_at ON atlas_edge TYPE string;
+DEFINE INDEX IF NOT EXISTS atlas_edge_project  ON TABLE atlas_edge FIELDS project;
 DEFINE INDEX IF NOT EXISTS atlas_edge_relation ON TABLE atlas_edge FIELDS relation;
+DEFINE INDEX IF NOT EXISTS atlas_edge_via      ON TABLE atlas_edge FIELDS via;
+-- Note: NO `atlas_edge_in`/`out` indexes — the planner doesn't use them for
+-- `IN (subquery)`, and we no longer issue that query shape (verified hang
+-- on 5879 edges); the `project` index does the actual work.
 
 -- Text chunks for document/PDF nodes (hybrid-searchable like hifz chunks).
 DEFINE TABLE IF NOT EXISTS atlas_chunk SCHEMAFULL;
@@ -186,5 +201,190 @@ mod tests {
         assert_eq!(row.source_kind.as_deref(), Some("pdf"));
         assert_eq!(row.source_uri.as_deref(), Some("file:///abs/legal/msa.pdf"));
         assert_eq!(row.source_ref.as_deref(), Some("legal/msa.pdf"));
+    }
+
+    /// Deterministic regression fence. The project-scoped edge queries
+    /// (analyze/cluster/web) and via-filtered DELETEs (code/extract) all do
+    /// `atlas_edge WHERE [via …] in IN (SELECT id FROM atlas_node WHERE
+    /// project=$p)`. Without in/out/via indexes that full-scans every
+    /// Deterministic schema fence. The fix to the project-scoped edge query
+    /// hang (>18s on real data) is the denormalized `project` field on
+    /// `atlas_edge` plus the single-col `atlas_edge_project` index — that's
+    /// the only shape the planner reliably indexes in this surreal rev. If
+    /// either is removed, this fails immediately (no silent regression).
+    #[tokio::test]
+    async fn atlas_edge_schema_has_project_field_and_index() {
+        let db = kernel::db::connect_mem().await.unwrap();
+        init_atlas_schema(&db, 384).await.unwrap();
+        let mut r = db.query("INFO FOR TABLE atlas_edge").await.unwrap();
+        let info: Option<serde_json::Value> = r.take(0).unwrap();
+        let s = info.map(|v| v.to_string()).unwrap_or_default();
+        for needed in [
+            "project",            // field
+            "atlas_edge_project", // index — THE one that makes the read fast
+            "atlas_edge_relation",
+            "atlas_edge_via",
+        ] {
+            assert!(
+                s.contains(needed),
+                "atlas_edge missing `{needed}` — INFO: {s}"
+            );
+        }
+    }
+
+    /// **Anti-pattern fence.** The bug class was a `WHERE in IN (SELECT … FROM
+    /// atlas_node WHERE project=$p)` against `atlas_edge` — that shape hangs
+    /// on real data regardless of `FIELDS in` indexes. This static-source
+    /// check fails the build the instant anyone reintroduces it. (The
+    /// previous behavioral test was too weak — 1500 in-mem edges aren't
+    /// enough to discriminate the bug — so the *deterministic* guard is the
+    /// source check.)
+    #[test]
+    fn no_atlas_edge_in_subquery_anywhere_in_atlas() {
+        let crate_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut offenders: Vec<String> = Vec::new();
+        for entry in std::fs::read_dir(&crate_dir).unwrap() {
+            let p = entry.unwrap().path();
+            if p.extension().and_then(|s| s.to_str()) != Some("rs") {
+                continue;
+            }
+            let src = std::fs::read_to_string(&p).unwrap();
+            // Strip the line each line that introduces the comparison; we're
+            // matching the SQL pattern as a substring on a normalised view.
+            let flat: String = src.split_whitespace().collect::<Vec<_>>().join(" ");
+            // The exact failing shape: a SELECT/DELETE against atlas_edge
+            // filtered by `in IN (SELECT ... FROM atlas_node`. We only flag
+            // it inside an atlas_edge query (not in this very test, which
+            // matches by literal *quoted* string in source — exclude this
+            // file).
+            if p.file_name().and_then(|s| s.to_str()) == Some("store.rs") {
+                continue;
+            }
+            if flat.contains("atlas_edge WHERE in IN (SELECT")
+                || flat.contains("atlas_edge WHERE via")
+                    && flat.contains("in IN (SELECT VALUE id FROM atlas_node")
+            {
+                offenders.push(p.display().to_string());
+            }
+        }
+        assert!(
+            offenders.is_empty(),
+            "Re-introduced the unindexed `atlas_edge WHERE in IN (SELECT … atlas_node …)` \
+             anti-pattern (hangs on real data) in: {offenders:?}. Use `WHERE project=$p` \
+             against the denormalized field instead."
+        );
+    }
+
+    /// Fast unit-test for the project-scoped edge query: a tiny fixture
+    /// just large enough to catch a cross-project leak. **Correctness/
+    /// isolation only — no perf assertion.** At-scale perf (the A/B vs the
+    /// old `IN (subquery)` shape) lives in `benchmark/atlas_edge_scaling_bench.rs`;
+    /// unit tests must stay sub-second. Together with the schema fence +
+    /// anti-pattern source fence above, this is the durable per-PR guard.
+    #[tokio::test]
+    async fn project_scoped_edge_query_returns_only_target_project() {
+        use surrealdb::types::RecordId;
+        let db = kernel::db::connect_mem().await.unwrap();
+        init_atlas_schema(&db, 384).await.unwrap();
+        for (id, p) in [
+            ("p1", "p"),
+            ("p2", "p"),
+            ("p3", "p"),
+            ("n1", "n"),
+            ("n2", "n"),
+            ("n3", "n"),
+            ("n4", "n"),
+        ] {
+            db.query(
+                "CREATE type::record($id) SET project=$pp, kind='concept', \
+                 label='x', cluster=-1, created_at='2026-01-01'",
+            )
+            .bind(("id", format!("atlas_node:{id}")))
+            .bind(("pp", p.to_string()))
+            .await
+            .unwrap()
+            .check()
+            .unwrap();
+        }
+        for (a, b, p) in [
+            ("p1", "p2", "p"),
+            ("p2", "p3", "p"),
+            ("n1", "n2", "n"),
+            ("n2", "n3", "n"),
+            ("n3", "n4", "n"),
+        ] {
+            db.query(
+                "RELATE $a->atlas_edge->$b SET project=$pp, relation='related', \
+                 via='t', score=1.0, created_at='2026-01-01'",
+            )
+            .bind(("a", RecordId::new("atlas_node", a.to_string())))
+            .bind(("b", RecordId::new("atlas_node", b.to_string())))
+            .bind(("pp", p.to_string()))
+            .await
+            .unwrap();
+        }
+        #[derive(Debug, SurrealValue)]
+        struct E {
+            r#in: RecordId,
+            out: RecordId,
+        }
+        let edges: Vec<E> = db
+            .query("SELECT in, out FROM atlas_edge WHERE project=$pp")
+            .bind(("pp", "p"))
+            .await
+            .unwrap()
+            .take(0)
+            .unwrap_or_default();
+        assert_eq!(edges.len(), 2, "exactly p's 2 edges, no n leakage");
+        for e in &edges {
+            let ins = kernel::ids::rid_to_string(&e.r#in);
+            assert!(
+                ins.starts_with("atlas_node:p"),
+                "leaked non-`p` edge: {ins}"
+            );
+        }
+    }
+
+    /// `/atlas/projects` integration: must list distinct atlas projects so
+    /// the UI dropdown can union them with hifz sessions (the dst-not-
+    /// appearing bug fix). Calls the production handler indirectly by
+    /// seeding nodes and reading the same shape the handler uses.
+    #[tokio::test]
+    async fn distinct_atlas_projects_query_returns_each_once_sorted() {
+        let db = kernel::db::connect_mem().await.unwrap();
+        init_atlas_schema(&db, 384).await.unwrap();
+        for (id, p) in [
+            ("atlas_node:a", "alpha"),
+            ("atlas_node:b", "alpha"), // duplicate
+            ("atlas_node:c", "zeta"),
+            ("atlas_node:d", "mid"),
+        ] {
+            db.query(
+                "CREATE type::record($id) SET project=$pp, kind='concept', \
+                 label='x', cluster=-1, created_at='2026-01-01'",
+            )
+            .bind(("id", id.to_string()))
+            .bind(("pp", p.to_string()))
+            .await
+            .unwrap()
+            .check()
+            .unwrap();
+        }
+        // Mirrors the handler in web.rs::projects exactly.
+        let all: Vec<String> = db
+            .query("SELECT VALUE project FROM atlas_node")
+            .await
+            .unwrap()
+            .take(0)
+            .unwrap_or_default();
+        let projs: Vec<String> = all
+            .into_iter()
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        assert_eq!(
+            projs,
+            vec!["alpha".to_string(), "mid".into(), "zeta".into()]
+        );
     }
 }

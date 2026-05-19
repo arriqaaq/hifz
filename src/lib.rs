@@ -8,7 +8,6 @@ use surrealdb::Surreal;
 use surrealdb::types::SurrealValue;
 
 pub mod chunk;
-#[cfg(feature = "code")]
 pub mod code;
 pub mod commits;
 pub mod compress;
@@ -812,7 +811,6 @@ impl Hifz {
 
     // --- Code dimension (M2+) ---
 
-    #[cfg(feature = "code")]
     pub async fn code_index(&self, req: crate::models::CodeIndexReq) -> Result<serde_json::Value> {
         let opts = crate::code::index::IndexOpts {
             follow_symlinks: req.follow_symlinks.unwrap_or(false),
@@ -830,7 +828,6 @@ impl Hifz {
         Ok(serde_json::to_value(&report)?)
     }
 
-    #[cfg(feature = "code")]
     pub async fn code_search(
         &self,
         req: crate::models::CodeSearchReq,
@@ -848,7 +845,6 @@ impl Hifz {
         Ok(serde_json::json!({ "results": results, "count": count }))
     }
 
-    #[cfg(feature = "code")]
     pub async fn code_link(&self, req: crate::models::CodeLinkReq) -> Result<serde_json::Value> {
         let mid = if req.memory_id.starts_with("memory:") {
             req.memory_id.clone()
@@ -880,7 +876,6 @@ impl Hifz {
         }))
     }
 
-    #[cfg(feature = "code")]
     pub async fn code_link_symbol(
         &self,
         req: crate::models::CodeLinkSymReq,
@@ -915,7 +910,6 @@ impl Hifz {
         }))
     }
 
-    #[cfg(feature = "code")]
     pub async fn code_gc(&self, req: crate::models::CodeGcReq) -> Result<serde_json::Value> {
         let report = crate::code::gc::run_gc(
             &self.db,

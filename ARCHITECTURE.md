@@ -309,7 +309,7 @@ The MCP proxy (`hifz mcp`) exposes a curated subset of the REST API as MCP tools
 | | `hifz_export` | `GET /export` |
 | **Graph** | `hifz_trace` | `POST /trace` |
 | **Provenance** | `hifz_commits` | `GET /commits` |
-| **Code** *(opt-in `code` feature)* | `hifz_code_index` | `POST /code/index` |
+| **Code** | `hifz_code_index` | `POST /code/index` |
 | | `hifz_code_search` | `POST /code/search` |
 | | `hifz_link_code` | `POST /code/link` |
 | | `hifz_link_symbol` | `POST /code/link/symbol` |
@@ -323,7 +323,7 @@ The proxy is intentionally thin: schema validation, JSON ↔ MCP conversion, and
 
 Memory is one half of the story. The other is **code itself, indexed and addressable**, so a memory can reference a precise location and the location is a first-class searchable row.
 
-`src/code/` is a native-Rust port of [cocoindex-code](https://github.com/cocoindex-io/cocoindex-code)'s chunk + index pipeline. It's gated behind the default-on `code` Cargo feature; `cargo build --no-default-features` produces a slim hifz binary without the tree-sitter grammars (~5–10 MB savings).
+`src/code/` is a native-Rust port of [cocoindex-code](https://github.com/cocoindex-io/cocoindex-code)'s chunk + index pipeline. It is compiled into every hifz build (tree-sitter grammars included) — there is no opt-out feature flag.
 
 ### Tables
 

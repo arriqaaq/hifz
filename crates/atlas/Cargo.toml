@@ -8,7 +8,7 @@ name = "atlas"
 path = "src/main.rs"
 
 [dependencies]
-kernel = { path = "../kernel", features = ["code-parse"] }
+kernel = { path = "../kernel" }
 
 surrealdb = { workspace = true }
 serde = { version = "1", features = ["derive"] }

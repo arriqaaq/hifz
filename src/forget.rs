@@ -55,7 +55,6 @@ pub async fn run_forget(db: &Surreal<Db>, dry_run: bool) -> Result<ForgetResult>
     // 5. (M5) Orphan code-reference edges + tombstoned code_file sweep.
     //    `code/gc.rs::reconcile_deletions` is the heavyweight pass that needs
     //    a project root path; this lighter pass works without one.
-    #[cfg(feature = "code")]
     if !dry_run {
         // Drop references / references_symbol edges whose target row no
         // longer exists (the writer should have done this, but stragglers

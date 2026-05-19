@@ -3,6 +3,7 @@
   import {
     getSessions,
     getAtlasInsights,
+    getAtlasProjects,
     atlasQuery,
     atlasAnswer,
     atlasStatus,
@@ -72,11 +73,63 @@
 
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+  // Derive a project name from a codebase path or git URL (basename,
+  // sanitized). Used to auto-fill `project` when the user is still on the
+  // 'default' bucket so a fresh repo doesn't silently land in 'default'.
+  function deriveProject(p: string): string {
+    if (!p) return 'default';
+    const stripped = p.replace(/\/+$/, '').replace(/\.git$/, '');
+    const base = stripped.split('/').pop() || '';
+    const clean = base.replace(/[^a-zA-Z0-9_-]/g, '_');
+    return clean || 'default';
+  }
+  // Persist the selected project to URL + localStorage so it survives reload.
+  function persistProject() {
+    try {
+      const u = new URL(window.location.href);
+      u.searchParams.set('project', project);
+      window.history.replaceState({}, '', u.toString());
+      localStorage.setItem('atlas.project', project);
+    } catch {
+      /* SSR / non-browser context — non-fatal */
+    }
+  }
+  // Auto-derive: while project is still 'default' (or empty), tracking the
+  // path/git field gives it a meaningful name. Once project has been
+  // changed (manually or by previous derive), this stops touching it.
+  $effect(() => {
+    const src = source === 'path' ? codePath : source === 'git' ? gitUrl : '';
+    if (!src || !src.trim()) return;
+    if (project === 'default' || project === '') {
+      const d = deriveProject(src);
+      if (d !== 'default' && d !== project) {
+        project = d;
+        persistProject();
+        // refresh insights for the newly-derived project; safe (Ask unaffected)
+        refresh();
+      }
+    }
+  });
+
   async function refresh() {
     loading = true;
     error = '';
     try {
-      ins = await getAtlasInsights(project);
+      // Time-bound the insights load so a large / un-rebuilt (B1-bloated)
+      // graph can never hang the panel forever. Ask is unaffected (separate
+      // card, always rendered). 12s is generous for a healthy graph.
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(
+          () =>
+            reject(
+              new Error(
+                'insights still loading (a build/index job may be running, or the graph is large) — Ask/Search are unaffected and work now.',
+              ),
+            ),
+          12000,
+        ),
+      );
+      ins = await Promise.race([getAtlasInsights(project), timeout]);
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     } finally {
@@ -85,15 +138,37 @@
   }
 
   onMount(async () => {
+    // 1. Restore the previously-selected project (URL ?project= wins, then
+    //    localStorage). Persistence across reload — the dst-vanishes-on-
+    //    refresh bug fix.
+    let initial: string | null = null;
+    try {
+      const u = new URL(window.location.href);
+      initial = u.searchParams.get('project') || localStorage.getItem('atlas.project');
+    } catch {
+      /* non-browser */
+    }
+    if (initial) project = initial;
+
+    // 2. Populate the dropdown as the UNION of hifz sessions + atlas
+    //    projects so atlas-only projects (no hifz session) are selectable.
+    const set = new Set<string>();
     try {
       const res = await getSessions(200);
-      const set = new Set<string>();
       for (const s of res.sessions ?? []) if (s?.project) set.add(s.project);
-      projects = Array.from(set).sort();
-      if (!projects.includes(project) && projects.length) project = projects[0];
     } catch {
-      /* projects list is best-effort; fall back to "default" */
+      /* sessions optional */
     }
+    try {
+      const res = await getAtlasProjects();
+      for (const p of res.projects ?? []) set.add(p);
+    } catch {
+      /* atlas list optional */
+    }
+    if (initial) set.add(initial); // keep restored value visible
+    projects = Array.from(set).sort();
+    if (!projects.includes(project) && projects.length && !initial) project = projects[0];
+
     await refresh();
     await pollOnce();
   });
@@ -210,7 +285,7 @@
   <div class="card toolbar">
     <label>
       Project
-      <select bind:value={project} onchange={() => { refresh(); pollOnce(); }}>
+      <select bind:value={project} onchange={() => { persistProject(); refresh(); pollOnce(); }}>
         {#if !projects.includes(project)}<option value={project}>{project}</option>{/if}
         {#each projects as p}<option value={p}>{p}</option>{/each}
       </select>
@@ -257,6 +332,85 @@
     {/if}
   </div>
 
+  <!-- Ask/Search — ALWAYS visible, independent of insights/corpus state.
+       (Previously nested under {:else if ins}, so a slow/empty insights
+       load hid it behind the spinner.) -->
+  <div class="card">
+    <div class="card-title">Ask</div>
+    <div class="qrow">
+      <input
+        placeholder="ask a question, or search the corpus…"
+        bind:value={q}
+        onkeydown={(e) => e.key === 'Enter' && runAnswer()}
+      />
+      <button class="btn btn--accent" onclick={runAnswer} disabled={asking || searching}>
+        {asking ? '…' : 'Ask'}
+      </button>
+      <button class="btn" onclick={runQuery} disabled={asking || searching}>
+        {searching ? '…' : 'Search'}
+      </button>
+    </div>
+
+    {#if ans}
+      {#if ans.note}
+        <div class="note"><span class="badge badge-amber">note</span> {ans.note}</div>
+      {/if}
+      {#if ans.answer}
+        <p class="ans">
+          {#each segments(ans.answer) as seg}
+            {#if seg.t === 'text'}{seg.v}{:else}<a class="cite" href={`#atlas-src-${seg.n}`}
+                >[{seg.n}]</a
+              >{/if}
+          {/each}
+        </p>
+      {/if}
+      {#if ans.citations.length}
+        <div class="card-title">Sources</div>
+        <div class="srclist">
+          {#each ans.citations as c}
+            <div class="src" id={`atlas-src-${c.n}`}>
+              <div class="srchead">
+                <span class="cite">[{c.n}]</span>
+                <span class="badge badge-blue">{c.source_kind ?? 'doc'}</span>
+                {#if isLink(c.source_uri)}
+                  <a class="ref" href={c.source_uri} target="_blank" rel="noreferrer"
+                    >{c.source_ref ?? c.doc_label}</a
+                  >
+                {:else}
+                  <span class="ref mono">{c.source_ref ?? c.doc_label}</span>
+                  {#if c.source_uri}
+                    <button class="btn btn--small" onclick={() => copyPath(c.source_uri!)}>
+                      {copied === c.source_uri ? 'copied' : 'copy path'}
+                    </button>
+                  {/if}
+                {/if}
+                {#if c.location}<span class="loc">· {c.location}</span>{/if}
+              </div>
+              {#if c.snippet}<div class="snip">{c.snippet}</div>{/if}
+            </div>
+          {/each}
+        </div>
+      {/if}
+    {/if}
+
+    {#if hits.length}
+      <table>
+        <thead><tr><th>Kind</th><th>Source</th><th>Loc</th><th>Score</th><th>Snippet</th></tr></thead>
+        <tbody>
+          {#each hits as h}
+            <tr>
+              <td><span class="badge badge-blue">{h.kind}</span></td>
+              <td class="mono">{h.source_ref ?? h.doc_label}</td>
+              <td>{h.location ?? ''}</td>
+              <td>{h.score.toFixed(3)}</td>
+              <td>{h.snippet ?? ''}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    {/if}
+  </div>
+
   {#if loading}
     <LoadingSpinner />
   {:else if error}
@@ -265,9 +419,9 @@
     <div class="card empty">
       <div class="card-title">Atlas is empty for “{project}”</div>
       <p class="sub">
-        Point Atlas at a repository or docs folder above (server path or git URL),
-        or upload PDFs/markdown, then <strong>Build all</strong>. Status shows in the
-        toolbar; the graph populates when the job finishes.
+        No corpus for this project yet — point Atlas at a repo/docs folder
+        above and <strong>Build all</strong>. (Ask above still works; it will
+        say no sources found until a corpus is built.)
       </p>
     </div>
   {:else if ins}
@@ -275,82 +429,6 @@
       <div class="stat-card"><div class="label">Nodes</div><div class="value">{ins.nodes}</div></div>
       <div class="stat-card"><div class="label">Edges</div><div class="value">{ins.edges}</div></div>
       <div class="stat-card"><div class="label">Clusters</div><div class="value">{ins.clusters}</div></div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Ask</div>
-      <div class="qrow">
-        <input
-          placeholder="ask a question, or search the corpus…"
-          bind:value={q}
-          onkeydown={(e) => e.key === 'Enter' && runAnswer()}
-        />
-        <button class="btn btn--accent" onclick={runAnswer} disabled={asking || searching}>
-          {asking ? '…' : 'Ask'}
-        </button>
-        <button class="btn" onclick={runQuery} disabled={asking || searching}>
-          {searching ? '…' : 'Search'}
-        </button>
-      </div>
-
-      {#if ans}
-        {#if ans.note}
-          <div class="note"><span class="badge badge-amber">note</span> {ans.note}</div>
-        {/if}
-        {#if ans.answer}
-          <p class="ans">
-            {#each segments(ans.answer) as seg}
-              {#if seg.t === 'text'}{seg.v}{:else}<a class="cite" href={`#atlas-src-${seg.n}`}
-                  >[{seg.n}]</a
-                >{/if}
-            {/each}
-          </p>
-        {/if}
-        {#if ans.citations.length}
-          <div class="card-title">Sources</div>
-          <div class="srclist">
-            {#each ans.citations as c}
-              <div class="src" id={`atlas-src-${c.n}`}>
-                <div class="srchead">
-                  <span class="cite">[{c.n}]</span>
-                  <span class="badge badge-blue">{c.source_kind ?? 'doc'}</span>
-                  {#if isLink(c.source_uri)}
-                    <a class="ref" href={c.source_uri} target="_blank" rel="noreferrer"
-                      >{c.source_ref ?? c.doc_label}</a
-                    >
-                  {:else}
-                    <span class="ref mono">{c.source_ref ?? c.doc_label}</span>
-                    {#if c.source_uri}
-                      <button class="btn btn--small" onclick={() => copyPath(c.source_uri!)}>
-                        {copied === c.source_uri ? 'copied' : 'copy path'}
-                      </button>
-                    {/if}
-                  {/if}
-                  {#if c.location}<span class="loc">· {c.location}</span>{/if}
-                </div>
-                {#if c.snippet}<div class="snip">{c.snippet}</div>{/if}
-              </div>
-            {/each}
-          </div>
-        {/if}
-      {/if}
-
-      {#if hits.length}
-        <table>
-          <thead><tr><th>Kind</th><th>Source</th><th>Loc</th><th>Score</th><th>Snippet</th></tr></thead>
-          <tbody>
-            {#each hits as h}
-              <tr>
-                <td><span class="badge badge-blue">{h.kind}</span></td>
-                <td class="mono">{h.source_ref ?? h.doc_label}</td>
-                <td>{h.location ?? ''}</td>
-                <td>{h.score.toFixed(3)}</td>
-                <td>{h.snippet ?? ''}</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      {/if}
     </div>
 
     <div class="card">

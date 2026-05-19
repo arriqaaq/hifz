@@ -131,10 +131,7 @@ pub async fn extract_concepts(
     // a re-run can't leave orphans (they UPSERT back deterministically).
     let _ = store
         .db
-        .query(
-            "DELETE atlas_edge WHERE via IN ['llm','embedding'] AND in IN \
-             (SELECT VALUE id FROM atlas_node WHERE project=$p)",
-        )
+        .query("DELETE atlas_edge WHERE project=$p AND via IN ['llm','embedding']")
         .bind(("p", store.project.clone()))
         .await;
     let _ = store
@@ -162,11 +159,13 @@ pub async fn extract_concepts(
                     let _ = store
                         .db
                         .query(
-                            "RELATE $a->atlas_edge->$b SET relation='related', \
-                             via='embedding', score=$s, created_at=$now",
+                            "RELATE $a->atlas_edge->$b SET project=$p, \
+                             relation='related', via='embedding', score=$s, \
+                             created_at=$now",
                         )
                         .bind(("a", docs[i].id.clone()))
                         .bind(("b", docs[j].id.clone()))
+                        .bind(("p", store.project.clone()))
                         .bind(("s", sim as f64))
                         .bind(("now", now.clone()))
                         .await;
@@ -272,11 +271,13 @@ pub async fn extract_concepts(
                     let _ = store
                         .db
                         .query(
-                            "RELATE $d->atlas_edge->$c SET \
-                             relation='mentions', via='llm', score=1.0, created_at=$now",
+                            "RELATE $d->atlas_edge->$c SET project=$p, \
+                             relation='mentions', via='llm', score=1.0, \
+                             created_at=$now",
                         )
                         .bind(("d", doc.id.clone()))
                         .bind(("c", crid))
+                        .bind(("p", store.project.clone()))
                         .bind(("now", now.clone()))
                         .await;
                 }
@@ -297,11 +298,12 @@ pub async fn extract_concepts(
                     let _ = store
                         .db
                         .query(
-                            "RELATE $s->atlas_edge->$t SET \
+                            "RELATE $s->atlas_edge->$t SET project=$p, \
                              relation=$r, via='llm', score=0.8, created_at=$now",
                         )
                         .bind(("s", RecordId::new("atlas_node", sk)))
                         .bind(("t", RecordId::new("atlas_node", tk)))
+                        .bind(("p", store.project.clone()))
                         .bind(("r", rel))
                         .bind(("now", now.clone()))
                         .await;

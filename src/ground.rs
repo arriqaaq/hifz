@@ -223,7 +223,6 @@ pub async fn on_commit_observation(
     // Code dimension (M5+, G8): bump strength + last_committed_at for chunks
     // whose `path` matches the committed file set. This keeps cold-decay GC
     // from sweeping chunks that just got real-world reinforcement.
-    #[cfg(feature = "code")]
     {
         let now = chrono::Utc::now().to_rfc3339();
         let _ = db

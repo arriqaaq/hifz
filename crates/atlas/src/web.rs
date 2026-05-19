@@ -94,6 +94,7 @@ pub fn router(state: AtlasState) -> Router {
         .route("/graph", get(graph))
         .route("/query", get(query))
         .route("/answer", get(answer))
+        .route("/projects", get(projects))
         .with_state(state)
 }
 
@@ -434,6 +435,24 @@ async fn answer(State(s): State<AtlasState>, Query(q): Query<Q>) -> Json<Value> 
     }
 }
 
+/// List the distinct atlas projects (projects that have at least one
+/// atlas_node row). The Atlas UI dropdown unions this with hifz sessions
+/// so any project with an atlas corpus is selectable — including projects
+/// that have NO hifz session (the dst-landed-in-default bug fix).
+async fn projects(State(s): State<AtlasState>) -> Json<Value> {
+    let all: Vec<String> =
+        s.db.query("SELECT VALUE project FROM atlas_node")
+            .await
+            .and_then(|mut r| r.take::<Vec<String>>(0))
+            .unwrap_or_default();
+    let projs: Vec<String> = all
+        .into_iter()
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    Json(json!({ "projects": projs }))
+}
+
 /// Node+edge dump for the UI (Cytoscape-friendly).
 async fn graph(State(s): State<AtlasState>, Query(sc): Query<Scoped>) -> Json<Value> {
     let p = proj(sc.project);
@@ -446,7 +465,7 @@ async fn graph(State(s): State<AtlasState>, Query(sc): Query<Scoped>) -> Json<Va
     let edges =
         s.db.query(
             "SELECT in, out, relation, resolution, score FROM atlas_edge \
-             WHERE in IN (SELECT VALUE id FROM atlas_node WHERE project=$p) LIMIT 8000",
+             WHERE project=$p LIMIT 8000",
         )
         .bind(("p", p))
         .await

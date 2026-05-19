@@ -12,7 +12,14 @@ const config = {
 		}
 	},
 	kit: {
-		adapter: adapter({ fallback: 'index.html' }),
+		// Output dir is env-overridable so the build can be staged and
+		// atomically swapped into `build/` only on success — a failed
+		// `npm run build` must never delete the live UI the daemon serves.
+		adapter: adapter({
+			pages: process.env.SVELTE_OUT || 'build',
+			assets: process.env.SVELTE_OUT || 'build',
+			fallback: 'index.html'
+		}),
 		prerender: { entries: [] }
 	}
 };

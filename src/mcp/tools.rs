@@ -463,7 +463,6 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                 .await?
         }
 
-        #[cfg(feature = "code")]
         "hifz_code_index" => {
             state
                 .client
@@ -473,7 +472,6 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                 .await?
         }
 
-        #[cfg(feature = "code")]
         "hifz_code_search" => {
             state
                 .client
@@ -483,7 +481,6 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                 .await?
         }
 
-        #[cfg(feature = "code")]
         "hifz_link_code" => {
             state
                 .client
@@ -493,7 +490,6 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                 .await?
         }
 
-        #[cfg(feature = "code")]
         "hifz_link_symbol" => {
             state
                 .client
@@ -503,7 +499,6 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                 .await?
         }
 
-        #[cfg(feature = "code")]
         "hifz_code_gc" => {
             state
                 .client
@@ -795,16 +790,11 @@ fn tool_defs() -> Vec<serde_json::Value> {
                 "required": ["mode"]
             }
         }),
-        // Code dimension (M2+) — gated by `code` Cargo feature.
-        #[cfg(feature = "code")]
+        // Code dimension (M2+).
         serde_json::json!({"name": "hifz_code_index", "description": "Index a repo: chunk + embed source files for semantic code search (idempotent).", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "root": {"type": "string", "description": "Absolute path to repo root"}, "follow_symlinks": {"type": "boolean", "default": false}, "max_file_bytes": {"type": "integer", "default": 2097152}}, "required": ["project", "root"]}}),
-        #[cfg(feature = "code")]
         serde_json::json!({"name": "hifz_code_search", "description": "Hybrid (vector + BM25) search over indexed code chunks. Returns paths with line ranges and snippets.", "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}, "project": {"type": "string"}, "language": {"type": "string", "description": "Filter by language: rust|python|typescript|javascript|go|java|c|cpp"}, "path": {"type": "string", "description": "Substring filter against code_chunk.path"}, "limit": {"type": "integer", "default": 10}, "group_by_file": {"type": "boolean", "default": false}}, "required": ["query"]}}),
-        #[cfg(feature = "code")]
         serde_json::json!({"name": "hifz_link_code", "description": "Link a memory to a precise code location. Creates Memory --references--> CodeChunk edges for every chunk overlapping the line range.", "inputSchema": {"type": "object", "properties": {"memory_id": {"type": "string"}, "file": {"type": "string", "description": "Repo-relative POSIX path"}, "start_line": {"type": "integer", "minimum": 1}, "end_line": {"type": "integer", "minimum": 1, "description": "Defaults to start_line"}, "project": {"type": "string"}, "reason": {"type": "string"}}, "required": ["memory_id", "file", "start_line"]}}),
-        #[cfg(feature = "code")]
         serde_json::json!({"name": "hifz_link_symbol", "description": "Link a memory to a named code symbol (function/struct/class/...). Creates Memory --references_symbol--> CodeSymbol edge(s).", "inputSchema": {"type": "object", "properties": {"memory_id": {"type": "string"}, "name": {"type": "string", "description": "Symbol name (or qualified module::name)"}, "kind": {"type": "string", "description": "Optional kind filter: function|struct|enum|trait|method|class|interface|const|module|namespace|type|macro"}, "file": {"type": "string", "description": "Optional path to disambiguate"}, "project": {"type": "string"}, "reason": {"type": "string"}}, "required": ["memory_id", "name"]}}),
-        #[cfg(feature = "code")]
         serde_json::json!({"name": "hifz_code_gc", "description": "Reconcile code-index against the filesystem: drop chunks/symbols/edges for deleted files; optionally decay cold chunks. Run after large refactors or when stale entries linger.", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "root": {"type": "string"}, "dry_run": {"type": "boolean", "default": false}, "force_decay": {"type": "boolean", "default": false}}, "required": ["project", "root"]}}),
     ]
 }

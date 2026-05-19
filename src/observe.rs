@@ -84,6 +84,14 @@ pub async fn observe(
         tool_input_str.clone()
     } else if let Some(prompt) = payload.data.get("prompt").and_then(|v| v.as_str()) {
         prompt.to_string()
+    } else if payload.hook_type == "post_compact"
+        && let Some(summary) = payload.data.get("summary").and_then(|v| v.as_str())
+    {
+        // post_compact carries no tool_input/prompt — the meaningful body
+        // is `data.summary`. Fingerprint on that explicitly so two distinct
+        // compactions in a session can't be collapsed by a serializer
+        // quirk in the fall-through `payload.data.to_string()` path.
+        summary.to_string()
     } else {
         payload.data.to_string()
     };
@@ -379,10 +387,9 @@ pub async fn observe(
                 link_commit_to_open_memories(db, obs_id, &payload.project, &commit_msg).await;
             }
 
-            // Optional (code feature): obs --touches_code--> code_chunk for
+            // obs --touches_code--> code_chunk for
             // chunks at the commit's changed paths → decision→code→commit is
             // walkable. Capped; deterministic by path.
-            #[cfg(feature = "code")]
             if !compressed.files.is_empty() {
                 #[derive(Debug, SurrealValue)]
                 struct ChunkId {

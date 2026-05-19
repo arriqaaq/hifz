@@ -9,7 +9,6 @@ use axum::response::Json;
 use serde::Deserialize;
 use surrealdb::types::SurrealValue;
 
-#[cfg(feature = "code")]
 use crate::models::{CodeGcReq, CodeIndexReq, CodeLinkReq, CodeLinkSymReq, CodeSearchReq};
 use crate::models::{
     CommitsReq, ContextReq, CoreEditReq, ExportReq, HookPayload, MemoriesReq, ObservationsReq,
@@ -634,10 +633,9 @@ pub async fn usage_sessions(
 }
 
 // -----------------------------------------------------------------------
-// Code dimension (M2+) — gated by `code` Cargo feature.
+// Code dimension (M2+).
 // -----------------------------------------------------------------------
 
-#[cfg(feature = "code")]
 pub async fn code_index(
     State(state): State<AppState>,
     AppJson(body): AppJson<CodeIndexReq>,
@@ -645,7 +643,6 @@ pub async fn code_index(
     json_or_err(state.code_index(body).await)
 }
 
-#[cfg(feature = "code")]
 pub async fn code_search(
     State(state): State<AppState>,
     AppJson(body): AppJson<CodeSearchReq>,
@@ -653,7 +650,6 @@ pub async fn code_search(
     json_or_err(state.code_search(body).await)
 }
 
-#[cfg(feature = "code")]
 pub async fn code_link(
     State(state): State<AppState>,
     AppJson(body): AppJson<CodeLinkReq>,
@@ -661,7 +657,6 @@ pub async fn code_link(
     json_or_err(state.code_link(body).await)
 }
 
-#[cfg(feature = "code")]
 pub async fn code_link_symbol(
     State(state): State<AppState>,
     AppJson(body): AppJson<CodeLinkSymReq>,
@@ -669,7 +664,6 @@ pub async fn code_link_symbol(
     json_or_err(state.code_link_symbol(body).await)
 }
 
-#[cfg(feature = "code")]
 pub async fn code_gc(
     State(state): State<AppState>,
     AppJson(body): AppJson<CodeGcReq>,

@@ -13,7 +13,10 @@ backend:
 	cargo build
 
 frontend:
-	cd website && npm install && rm -rf .svelte-kit build && npm run build
+	cd website && npm install
+	cd website && rm -rf .svelte-kit _build_stage
+	cd website && SVELTE_OUT=_build_stage npm run build
+	cd website && rm -rf build.old && (mv build build.old 2>/dev/null || true) && mv _build_stage build && rm -rf build.old
 
 check:
 	cargo check
@@ -102,7 +105,9 @@ backfill-commits:
 # persistent path; `make dev` is foreground/testing only and conflicts
 # with the service on port $(PORT).
 
-install-service:
+# `frontend` first: the daemon serves website/build as the SPA, so a stale
+# or missing build means /atlas (and every deep route) 404s / serves old UI.
+install-service: frontend
 	@echo "==> Building release binary (with atlas)..."
 	cargo build --release --features atlas
 	@echo "==> Installing launchd LaunchAgent ($(LABEL))..."
@@ -114,7 +119,9 @@ uninstall-service:
 # Roll a rebuilt binary into the running daemon. ProgramArguments[0] is a
 # fixed path, so rebuilding in place + kickstart relaunches from the new
 # binary. kickstart hard-fails if the service is not loaded.
-restart-service:
+# `frontend` first for the same reason as install-service (the daemon serves
+# website/build; a stale build serves the old UI after restart).
+restart-service: frontend
 	cargo build --release --features atlas
 	@launchctl kickstart -k "gui/$$(id -u)/$(LABEL)" && echo "hifz service restarted"
 

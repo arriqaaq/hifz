@@ -440,10 +440,7 @@ pub async fn cluster(store: &Store) -> Result<ClusterReport> {
 
     let mut er = store
         .db
-        .query(
-            "SELECT in, out, score FROM atlas_edge WHERE \
-             in IN (SELECT VALUE id FROM atlas_node WHERE project=$p)",
-        )
+        .query("SELECT in, out, score FROM atlas_edge WHERE project=$p")
         .bind(("p", p.clone()))
         .await?;
     let edges: Vec<EdgeRow> = er.take(0).unwrap_or_default();
@@ -839,7 +836,7 @@ mod tests {
             ] {
                 store
                     .db
-                    .query("RELATE $a->atlas_edge->$b SET relation='related', via='t', score=$w, created_at='2026-01-01'")
+                    .query("RELATE $a->atlas_edge->$b SET project='demo', relation='related', via='t', score=$w, created_at='2026-01-01'")
                     .bind(("a", RecordId::new("atlas_node", x.to_string())))
                     .bind(("b", RecordId::new("atlas_node", y.to_string())))
                     .bind(("w", w))
@@ -924,7 +921,7 @@ mod tests {
     async fn rel(store: &Store, x: &str, y: &str, w: f64) {
         store
             .db
-            .query("RELATE $a->atlas_edge->$b SET relation='related', via='t', score=$w, created_at='2026-01-01'")
+            .query("RELATE $a->atlas_edge->$b SET project='demo', relation='related', via='t', score=$w, created_at='2026-01-01'")
             .bind(("a", RecordId::new("atlas_node", x.to_string())))
             .bind(("b", RecordId::new("atlas_node", y.to_string())))
             .bind(("w", w))

@@ -38,7 +38,7 @@
 
 <style>
   .mv {
-    border: 1px solid var(--border, #30363d);
+    border: 1px solid var(--line);
     border-radius: 8px;
     padding: 12px 14px;
   }
@@ -51,6 +51,6 @@
     font-size: 14px;
     margin-bottom: 8px;
     padding-bottom: 8px;
-    border-bottom: 1px solid var(--border, #30363d);
+    border-bottom: 1px solid var(--line);
   }
 </style>

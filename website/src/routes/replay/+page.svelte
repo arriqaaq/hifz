@@ -157,17 +157,17 @@
         {/each}
       </div>
       <footer>
-        <button onclick={restart} title="restart">⏮</button>
+        <button class="btn btn--small btn--accent" onclick={restart}>⏮ Restart</button>
         {#if playing}
-          <button onclick={pause}>⏸ pause</button>
+          <button class="btn btn--small btn--accent" onclick={pause}>⏸ Pause</button>
         {:else}
-          <button onclick={play}>▶ play</button>
+          <button class="btn btn--small btn--accent" onclick={play}>▶ Play</button>
         {/if}
-        <button onclick={step} title="step">⏭ step</button>
+        <button class="btn btn--small btn--accent" onclick={step}>⏭ Step</button>
         <span class="spc">
           speed
           {#each [1, 2, 4] as sp}
-            <button class:on={speed === sp} onclick={() => (speed = sp)}>{sp}×</button>
+            <button class="btn btn--small" class:btn--accent={speed === sp} onclick={() => (speed = sp)}>{sp}×</button>
           {/each}
         </span>
         <span class="bar"><span class="fill" style={`width:${events.length ? (shown / events.length) * 100 : 0}%`}></span></span>
@@ -185,7 +185,7 @@
     padding: 16px;
   }
   .list {
-    border-right: 1px solid var(--border, #30363d);
+    border-right: 1px solid var(--line);
     padding-right: 12px;
     overflow-y: auto;
   }
@@ -209,10 +209,10 @@
     color: inherit;
   }
   .sess:hover {
-    background: var(--surface-2, #161b22);
+    background: var(--surface-alt);
   }
   .sess.active {
-    border-color: var(--accent, #58a6ff);
+    border-color: var(--ink);
   }
   .sid {
     font-family: ui-monospace, monospace;
@@ -236,7 +236,7 @@
   .transcript {
     flex: 1;
     overflow-y: auto;
-    border: 1px solid var(--border, #30363d);
+    border: 1px solid var(--line);
     border-radius: 8px;
     padding: 12px;
   }
@@ -262,25 +262,13 @@
     opacity: 0.7;
   }
   .err {
-    color: #f85149;
+    color: var(--danger);
   }
   footer {
     display: flex;
     align-items: center;
     gap: 8px;
     margin-top: 10px;
-  }
-  footer button {
-    background: var(--surface-2, #161b22);
-    border: 1px solid var(--border, #30363d);
-    border-radius: 6px;
-    padding: 4px 8px;
-    cursor: pointer;
-    color: inherit;
-    font-size: 12px;
-  }
-  footer button.on {
-    border-color: var(--accent, #58a6ff);
   }
   .spc {
     display: flex;
@@ -292,14 +280,14 @@
   .bar {
     flex: 1;
     height: 4px;
-    background: var(--surface-2, #161b22);
+    background: var(--surface-alt);
     border-radius: 2px;
     overflow: hidden;
   }
   .fill {
     display: block;
     height: 100%;
-    background: var(--accent, #58a6ff);
+    background: var(--neon);
   }
   .empty {
     opacity: 0.6;

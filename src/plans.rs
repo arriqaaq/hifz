@@ -3,6 +3,7 @@
 
 use anyhow::Result;
 use surrealdb::Surreal;
+use surrealdb::types::{RecordId, SurrealValue};
 
 use crate::db::Db;
 use crate::models::{PlanActivateReq, PlansListReq};
@@ -60,6 +61,35 @@ pub async fn current(db: &Surreal<Db>, project: Option<&str>) -> Result<serde_js
         .and_then(|mut r| r.take(0).ok())
         .unwrap_or_default();
     Ok(plans.into_iter().next().unwrap_or(serde_json::Value::Null))
+}
+
+/// The active plan's typed `RecordId` for a project (deterministic, single
+/// row) — for wiring `plan --implemented_by--> commit`. Same selection as
+/// `current()` but returns the id, not the row.
+pub async fn current_id(db: &Surreal<Db>, project: Option<&str>) -> Option<RecordId> {
+    #[derive(Debug, SurrealValue)]
+    struct IdRow {
+        id: Option<RecordId>,
+    }
+    let project_str = project.unwrap_or("");
+    let mut conditions =
+        vec!["category = 'plan' AND is_latest = true AND tags CONTAINS 'active'".to_string()];
+    if !project_str.is_empty() {
+        conditions.push("project = $project".to_string());
+    }
+    let sql = format!(
+        "SELECT id FROM memory WHERE {} LIMIT 1",
+        conditions.join(" AND ")
+    );
+    let mut q = db.query(&sql);
+    if !project_str.is_empty() {
+        q = q.bind(("project", project_str.to_string()));
+    }
+    q.await
+        .ok()
+        .and_then(|mut r| r.take::<Vec<IdRow>>(0).ok())
+        .and_then(|v| v.into_iter().next())
+        .and_then(|r| r.id)
 }
 
 /// Mark a plan completed: replace the `active` tag with `completed`.

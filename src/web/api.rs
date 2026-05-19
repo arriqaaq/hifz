@@ -487,6 +487,23 @@ pub async fn timeline(
     json_or_err(state.timeline(req).await)
 }
 
+pub async fn timeline_causal(
+    State(state): State<AppState>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> ApiResult {
+    let seed = params.get("seed").map(|s| s.as_str());
+    let project = params.get("project").map(|s| s.as_str());
+    let max_hops = params
+        .get("max_hops")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(3);
+    let limit = params
+        .get("limit")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(20);
+    json_or_err(state.timeline_causal(seed, project, max_hops, limit).await)
+}
+
 pub async fn commits_list(
     State(state): State<AppState>,
     Query(params): Query<std::collections::HashMap<String, String>>,

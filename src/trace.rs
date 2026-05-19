@@ -37,7 +37,38 @@ pub async fn trace(
     relations: Option<Vec<String>>,
     max_hops: usize,
 ) -> Result<TraceResult> {
-    let rid = resolve_record_id(db, start_id).await?;
+    trace_multi(
+        db,
+        std::slice::from_ref(&start_id.to_string()),
+        direction,
+        relations,
+        max_hops,
+    )
+    .await
+}
+
+/// Multi-seed graph trace: convergence/divergence across several start nodes.
+/// `expand_graph` is already multi-seed; this just resolves N ids and assembles
+/// the node/edge view. Unresolvable ids are skipped (best-effort).
+pub async fn trace_multi(
+    db: &Surreal<Db>,
+    start_ids: &[String],
+    direction: &str,
+    relations: Option<Vec<String>>,
+    max_hops: usize,
+) -> Result<TraceResult> {
+    let mut seeds: Vec<RecordId> = Vec::new();
+    for s in start_ids {
+        if let Ok(rid) = resolve_record_id(db, s).await {
+            seeds.push(rid);
+        }
+    }
+    if seeds.is_empty() {
+        return Ok(TraceResult {
+            nodes: vec![],
+            edges: vec![],
+        });
+    }
 
     let dir = match direction {
         "forward" => Direction::Outgoing,
@@ -54,10 +85,12 @@ pub async fn trace(
         direction: dir,
     };
 
-    let edges = link::expand_graph(db, &[rid.clone()], &config).await?;
+    let edges = link::expand_graph(db, &seeds, &config).await?;
 
     let mut node_ids: HashSet<String> = HashSet::new();
-    node_ids.insert(rid_to_string(&rid));
+    for s in &seeds {
+        node_ids.insert(rid_to_string(s));
+    }
 
     let mut trace_edges = Vec::new();
     for e in &edges {
@@ -102,6 +135,90 @@ fn rid_to_string(rid: &RecordId) -> String {
         other => format!("{other:?}"),
     };
     format!("{}:{key}", rid.table)
+}
+
+/// Causal timeline: a provenance trace ordered in time. Walks only causal/
+/// provenance relations from the seed(s) (or, with no seed, the project's
+/// active plan + recent commits) and returns nodes sorted by `created_at`
+/// ascending — i.e. "plan → commits that implemented it → code", in order.
+pub async fn causal(
+    db: &Surreal<Db>,
+    seed: Option<&str>,
+    project: Option<&str>,
+    max_hops: usize,
+    limit: usize,
+) -> Result<TraceResult> {
+    let rels: Vec<String> = [
+        "implemented_by",
+        "commits_for",
+        "touches_code",
+        "generated_by",
+        "derived_from",
+        "supersedes",
+        "closes",
+        "informed_by",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+
+    let seeds: Vec<String> = if let Some(s) = seed {
+        vec![s.to_string()]
+    } else if let Some(p) = project {
+        #[derive(Debug, SurrealValue)]
+        struct IdRow {
+            id: Option<RecordId>,
+        }
+        let mut ids: Vec<String> = Vec::new();
+        // Active plan(s) for the project.
+        if let Ok(mut r) = db
+            .query(
+                "SELECT id FROM memory WHERE category = 'plan' AND is_latest = true \
+                 AND tags CONTAINS 'active' AND project = $p LIMIT 5",
+            )
+            .bind(("p", p.to_string()))
+            .await
+        {
+            for row in r.take::<Vec<IdRow>>(0).unwrap_or_default() {
+                if let Some(rid) = row.id {
+                    ids.push(rid_to_string(&rid));
+                }
+            }
+        }
+        // Recent commits in the project.
+        if let Ok(mut r) = db
+            .query(
+                "SELECT id FROM observation WHERE obs_type = 'commit_made' \
+                 AND session_id.project = $p ORDER BY timestamp DESC LIMIT $n",
+            )
+            .bind(("p", p.to_string()))
+            .bind(("n", limit as i64))
+            .await
+        {
+            for row in r.take::<Vec<IdRow>>(0).unwrap_or_default() {
+                if let Some(rid) = row.id {
+                    ids.push(rid_to_string(&rid));
+                }
+            }
+        }
+        ids
+    } else {
+        return Err(anyhow::anyhow!(
+            "causal timeline requires `seed` or `project`"
+        ));
+    };
+
+    let mut result = trace_multi(db, &seeds, "both", Some(rels), max_hops).await?;
+    // Time-order the chain (None timestamps last → unknown at the end).
+    result
+        .nodes
+        .sort_by(|a, b| match (&a.created_at, &b.created_at) {
+            (Some(x), Some(y)) => x.cmp(y),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => std::cmp::Ordering::Equal,
+        });
+    Ok(result)
 }
 
 async fn resolve_record_id(db: &Surreal<Db>, id_str: &str) -> Result<RecordId> {

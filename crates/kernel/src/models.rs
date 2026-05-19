@@ -335,7 +335,12 @@ pub struct CoreEditReq {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TraceReq {
+    #[serde(default)]
     pub id: String,
+    /// Multi-seed trace: convergence/divergence across several start nodes.
+    /// When non-empty, takes precedence over `id`.
+    #[serde(default)]
+    pub ids: Option<Vec<String>>,
     #[serde(default)]
     pub direction: Option<String>,
     #[serde(default)]

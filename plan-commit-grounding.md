@@ -49,3 +49,34 @@ same family as K1) → every commit's diff = "commit not found". Fix: traverse
 src/commits.rs, no schema/migration. Verified live: real HEAD ingest → diff
 renders (35KB); project-filtered list → 3 rows; fabricated sha → honest git
 error; health stable. Build clean, restarted.
+
+## Phase 1 (core layer) — DONE & VERIFIED (HEAD post-605f9fe, uncommitted)
+- plans::current_id added; observe.rs commit_made: deterministic
+  plan--implemented_by(via:declared)-->commit (gated !revert && authored_locally);
+  commits_for demoted via:inferred; cfg(code) commit--touches_code-->code_chunk.
+- trace.rs: trace_multi + causal(); TraceReq.ids; lib::timeline_causal + multi-seed
+  trace; GET /api/v1/agent/timeline/causal; hifz_timeline_causal + hifz_trace ids.
+- Builds clean (release default + --features code). restart-service ok.
+- Verified live: implemented_by edge count=1 via:declared with active plan;
+  none without; causal timeline ordered (plan@t -> commit@t); multi-seed count 2;
+  flat timeline + health unaffected. commits_for via:inferred = code-verified
+  (synthetic payload title:"c" starves the BM25 matcher; real .mjs title differs).
+## Next: Phase 2 — adapter plan-activation keystone.
+
+## Phases 2 & 3 — DONE & VERIFIED
+- P2 keystone: plan-capture.mjs now POSTs /memories THEN /agent/plans/activate
+  (was inert). session-start.mjs appends graph-assembled "Active decision —
+  provenance (time-ordered)" from /timeline/causal of the active plan.
+- P2 scope decision (anti-confirmation-bias): post-tool-failure.mjs left
+  unchanged — the flat similar-failure search there is correct; no clean causal
+  seed at failure time; the plan's "replace with trace" was speculative. Skipped
+  deliberately, documented (not silently).
+- Verified end-to-end: simulated Write→plan-capture → current_plan returns the
+  plan (activate fired); commit_made → plan--implemented_by(via:declared)-->commit
+  count=1; session-start emits the provenance block. Revert commit with active
+  plan → implemented_by count=0 (correctly demoted). atlas untouched (no atlas
+  files changed — deliberately separate). Health healthy, no regression.
+- Builds: Rust (P1) clean release default + --features code; daemon restarted.
+  P2 = .mjs only (no rebuild). Nothing committed (no commit requested).
+- NOTE: Cargo.toml/Makefile/benchmark/code_retrieval_bench.rs/docs were NOT
+  modified by this implementation (pre-existing/linter in the work area).

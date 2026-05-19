@@ -109,6 +109,7 @@ pub async fn serve(state: Hifz, port: u16) -> Result<()> {
             axum::routing::get(api::observations_search),
         )
         .route("/timeline", axum::routing::get(api::timeline))
+        .route("/timeline/causal", axum::routing::get(api::timeline_causal))
         .route("/runs", axum::routing::post(api::runs_search))
         .route("/runs/{id}", axum::routing::get(api::run_detail))
         .route("/commits", axum::routing::get(api::commits_list))

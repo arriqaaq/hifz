@@ -78,6 +78,37 @@ async function main() {
 					process.stdout.write(block);
 				}
 			}
+
+			// Graph-assembled provenance: the active decision and the
+			// commits that DECLARED-ly implemented it (deterministic
+			// `implemented_by`, not BM25). This is the Phase-1 causal layer
+			// surfaced to the next session. Best-effort; never blocks.
+			try {
+				const planRes = await fetch(
+					`${REST_URL}/api/v1/agent/plans/current?project=${encodeURIComponent(project)}`,
+					{ method: "GET", headers: HEADERS, signal: AbortSignal.timeout(3e3) },
+				);
+				const plan = planRes.ok ? await planRes.json() : null;
+				const planId =
+					plan && typeof plan === "object" && typeof plan.id === "string"
+						? plan.id
+						: null;
+				if (planId) {
+					const cRes = await fetch(
+						`${REST_URL}/api/v1/agent/timeline/causal?seed=${encodeURIComponent(planId)}&max_hops=3`,
+						{ method: "GET", headers: HEADERS, signal: AbortSignal.timeout(3e3) },
+					);
+					const c = cRes.ok ? await cRes.json() : null;
+					if (c && Array.isArray(c.nodes) && c.nodes.length > 1) {
+						const out = ["", "## Active decision — provenance (time-ordered)"];
+						for (const n of c.nodes.slice(0, 12)) {
+							const lbl = String(n.label || n.id || "").slice(0, 70);
+							out.push(`- [${n.table}] ${lbl}`);
+						}
+						process.stdout.write(out.join("\n") + "\n");
+					}
+				}
+			} catch {}
 		}
 	} catch {}
 }

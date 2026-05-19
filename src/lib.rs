@@ -953,13 +953,25 @@ impl Hifz {
             direction,
             ..Default::default()
         };
-        let (table, key) = if let Some(idx) = req.id.find(':') {
-            (req.id[..idx].to_string(), req.id[idx + 1..].to_string())
-        } else {
-            ("memory".to_string(), req.id.clone())
+        // Multi-seed when `ids` is provided (convergence/divergence);
+        // else single `id`. `expand_graph` is already multi-seed.
+        let id_list: Vec<String> = match &req.ids {
+            Some(v) if !v.is_empty() => v.clone(),
+            _ => vec![req.id.clone()],
         };
-        let start_rid = surrealdb::types::RecordId::new(table, key);
-        let edges = crate::link::expand_graph(&self.db, &[start_rid], &cfg).await?;
+        let seeds: Vec<surrealdb::types::RecordId> = id_list
+            .iter()
+            .filter(|s| !s.is_empty())
+            .map(|s| {
+                let (table, key) = if let Some(idx) = s.find(':') {
+                    (s[..idx].to_string(), s[idx + 1..].to_string())
+                } else {
+                    ("memory".to_string(), s.clone())
+                };
+                surrealdb::types::RecordId::new(table, key)
+            })
+            .collect();
+        let edges = crate::link::expand_graph(&self.db, &seeds, &cfg).await?;
         Ok(
             serde_json::json!({"edges": edges.iter().map(|e| serde_json::json!({
             "from": format!("{:?}", e.from),
@@ -994,6 +1006,18 @@ impl Hifz {
     }
     pub async fn timeline(&self, params: crate::models::TimelineReq) -> Result<serde_json::Value> {
         crate::timeline::list(&self.db, params).await
+    }
+    /// Causal timeline: time-ordered provenance chain from a seed (or the
+    /// project's active plan + recent commits) over causal relations only.
+    pub async fn timeline_causal(
+        &self,
+        seed: Option<&str>,
+        project: Option<&str>,
+        max_hops: usize,
+        limit: usize,
+    ) -> Result<serde_json::Value> {
+        let r = crate::trace::causal(&self.db, seed, project, max_hops, limit).await?;
+        Ok(serde_json::to_value(r).unwrap_or_default())
     }
     pub async fn commits_list(
         &self,

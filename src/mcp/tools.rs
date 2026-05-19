@@ -143,6 +143,26 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                 .await?
         }
 
+        "hifz_timeline_causal" => {
+            let mut qs = String::new();
+            if let Some(s) = args.get("seed").and_then(|v| v.as_str()) {
+                qs.push_str(&format!("seed={s}&"));
+            }
+            if let Some(p) = args.get("project").and_then(|v| v.as_str()) {
+                qs.push_str(&format!("project={p}&"));
+            }
+            let max_hops = args.get("max_hops").and_then(|v| v.as_u64()).unwrap_or(3);
+            let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(20);
+            state
+                .client
+                .get(format!(
+                    "{}/api/v1/agent/timeline/causal?{qs}max_hops={max_hops}&limit={limit}",
+                    state.base_url
+                ))
+                .send_decode()
+                .await?
+        }
+
         "hifz_export" => {
             state
                 .client
@@ -723,6 +743,7 @@ fn tool_defs() -> Vec<serde_json::Value> {
         serde_json::json!({"name": "hifz_sessions", "description": "List recent sessions", "inputSchema": {"type": "object", "properties": {"limit": {"type": "integer", "default": 20}}}}),
         serde_json::json!({"name": "hifz_digest", "description": "Get project intelligence — top keywords, files, and stats", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}}}}),
         serde_json::json!({"name": "hifz_timeline", "description": "Chronological observations", "inputSchema": {"type": "object", "properties": {"session_id": {"type": "string"}, "limit": {"type": "integer", "default": 50}}}}),
+        serde_json::json!({"name": "hifz_timeline_causal", "description": "Causal timeline: time-ordered provenance chain (plan -> implementing commits -> code) from a seed node, or the project's active plan + recent commits. Walks only causal/provenance edges, not flat events.", "inputSchema": {"type": "object", "properties": {"seed": {"type": "string", "description": "Seed node id (e.g. 'memory:abc'); omit to use the project's active plan + recent commits"}, "project": {"type": "string"}, "max_hops": {"type": "integer", "default": 3}, "limit": {"type": "integer", "default": 20}}}}),
         serde_json::json!({"name": "hifz_export", "description": "Export all memory data", "inputSchema": {"type": "object", "properties": {}}}),
         serde_json::json!({"name": "hifz_delete", "description": "Delete a memory by ID", "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]}}),
         serde_json::json!({"name": "hifz_core_get", "description": "Read the always-on core memory block for a project (identity, goals, invariants, watchlist)", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}}}}),
@@ -735,7 +756,7 @@ fn tool_defs() -> Vec<serde_json::Value> {
         serde_json::json!({"name": "hifz_plans", "description": "List plans for a project. Filter by status (active, completed, abandoned, all).", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "status": {"type": "string", "enum": ["active", "completed", "abandoned", "all"], "default": "all"}, "limit": {"type": "integer", "default": 10}}}}),
         serde_json::json!({"name": "hifz_complete_plan", "description": "Mark the current active plan as completed.", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}}}}),
         serde_json::json!({"name": "hifz_activate_plan", "description": "Activate a plan for this session. Adds plan title to core memory goals and files to watchlist. The plan will then be injected into context.", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "plan_id": {"type": "string", "description": "Optional. If omitted, activates the most recent active plan."}, "session_id": {"type": "string", "description": "Session ID for provenance tracking"}}}}),
-        serde_json::json!({"name": "hifz_trace", "description": "Trace the knowledge graph from a starting node. Returns nodes and edges showing provenance, similarity, and causal relationships.", "inputSchema": {"type": "object", "properties": {"id": {"type": "string", "description": "Starting node ID (e.g. 'memory:abc', 'run:xyz')"}, "direction": {"type": "string", "enum": ["forward", "backward", "both"], "default": "both"}, "relations": {"type": "array", "items": {"type": "string"}, "description": "Filter to specific relation types"}, "max_hops": {"type": "integer", "default": 2}}, "required": ["id"]}}),
+        serde_json::json!({"name": "hifz_trace", "description": "Trace the knowledge graph from a starting node. Returns nodes and edges showing provenance, similarity, and causal relationships.", "inputSchema": {"type": "object", "properties": {"id": {"type": "string", "description": "Starting node ID (e.g. 'memory:abc', 'run:xyz')"}, "ids": {"type": "array", "items": {"type": "string"}, "description": "Multiple seed node IDs for convergence/divergence trace; takes precedence over `id`"}, "direction": {"type": "string", "enum": ["forward", "backward", "both"], "default": "both"}, "relations": {"type": "array", "items": {"type": "string"}, "description": "Filter to specific relation types"}, "max_hops": {"type": "integer", "default": 2}}, "required": ["id"]}}),
         // Phase 9: typed graph + project surface tools.
         serde_json::json!({"name": "hifz_neighbors", "description": "Walk the typed graph from a memory. Use this to find related memories by specific relation kinds: conceptual (related/broader/narrower), argumentative (supports/contradicts/elaborates), lifecycle (closes/supersedes), or co-occurrence (co_occurs_*).", "inputSchema": {"type": "object", "properties": {"memory_id": {"type": "string", "description": "RecordId like 'memory:abc'"}, "relations": {"type": "array", "items": {"type": "string", "enum": ["co_occurs_files", "co_occurs_keywords", "co_occurs_embedding", "mentions", "generated_by", "informed_by", "derived_from", "attributed_to", "part_of", "follows", "broader", "narrower", "related", "same_as", "supports", "contradicts", "elaborates", "responds_to", "supersedes", "closes", "touches_file", "commits_for", "tests"]}, "description": "Filter to specific typed relations. Empty = all relations."}, "max_hops": {"type": "integer", "default": 1, "minimum": 1, "maximum": 4}}, "required": ["memory_id"]}}),
         serde_json::json!({"name": "hifz_backlinks", "description": "List incoming edges for a memory — every memory or observation that references it. Optional relation filter.", "inputSchema": {"type": "object", "properties": {"memory_id": {"type": "string"}, "relation": {"type": "string", "description": "Optional: limit to one typed relation"}}, "required": ["memory_id"]}}),

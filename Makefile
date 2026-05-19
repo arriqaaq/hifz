@@ -122,8 +122,9 @@ service-status:
 	@launchctl print "gui/$$(id -u)/$(LABEL)" 2>/dev/null | grep -E "state|pid|last exit" || echo "service not loaded — run 'make install-service'"
 	@curl -fsS --max-time 2 http://127.0.0.1:$(PORT)/api/v1/livez 2>/dev/null && echo " <- /livez OK" || echo "/livez FAILED"
 
-# Code-retrieval token-efficiency: atlas vs code-search vs grep on the whole
-# tree. Needs the non-default `atlas` feature. See docs/eval/code-retrieval.md.
+# Code-retrieval correctness diagnosis: does hifz code_search find the right
+# function, and when it doesn't, why (recoverable vs deep). Diagnose-only.
+# See docs/eval/code-retrieval.md.
 code-retrieval-bench:
-	cargo run --release --features atlas --bin code-retrieval-bench -- --root .
+	cargo run --release --bin code-retrieval-bench -- --root .
 

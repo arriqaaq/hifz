@@ -61,7 +61,7 @@ async function main() {
 	const project = data.cwd || process.cwd();
 
 	try {
-		await fetch(`${REST_URL}/api/v1/memories`, {
+		const resp = await fetch(`${REST_URL}/api/v1/memories`, {
 			method: "POST",
 			headers: HEADERS,
 			body: JSON.stringify({
@@ -77,7 +77,29 @@ async function main() {
 			}),
 			signal: AbortSignal.timeout(3000),
 		});
+		// KEYSTONE: actually activate the plan. The `tags:["active"]` above is
+		// just a label — `plans::current()` (which gates the deterministic
+		// `plan --implemented_by--> commit` edge) is only authoritative once
+		// /plans/activate runs (it deactivates any prior active plan for the
+		// project and marks this one). Without this the whole causal layer is
+		// inert (verified rot class: same as the never-called-activate gap).
+		const saved = await resp.json().catch(() => null);
+		const planId =
+			saved && typeof saved.id === "string" ? saved.id : null;
+		if (planId) {
+			await fetch(`${REST_URL}/api/v1/agent/plans/activate`, {
+				method: "POST",
+				headers: HEADERS,
+				body: JSON.stringify({ project, plan_id: planId }),
+				signal: AbortSignal.timeout(3000),
+			}).catch(() => {});
+		}
 	} catch {}
+	// NOTE: plan complete/abandon is intentionally NOT auto-detected here —
+	// a `.md` edit carries no reliable "done" signal; inventing a heuristic
+	// would mis-transition state. Lifecycle close stays an explicit action
+	// (hifz_complete_plan / a future ExitPlanMode signal). Documented, not
+	// silently skipped.
 }
 main();
 

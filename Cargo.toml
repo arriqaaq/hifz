@@ -139,7 +139,6 @@ path = "benchmark/parity_bench.rs"
 [[bin]]
 name = "code-retrieval-bench"
 path = "benchmark/code_retrieval_bench.rs"
-required-features = ["atlas"]
 
 # For local dev: uncomment to use local SurrealDB checkout instead of git
 # [patch.crates-io]

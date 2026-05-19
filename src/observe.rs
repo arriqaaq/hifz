@@ -353,6 +353,25 @@ pub async fn observe(
                     "commit not locally authored (pulled/merged); skipping commits_for linking"
                 );
             } else {
+                // PRIMARY (declared, deterministic): the project's active plan
+                // — if any — is implemented by this commit. Zero BM25;
+                // `plans::current_id` is a single-row invariant query. This is
+                // the keystone the causal layer is built on.
+                if let Some(plan_rid) = crate::plans::current_id(db, Some(&payload.project)).await {
+                    let _ = link::upsert_edge(
+                        db,
+                        &plan_rid,
+                        obs_id,
+                        "implemented_by",
+                        "declared",
+                        1.0,
+                        Some("active plan implemented by this commit"),
+                    )
+                    .await;
+                }
+                // FALLBACK (inferred): BM25 commit-message match to open
+                // bug/plan/decision. Kept for the no-active-plan / non-plan
+                // case, now `via:"inferred"` so consumers prefer `declared`.
                 let commit_msg = compressed
                     .narrative
                     .lines()
@@ -360,6 +379,40 @@ pub async fn observe(
                     .unwrap_or(&compressed.title)
                     .to_string();
                 link_commit_to_open_memories(db, obs_id, &payload.project, &commit_msg).await;
+            }
+
+            // Optional (code feature): obs --touches_code--> code_chunk for
+            // chunks at the commit's changed paths → decision→code→commit is
+            // walkable. Capped; deterministic by path.
+            #[cfg(feature = "code")]
+            if !compressed.files.is_empty() {
+                #[derive(Debug, SurrealValue)]
+                struct ChunkId {
+                    id: Option<RecordId>,
+                }
+                if let Ok(mut r) = db
+                    .query(
+                        "SELECT id FROM code_chunk \
+                         WHERE project = $p AND path IN $files LIMIT 50",
+                    )
+                    .bind(("p", payload.project.clone()))
+                    .bind(("files", compressed.files.clone()))
+                    .await
+                {
+                    let chunks: Vec<ChunkId> = r.take(0).unwrap_or_default();
+                    for c in chunks.into_iter().filter_map(|c| c.id) {
+                        let _ = link::upsert_edge(
+                            db,
+                            obs_id,
+                            &c,
+                            "touches_code",
+                            "declared",
+                            1.0,
+                            Some("commit changed this code chunk's file"),
+                        )
+                        .await;
+                    }
+                }
             }
         }
     }
@@ -459,7 +512,9 @@ async fn link_commit_to_open_memories(
             obs_id,
             &mid,
             "commits_for",
-            "system",
+            // `via:"inferred"` — fuzzy BM25 fallback, demoted below the
+            // deterministic `implemented_by` (`via:"declared"`).
+            "inferred",
             normalized,
             Some(&reason),
         )

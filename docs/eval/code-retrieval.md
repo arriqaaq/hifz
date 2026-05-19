@@ -1,133 +1,102 @@
-# Code-retrieval token efficiency — atlas vs code-search vs grep
+# code_search retrieval-correctness diagnosis (not token theater)
 
-A single-corpus efficacy benchmark: on a real tree, **how many tokens does an
-agent burn to answer "find/understand this function", and does the cheap path
-actually find the right code** — hifz retrieval vs. the grep-and-read an agent
-falls back to with no tool. Runnable: `make code-retrieval-bench` (or
-`cargo run --release --features atlas --bin code-retrieval-bench -- --root .`).
+**Question:** does hifz `search_code` actually find the right function, and when
+it doesn't, **why** — and is that fixable? If retrieval is wrong, the agent's
+whole reasoning is wrong; saving tokens on a wrong retrieval is *negative*
+value. So correctness is the headline; token cost is informational only.
 
-## Why this and not a hifz-vs-Fullerenes head-to-head
-
-A Burhan adversarial debate established that an unbiased apples-to-apples token
-head-to-head between hifz and Fullerenes (the TypeScript analogue of graphify)
-is a **category error**: hifz `search_code` returns count-bounded raw chunks
-while Fullerenes returns char-budgeted section-atomic maps — printing the two
-ratios side-by-side *is* the bias, because adjacency reads as comparability.
-That comparison is intentionally not run.
-
-This benchmark has no such flaw. Every arm answers the **same** docstring→code
-questions against the **same** oracle with the **same** `chars/4` estimator, and
-the anchor is the **grep baseline** — the universal fallback graphify and
-Fullerenes themselves benchmark against. That is exactly why the reduction
-ratio here is legitimately comparable to their published figures.
+Runnable: `make code-retrieval-bench` (or `cargo run --release --bin
+code-retrieval-bench -- --root .`). Diagnose-only — no retrieval/library code
+is changed; the localized fix is the documented next step.
 
 ## Method
 
-- **Corpus**: the chosen tree (default: the whole hifz repo, gitignore-filtered,
-  `target/` excluded). Hundreds of documented symbols across every crate.
-- **Oracle / ground truth**: docstring→code (CodeSearchNet style), copied
-  verbatim from `benchmark/corpus_code_bench.rs` (that file is left untouched —
-  this bench is *additive*). Every documented `code_symbol`'s first doc sentence
-  is a query whose oracle is that symbol.
-  - **raw** style: first sentence verbatim (shares identifiers with the body →
-    lexical-overlap bias).
-  - **paraphrase** style: identifier tokens deterministically stripped — the
-    controlled semantic test. **The gate lives here.**
-- **Arms** (same oracle, same estimator):
-  - **code_search** — `search_code` (vector + BM25 hybrid over chunk bodies);
-    this is the engine the `hifz_code_search` MCP tool wraps. Tokens = Σ snippet
-    tokens the agent would read.
-  - **atlas** — `atlas::query` over `project_code_graph`. **Honest caveat,
-    stated up front**: `query()` is BM25 on the symbol *name*; the embedding
-    atlas stores is **not used by the query path**. So atlas is *expected* to
-    score low recall at low tokens on natural-language docstrings. A low number
-    is a true measurement, not a defect — the bench measures, it does not
-    flatter. **atlas is reported, never gated as a winner.**
-  - **grep** — realistic grep, deliberately *generous to grep*: only
-    distinctive terms (len ≥ 4, dropping most stopwords), so fewer files match →
-    lower grep token cost → a harder, more conservative bar for hifz's claim.
-    Recall = is the oracle file in the matched set (grep finds the file or it
-    doesn't; no intra-file ranking). Tokens = Σ tokens of the matched files.
-  - **whole-corpus ceiling**: Σ tokens of every walked code file = the absolute
-    upper bound an agent could burn.
-- **Metrics** per (arm × style): Recall@1/5/10, MRR, avg tokens-to-answer,
-  `×reduction vs grep`, `×reduction vs whole-corpus`.
+- **Corpus**: the chosen tree (default: whole hifz repo, gitignore-filtered).
+- **Oracle**: docstring→code (CodeSearchNet style), copied verbatim from
+  `benchmark/corpus_code_bench.rs` (untouched; this bench is additive). The
+  **paraphrase** style (identifiers deterministically stripped) is the semantic
+  test the gate lives on; **raw** is a lexical-overlap-biased sanity row.
+- **Correctness metric**: per paraphrase probe, `search_code(limit=K=10)` →
+  - **file-hit@K**: any returned result from the oracle *file* (exact
+    repo-relative path; no basename fallback — paths are identical `f.rel`
+    form, the fallback only adds cross-crate collisions). This is the
+    grep-comparable "did the agent get the right file into context".
+  - **chunk-rank@K**: stricter — a returned chunk's line span overlaps the
+    symbol span. Reported alongside file-hit so neither flatters.
+- **grep**: token-cost baseline only (generous: distinctive len≥4 terms). Its
+  file-presence "recall" is a different granularity — reported, never gated.
 
-## Gate (honest single-tool efficacy — no manufactured winner)
+## Localization — every paraphrase probe → exactly one bucket
 
-- **SKIP** (exit 2): < 25 usable documented symbols, or 0 code symbols indexed,
-  or < 25 paraphrasable symbols. Distinct reason strings per cause.
-- Atlas ingest 0/failed → atlas rows print `SKIP`, excluded from the gate;
-  code_search/grep still gate.
-- **PASS** (exit 0) iff, on the **paraphrase** (semantic) style:
-  1. `code_search Recall@5 ≥ 0.50` (an absolute semantic-retrieval floor), **and**
-  2. `code_search avg_tok ≤ grep avg_tok` (the index is materially cheaper —
-     the actual value proposition).
-- **FAIL** (exit 1) otherwise, listing the offending numbers.
+- **HIT**: file-hit@K (correct retrieval).
+  - sub-count **T2 (chunk-granularity artifact)**: file-hit but chunk-rank
+    miss. A measurement control quantifying how much a chunk-oracle *understates*
+    correctness — reported separately, never used to discount a real miss,
+    excluded from `genuine_fail`.
+- **T3 (unindexed-symbol)**: the symbol has no indexed `code_chunk`
+  (`splitter.rs:74` `min_chars=250` non-first-chunk drop / indexing gap).
+  Genuine but infrastructural.
+- **T1a (recoverable)**: file-miss@K, but the oracle file *is* present in a
+  WIDE=200 fused pool **or** BM25-wide → a signal surfaces it; the
+  ≤`limit`-per-branch pool + `max(vec, bm25/4)` fusion + no rerank
+  (`src/code/search.rs:87-160`) buried it before top-K. **Fixable.**
+- **T1b (representation failure)**: file-miss@K and absent even from WIDE fused
+  *and* BM25-wide → neither signal surfaces it in 200 → embeddings / chunking /
+  index. **Deep.**
 
-> **Why there is no "code_search recall ≥ grep recall" condition (honest
-> trail).** The first version of this gate had exactly that third condition.
-> It FAILED on the first real run (`code_search` paraphrase R@5 0.667 vs grep
-> 0.997). On inspection the condition is *methodologically unsound*, not a hifz
-> signal: grep has no intra-result ranking, so its "recall" is mere
-> file-presence, whereas `code_search` recall is chunk-rank — different
-> granularities. And because every query is derived from its own symbol's
-> docstring, generous file-grep finds the file ≈always, making the condition
-> **unconditionally unsatisfiable regardless of how good hifz is**. A gate that
-> can never pass is broken, not evidence. It was removed — *not* flipped green —
-> and grep retained only in its legitimate role: the token-cost denominator
-> (exactly how graphify/Fullerenes use it). The apples-to-apples semantic lift
-> vs BM25-only already lives in `corpus-code-bench`.
+Headline: `genuine_fail = (T1a + T1b + T3) / N`, and
+`recoverable_share = T1a / (T1a + T1b + T3)`.
 
-`×reduction` uses `chars/4` (the graphify/Fullerenes estimator), stated
-explicitly. It is comparable to their published numbers **only** because the
-grep baseline is defined identically — not a cross-tool contest.
+## Gate (correctness only)
 
-## Results — whole hifz repo (`--root .`, limit 10)
+- **SKIP** (exit 2): <25 usable / <25 paraphrasable / 0 symbols indexed.
+- **PASS** (exit 0) iff paraphrase **file-hit recall ≥ 0.50** — the project's
+  own pre-registered floor (`benchmark/corpus_code_bench.rs:372`). Gate on
+  *correctness*, nothing else.
+- **FAIL** otherwise. Taxonomy, chunk-rank, tokens: **reported, not gated**.
 
-`index_repo`: 135 files, 1565 chunks, 1507 symbols · atlas projection: 1507
-symbols, 16676 edges · 442 usable documented probes (381 paraphrasable) ·
-whole-corpus ceiling ≈ 300k tokens. Artifact:
-`benchmark/data/code_retrieval_results.json`.
+## Tokens — informational only
+
+`code_search` avg tokens are reported **only on the HIT set** beside the grep
+file-cost baseline, in a clearly-labelled secondary section. They are **not the
+headline, not a ratio claim, not gated**, and explicitly null-value on the
+`genuine_fail` fraction (token savings on a wrong retrieval are negative value).
+Kept purely for information.
+
+## Results — whole hifz repo (`--root .`)
+
+_Filled by the run; artifact `benchmark/data/code_retrieval_results.json`._
 
 ```
-style       arm           R@1   R@5   R@10  MRR    avg_tok  x_grep  x_corpus   n
-raw         grep         1.000 1.000 1.000 1.000   243561    1.0     1.2     442
-raw         code_search  0.448 0.717 0.771 0.572     1938  125.7   154.9     442
-raw         atlas        0.000 0.000 0.000 0.000        0     —       —      442
-paraphrase  grep         0.997 0.997 0.997 0.997   234809    1.0     1.3     381
-paraphrase  code_search  0.425 0.659 0.696 0.531     1942  120.9   154.6     381
-paraphrase  atlas        0.000 0.000 0.000 0.000        0     —       —      381
-GATE: PASS
+PARAPHRASE (n=…)
+  genuine_fail = …%  (T1a_recoverable=… T1b_representation=… T3_unindexed=…)
+  HIT (file-hit@10) = … %   of which chunk-granularity artifact (T2) = … %
+  of genuine failures, …% are RECOVERABLE
+raw-doc sanity: file-hit@10=…  chunk-rank@10=…
+tokens (secondary): code_search avg(HIT)=…  grep avg=…  grep file-hit=…%
+GATE: PASS|FAIL|SKIP
 ```
 
-**Honest reading:**
-- **code_search**: on hard semantic (paraphrase) queries across the full
-  1565-chunk repo, it puts the right chunk in the top-5 **66%** of the time
-  (MRR 0.53) while reading **~1.9k tokens — ≈121× fewer than grep** (~235k) and
-  ~155× under the whole-corpus ceiling. The token-efficiency is the strong,
-  robust result; the 66% R@5 is a real, *stated* ceiling on retrieval quality
-  (not spun) — the apples-to-apples semantic check vs BM25-only is in
-  `corpus-code-bench`.
-- **grep**: ≈always finds the oracle *file* — but at essentially whole-corpus
-  token cost. That is the tradeoff an index exists to remove.
-- **atlas**: **0.000** across the board. `atlas::query` matches the query
-  against the symbol *name* (BM25); a full NL docstring sentence ≈never matches
-  a 1–2-word name, so atlas returns nothing **by construction**. A true
-  negative for atlas's text-query surface on docstring→code retrieval — kept
-  visible, not hidden; atlas is never gated.
+**Reading (filled after the run):** if **T1a ≫ T1b**, the dominant cause is the
+`limit`-bounded candidate pool + crude `max(vec,bm25/4)` fusion + no rerank in
+`search_code` — *recoverable* by retrieving N≫K per branch then RRF-fuse +
+rerank (mirroring what memory `search.rs` already does and `search_code` does
+not). If **T1b ≫ T1a**, the cause is representation (embeddings/chunking) — a
+deeper fix. The number decides; this doc is updated with the measured verdict,
+not a prejudged one.
 
-## Honest caveats
+## Honest notes
 
-- Atlas's weakness on NL docstrings is structural (BM25-on-name; embedding
-  unused by `query()`) — disclosed, not hidden; surfaced by the (recall, tokens)
-  pairing.
-- Grep "recall" is lexical; on the paraphrase style (identifiers stripped) grep
-  is expected to fall off — that gap is precisely what semantic retrieval exists
-  for, and gate condition (3) tests exactly it.
-- One project (hifz's own code): a strong *within-project* signal, not a
-  cross-project population claim. `--root <dir>` makes it repeatable elsewhere;
-  `--root crates/memdiff` is the fast smoke path.
+- Earlier honesty trail (kept): a prior gate condition `code_search recall ≥
+  grep recall` was removed — not flipped green — because grep's file-presence
+  recall is a different granularity than chunk-rank and (queries deriving from
+  their own docstring) is unconditionally ≈1.0, making it a broken,
+  unsatisfiable condition rather than a signal. grep is the token-cost
+  denominator only.
+- file-hit is the fair grep-comparable correctness metric but *looser* than
+  chunk-rank; both reported. The headline is the genuine (T1a+T1b+T3) failure
+  rate — not the friendlier number.
+- Single project (hifz); `--root` makes it repeatable. Diagnose-only: no
+  retrieval behavior changed here.
 
-See also: [graphify-parity.md](graphify-parity.md) — the qualitative capability
-matrix and the Fullerenes/graphify framing.
+See also: [graphify-parity.md](graphify-parity.md).

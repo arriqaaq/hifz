@@ -66,6 +66,15 @@ DEFINE FIELD IF NOT EXISTS kind       ON atlas_node TYPE string;
 DEFINE FIELD IF NOT EXISTS label      ON atlas_node TYPE string;
 DEFINE FIELD IF NOT EXISTS qualified  ON atlas_node TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS path       ON atlas_node TYPE option<string>;
+-- Source-agnostic provenance (forward-compatible: a future Slack/Jira/Notion
+-- connector fills the same trio with a URL instead of a file path — no
+-- migration, no downstream change). `source_kind` ∈ file|pdf|code|concept
+-- now (later slack|jira|notion|web); `source_uri` = the one openable locator
+-- (`file://…` now, `https://notion.so/…` later); `source_ref` = the human
+-- breadcrumb shown as the citation text. NONE default → no migration runner.
+DEFINE FIELD IF NOT EXISTS source_kind ON atlas_node TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS source_uri  ON atlas_node TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS source_ref  ON atlas_node TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS language   ON atlas_node TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS summary    ON atlas_node TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS embedding  ON atlas_node TYPE option<array<float>>;
@@ -79,6 +88,8 @@ DEFINE INDEX IF NOT EXISTS atlas_node_cluster ON TABLE atlas_node FIELDS project
 DEFINE ANALYZER IF NOT EXISTS atlas_analyzer TOKENIZERS blank, class FILTERS lowercase;
 DEFINE INDEX IF NOT EXISTS atlas_node_label_ft ON TABLE atlas_node
   FIELDS label FULLTEXT ANALYZER atlas_analyzer BM25 CONCURRENTLY;
+DEFINE INDEX IF NOT EXISTS atlas_node_summary_ft ON TABLE atlas_node
+  FIELDS summary FULLTEXT ANALYZER atlas_analyzer BM25 CONCURRENTLY;
 DEFINE INDEX IF NOT EXISTS atlas_node_vec ON TABLE atlas_node
   FIELDS embedding HNSW DIMENSION 384 DIST COSINE;
 
@@ -141,5 +152,39 @@ mod tests {
             .unwrap();
         let rows: Vec<C> = r.take(0).unwrap_or_default();
         assert_eq!(rows.into_iter().next().and_then(|x| x.c), Some(1));
+    }
+
+    #[tokio::test]
+    async fn provenance_trio_fields_are_writable_and_readable() {
+        let db = kernel::db::connect_mem().await.unwrap();
+        init_atlas_schema(&db, 384).await.unwrap();
+        db.query(
+            "CREATE atlas_node SET project='p', kind='document', label='msa.pdf', \
+             source_kind='pdf', source_uri='file:///abs/legal/msa.pdf', \
+             source_ref='legal/msa.pdf', created_at='2026-01-01'",
+        )
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+        #[derive(Debug, SurrealValue)]
+        struct Row {
+            source_kind: Option<String>,
+            source_uri: Option<String>,
+            source_ref: Option<String>,
+        }
+        let mut r = db
+            .query("SELECT source_kind, source_uri, source_ref FROM atlas_node")
+            .await
+            .unwrap();
+        let row = r
+            .take::<Vec<Row>>(0)
+            .unwrap()
+            .into_iter()
+            .next()
+            .expect("one node");
+        assert_eq!(row.source_kind.as_deref(), Some("pdf"));
+        assert_eq!(row.source_uri.as_deref(), Some("file:///abs/legal/msa.pdf"));
+        assert_eq!(row.source_ref.as_deref(), Some("legal/msa.pdf"));
     }
 }

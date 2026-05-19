@@ -140,6 +140,10 @@ path = "benchmark/parity_bench.rs"
 name = "code-retrieval-bench"
 path = "benchmark/code_retrieval_bench.rs"
 
+[[bin]]
+name = "chunk-ablation-bench"
+path = "benchmark/chunk_ablation_bench.rs"
+
 # For local dev: uncomment to use local SurrealDB checkout instead of git
 # [patch.crates-io]
 # surrealdb = { path = "/path/to/surrealdb/surrealdb" }

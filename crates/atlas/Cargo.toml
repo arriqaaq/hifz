@@ -22,9 +22,6 @@ hex = "0.4"
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", features = ["json"] }
 
-# Graph + clustering (E9)
-petgraph = "0.6"
-
 # PDF ingest (E6) — pure-Rust, no system deps
 pdf-extract = "0.7"
 

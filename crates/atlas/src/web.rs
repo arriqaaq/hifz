@@ -93,6 +93,7 @@ pub fn router(state: AtlasState) -> Router {
         .route("/insights", get(insights))
         .route("/graph", get(graph))
         .route("/query", get(query))
+        .route("/answer", get(answer))
         .with_state(state)
 }
 
@@ -401,8 +402,34 @@ async fn insights(State(s): State<AtlasState>, Query(sc): Query<Scoped>) -> Json
 }
 
 async fn query(State(s): State<AtlasState>, Query(q): Query<Q>) -> Json<Value> {
-    match crate::query::query(&store(&s, q.project.clone()), &q.q, q.limit.unwrap_or(20)).await {
+    match crate::query::query(
+        &store(&s, q.project.clone()),
+        &s.embedder,
+        &q.q,
+        q.limit.unwrap_or(20),
+    )
+    .await
+    {
         Ok(h) => Json(json!({ "hits": h })),
+        Err(e) => err(e),
+    }
+}
+
+/// Query-time RAG for the UI "Ask": retrieve → LLM answer + citations.
+/// `LlmBackend::from_env()` is read per-request; absent → degraded
+/// (ranked sources + note), never a 500.
+async fn answer(State(s): State<AtlasState>, Query(q): Query<Q>) -> Json<Value> {
+    let backend = crate::llm::LlmBackend::from_env();
+    match crate::answer::answer(
+        &store(&s, q.project.clone()),
+        &s.embedder,
+        backend.as_ref(),
+        &q.q,
+        q.limit.unwrap_or(20),
+    )
+    .await
+    {
+        Ok(a) => Json(json!(a)),
         Err(e) => err(e),
     }
 }

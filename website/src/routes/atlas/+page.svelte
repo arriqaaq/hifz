@@ -4,6 +4,7 @@
     getSessions,
     getAtlasInsights,
     atlasQuery,
+    atlasAnswer,
     atlasStatus,
     atlasBuildAll,
     atlasCode,
@@ -13,6 +14,7 @@
     atlasUpload,
     type AtlasInsights,
     type AtlasHit,
+    type AtlasAnswer,
     type AtlasStatus,
   } from '$lib/api';
   import LoadingSpinner from '$lib/components/common/LoadingSpinner.svelte';
@@ -27,6 +29,36 @@
   let q = $state('');
   let hits = $state<AtlasHit[]>([]);
   let searching = $state(false);
+  let ans = $state<AtlasAnswer | null>(null);
+  let asking = $state(false);
+  let copied = $state<string | null>(null);
+
+  // Split an answer into plain text + [n] citation refs so we can render
+  // the refs as anchors without {@html} (LLM output is untrusted).
+  type Seg = { t: 'text'; v: string } | { t: 'ref'; n: number };
+  function segments(a: string): Seg[] {
+    const out: Seg[] = [];
+    const re = /\[(\d+)\]/g;
+    let last = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(a))) {
+      if (m.index > last) out.push({ t: 'text', v: a.slice(last, m.index) });
+      out.push({ t: 'ref', n: Number(m[1]) });
+      last = m.index + m[0].length;
+    }
+    if (last < a.length) out.push({ t: 'text', v: a.slice(last) });
+    return out;
+  }
+  const isLink = (u?: string | null) => !!u && /^https?:\/\//.test(u);
+  async function copyPath(uri: string) {
+    try {
+      await navigator.clipboard.writeText(uri);
+      copied = uri;
+      setTimeout(() => (copied = copied === uri ? null : copied), 1500);
+    } catch {
+      /* clipboard may be blocked; non-fatal */
+    }
+  }
 
   // Build panel
   let source = $state<'path' | 'git' | 'upload'>('path');
@@ -144,6 +176,7 @@
   async function runQuery() {
     if (!q.trim()) return;
     searching = true;
+    ans = null;
     try {
       const r = await atlasQuery(project, q.trim());
       hits = r.hits ?? [];
@@ -151,6 +184,19 @@
       error = e instanceof Error ? e.message : String(e);
     } finally {
       searching = false;
+    }
+  }
+
+  async function runAnswer() {
+    if (!q.trim()) return;
+    asking = true;
+    hits = [];
+    try {
+      ans = await atlasAnswer(project, q.trim());
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    } finally {
+      asking = false;
     }
   }
 </script>
@@ -232,25 +278,73 @@
     </div>
 
     <div class="card">
-      <div class="card-title">Query</div>
+      <div class="card-title">Ask</div>
       <div class="qrow">
         <input
-          placeholder="search the corpus graph…"
+          placeholder="ask a question, or search the corpus…"
           bind:value={q}
-          onkeydown={(e) => e.key === 'Enter' && runQuery()}
+          onkeydown={(e) => e.key === 'Enter' && runAnswer()}
         />
-        <button class="btn btn--accent" onclick={runQuery} disabled={searching}>
+        <button class="btn btn--accent" onclick={runAnswer} disabled={asking || searching}>
+          {asking ? '…' : 'Ask'}
+        </button>
+        <button class="btn" onclick={runQuery} disabled={asking || searching}>
           {searching ? '…' : 'Search'}
         </button>
       </div>
+
+      {#if ans}
+        {#if ans.note}
+          <div class="note"><span class="badge badge-amber">note</span> {ans.note}</div>
+        {/if}
+        {#if ans.answer}
+          <p class="ans">
+            {#each segments(ans.answer) as seg}
+              {#if seg.t === 'text'}{seg.v}{:else}<a class="cite" href={`#atlas-src-${seg.n}`}
+                  >[{seg.n}]</a
+                >{/if}
+            {/each}
+          </p>
+        {/if}
+        {#if ans.citations.length}
+          <div class="card-title">Sources</div>
+          <div class="srclist">
+            {#each ans.citations as c}
+              <div class="src" id={`atlas-src-${c.n}`}>
+                <div class="srchead">
+                  <span class="cite">[{c.n}]</span>
+                  <span class="badge badge-blue">{c.source_kind ?? 'doc'}</span>
+                  {#if isLink(c.source_uri)}
+                    <a class="ref" href={c.source_uri} target="_blank" rel="noreferrer"
+                      >{c.source_ref ?? c.doc_label}</a
+                    >
+                  {:else}
+                    <span class="ref mono">{c.source_ref ?? c.doc_label}</span>
+                    {#if c.source_uri}
+                      <button class="btn btn--small" onclick={() => copyPath(c.source_uri!)}>
+                        {copied === c.source_uri ? 'copied' : 'copy path'}
+                      </button>
+                    {/if}
+                  {/if}
+                  {#if c.location}<span class="loc">· {c.location}</span>{/if}
+                </div>
+                {#if c.snippet}<div class="snip">{c.snippet}</div>{/if}
+              </div>
+            {/each}
+          </div>
+        {/if}
+      {/if}
+
       {#if hits.length}
         <table>
-          <thead><tr><th>Kind</th><th>Label</th><th>Snippet</th></tr></thead>
+          <thead><tr><th>Kind</th><th>Source</th><th>Loc</th><th>Score</th><th>Snippet</th></tr></thead>
           <tbody>
             {#each hits as h}
               <tr>
                 <td><span class="badge badge-blue">{h.kind}</span></td>
-                <td class="mono">{h.label}</td>
+                <td class="mono">{h.source_ref ?? h.doc_label}</td>
+                <td>{h.location ?? ''}</td>
+                <td>{h.score.toFixed(3)}</td>
                 <td>{h.snippet ?? ''}</td>
               </tr>
             {/each}
@@ -326,4 +420,13 @@
   .wide { width: 100%; margin: 6px 0; }
   .log { background: var(--bg-elev, #f2f1eb); padding: 10px; font-size: 12px; overflow-x: auto; white-space: pre-wrap; }
   .empty .sub { margin: 6px 0 0; }
+  .note { font-size: 13px; color: var(--ink-secondary); margin: 4px 0 10px; }
+  .ans { font-size: 14px; line-height: 1.6; color: var(--ink); margin: 6px 0 14px; white-space: pre-wrap; }
+  .cite { color: var(--c-session, #2563eb); text-decoration: none; font-weight: 600; }
+  .srclist { display: flex; flex-direction: column; gap: 10px; }
+  .src { border-left: 2px solid var(--surface-alt, #ecebe4); padding-left: 10px; }
+  .srchead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+  .ref { color: var(--ink); }
+  .loc { color: var(--ink-muted); font-size: 12px; }
+  .snip { color: var(--ink-secondary); font-size: 12px; margin-top: 3px; }
 </style>

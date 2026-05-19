@@ -54,7 +54,7 @@ fn atlas_tool_defs() -> Vec<serde_json::Value> {
         serde_json::json!({"name": "atlas_extract", "description": "LLM concept-graph extraction over ingested docs (no-LLM embedding fallback if no backend)", "inputSchema": {"type": "object", "properties": {}}}),
         serde_json::json!({"name": "atlas_cluster", "description": "Modularity clustering + >25% re-split over the atlas graph", "inputSchema": {"type": "object", "properties": {}}}),
         serde_json::json!({"name": "atlas_insights", "description": "Hub nodes / surprising cross-cluster links / isolated nodes (JSON)", "inputSchema": {"type": "object", "properties": {}}}),
-        serde_json::json!({"name": "atlas_query", "description": "Hybrid text query over the atlas corpus graph", "inputSchema": {"type": "object", "properties": {"q": {"type": "string"}}, "required": ["q"]}}),
+        serde_json::json!({"name": "atlas_query", "description": "Ranked hybrid retrieval (vector + BM25, RRF-fused) over the atlas corpus graph. Returns evidence hits sorted by relevance, each with full source provenance — doc_label, source_kind, source_uri (openable), source_ref, location, snippet, score. Use this to answer questions from ingested docs/code and CITE the source_ref/source_uri of each hit you rely on.", "inputSchema": {"type": "object", "properties": {"q": {"type": "string"}}, "required": ["q"]}}),
     ]
 }
 

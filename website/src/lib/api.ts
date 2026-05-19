@@ -475,8 +475,27 @@ export interface AtlasGraph {
 export interface AtlasHit {
   id: string;
   kind: string;
-  label: string;
-  snippet?: string;
+  doc_label: string;
+  source_kind?: string | null;
+  source_uri?: string | null;
+  source_ref?: string | null;
+  location?: string | null;
+  snippet?: string | null;
+  score: number;
+}
+export interface AtlasCitation {
+  n: number;
+  doc_label: string;
+  source_kind?: string | null;
+  source_uri?: string | null;
+  source_ref?: string | null;
+  location?: string | null;
+  snippet?: string | null;
+}
+export interface AtlasAnswer {
+  answer: string;
+  citations: AtlasCitation[];
+  note?: string | null;
 }
 
 export interface AtlasStatus {
@@ -501,6 +520,13 @@ export function atlasQuery(
   limit = 20,
 ): Promise<{ hits: AtlasHit[] }> {
   return get(`${ATLAS}/query?q=${encodeURIComponent(q)}&limit=${limit}&${pj(project)}`);
+}
+export function atlasAnswer(
+  project: string,
+  q: string,
+  limit = 8,
+): Promise<AtlasAnswer> {
+  return get(`${ATLAS}/answer?q=${encodeURIComponent(q)}&limit=${limit}&${pj(project)}`);
 }
 
 // Build endpoints are async: they return `{ started: true }` (or

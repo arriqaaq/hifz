@@ -2,13 +2,22 @@
 //!
 //! With an LLM backend: per chunk, ask for a strict-JSON `{nodes,edges}`
 //! concept graph (one repair retry, then skip — never crash, never
-//! fabricate). Concept nodes dedupe on a normalized-label deterministic id
-//! so re-runs UPSERT in place. Without a backend: a deterministic
-//! no-LLM fallback links semantically-similar document nodes
-//! (`related`, via `embedding`) — nothing is dropped, no LLM required.
+//! fabricate). Without a backend: a deterministic no-LLM fallback links
+//! semantically-similar document nodes (`related`, via `embedding`) —
+//! nothing is dropped, no LLM required.
+//!
+//! Idempotent: every run first wipes this project's prior concept layer
+//! (`via IN ['llm','embedding']` edges + `kind='concept'` nodes), then
+//! recreates it — concept nodes via normalized-label deterministic id,
+//! edges deduped within the run by (doc,concept) / (src,tgt,relation).
+//! `RELATE` is an *insert* (not an upsert), so the wipe is what actually
+//! guarantees re-runs don't accumulate duplicate edges.
+
+use std::collections::HashSet;
 
 use anyhow::Result;
 use kernel::embed::Embedder;
+use kernel::ids::rid_to_string;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use surrealdb::types::{RecordId, SurrealValue};
@@ -66,9 +75,6 @@ fn concept_key(project: &str, label: &str) -> String {
     h.update(norm_label(label).as_bytes());
     hex::encode(&h.finalize()[..16])
 }
-fn concept_rid(project: &str, label: &str) -> RecordId {
-    RecordId::new("atlas_node", concept_key(project, label))
-}
 
 fn cosine(a: &[f32], b: &[f32]) -> f32 {
     if a.len() != b.len() || a.is_empty() {
@@ -115,6 +121,28 @@ pub async fn extract_concepts(
     let mut report = ExtractReport::default();
     let now = chrono::Utc::now().to_rfc3339();
 
+    // Idempotency (fix for the non-idempotent `RELATE`): wipe this project's
+    // prior concept layer before recreating, exactly as code.rs:53-66 does for
+    // the code layer. SurrealDB `RELATE` always *inserts* a new edge (it is
+    // not an upsert), so without this every re-run duplicated every concept
+    // edge — inflating `score`/weighted-degree and skewing cluster.rs +
+    // analyze.rs. `via IN ['llm','embedding']` covers both the LLM concept
+    // edges and the no-LLM `related` fallback; concept *nodes* are deleted so
+    // a re-run can't leave orphans (they UPSERT back deterministically).
+    let _ = store
+        .db
+        .query(
+            "DELETE atlas_edge WHERE via IN ['llm','embedding'] AND in IN \
+             (SELECT VALUE id FROM atlas_node WHERE project=$p)",
+        )
+        .bind(("p", store.project.clone()))
+        .await;
+    let _ = store
+        .db
+        .query("DELETE atlas_node WHERE project=$p AND kind='concept'")
+        .bind(("p", store.project.clone()))
+        .await;
+
     let mut dr = store
         .db
         .query("SELECT id, embedding FROM atlas_node WHERE project=$p AND kind='document'")
@@ -150,7 +178,16 @@ pub async fn extract_concepts(
     };
 
     // -- LLM concept extraction -----------------------------------------
+    // Within-run dedupe (the second half of the B1 fix): a concept the LLM
+    // names in multiple chunks/docs must be counted/UPSERTed once, a
+    // (doc,concept) `mentions` edge created once, a (src,tgt,rel)
+    // concept→concept edge created once — otherwise a doc whose N chunks each
+    // mention "JWT" produced N identical edges in a single pass.
+    let mut seen_concept: HashSet<String> = HashSet::new();
+    let mut seen_mention: HashSet<(String, String)> = HashSet::new();
+    let mut seen_cc: HashSet<(String, String, String)> = HashSet::new();
     for doc in &docs {
+        let doc_key = rid_to_string(&doc.id);
         let mut cr = store
             .db
             .query(
@@ -211,59 +248,65 @@ pub async fn extract_concepts(
                 }
                 let ckey = concept_key(&store.project, label);
                 let crid = RecordId::new("atlas_node", ckey.clone());
-                let emb = embedder.embed_single(label).ok();
-                let created = store
-                    .db
-                    .query(
-                        "UPSERT type::record($id) SET project=$p, kind='concept', \
-                         label=$l, embedding=$e, cluster=-1, created_at=$now",
-                    )
-                    .bind(("id", format!("atlas_node:{ckey}")))
-                    .bind(("p", store.project.clone()))
-                    .bind(("l", label.trim().to_string()))
-                    .bind(("e", emb))
-                    .bind(("now", now.clone()))
-                    .await
-                    .and_then(|r| r.check());
-                if created.is_ok() {
-                    report.concepts += 1;
+                if seen_concept.insert(ckey.clone()) {
+                    let emb = embedder.embed_single(label).ok();
+                    let created = store
+                        .db
+                        .query(
+                            "UPSERT type::record($id) SET project=$p, kind='concept', \
+                             label=$l, embedding=$e, cluster=-1, created_at=$now",
+                        )
+                        .bind(("id", format!("atlas_node:{ckey}")))
+                        .bind(("p", store.project.clone()))
+                        .bind(("l", label.trim().to_string()))
+                        .bind(("e", emb))
+                        .bind(("now", now.clone()))
+                        .await
+                        .and_then(|r| r.check());
+                    if created.is_ok() {
+                        report.concepts += 1;
+                    }
                 }
-                // document --mentions--> concept
-                let _ = store
-                    .db
-                    .query(
-                        "RELATE $d->atlas_edge->$c SET \
-                         relation='mentions', via='llm', score=1.0, created_at=$now",
-                    )
-                    .bind(("d", doc.id.clone()))
-                    .bind(("c", crid))
-                    .bind(("now", now.clone()))
-                    .await;
+                // document --mentions--> concept (once per (doc,concept))
+                if seen_mention.insert((doc_key.clone(), ckey.clone())) {
+                    let _ = store
+                        .db
+                        .query(
+                            "RELATE $d->atlas_edge->$c SET \
+                             relation='mentions', via='llm', score=1.0, created_at=$now",
+                        )
+                        .bind(("d", doc.id.clone()))
+                        .bind(("c", crid))
+                        .bind(("now", now.clone()))
+                        .await;
+                }
             }
-            // concept --relation--> concept
+            // concept --relation--> concept (once per (src,tgt,relation))
             for e in &out.edges {
                 if e.source.trim().is_empty() || e.target.trim().is_empty() {
                     continue;
                 }
-                let s = concept_rid(&store.project, &e.source);
-                let t = concept_rid(&store.project, &e.target);
+                let sk = concept_key(&store.project, &e.source);
+                let tk = concept_key(&store.project, &e.target);
                 let rel = if e.relation.trim().is_empty() {
                     "related".to_string()
                 } else {
                     e.relation.trim().to_string()
                 };
-                let _ = store
-                    .db
-                    .query(
-                        "RELATE $s->atlas_edge->$t SET \
-                         relation=$r, via='llm', score=0.8, created_at=$now",
-                    )
-                    .bind(("s", s))
-                    .bind(("t", t))
-                    .bind(("r", rel))
-                    .bind(("now", now.clone()))
-                    .await;
-                report.edges += 1;
+                if seen_cc.insert((sk.clone(), tk.clone(), rel.clone())) {
+                    let _ = store
+                        .db
+                        .query(
+                            "RELATE $s->atlas_edge->$t SET \
+                             relation=$r, via='llm', score=0.8, created_at=$now",
+                        )
+                        .bind(("s", RecordId::new("atlas_node", sk)))
+                        .bind(("t", RecordId::new("atlas_node", tk)))
+                        .bind(("r", rel))
+                        .bind(("now", now.clone()))
+                        .await;
+                    report.edges += 1;
+                }
             }
         }
     }
@@ -346,16 +389,31 @@ mod tests {
             "SELECT count() AS c FROM atlas_edge WHERE relation='mentions' GROUP ALL",
         )
         .await;
-        assert!(mentions >= 2, "document mentions both concepts");
+        assert_eq!(mentions, 2, "document mentions both concepts, once each");
+        let all_edges = cnt(
+            store.db.clone(),
+            "SELECT count() AS c FROM atlas_edge GROUP ALL",
+        )
+        .await;
+        assert_eq!(all_edges, 3, "2 mentions + 1 concept→concept, no dup");
 
-        // Idempotent re-run (deterministic concept ids).
-        extract_concepts(&store, &emb, Some(&stub)).await.unwrap();
+        // B1 regression guard: re-running extract must NOT accumulate edges.
+        // (`RELATE` is an insert; the per-run wipe is what makes this hold.)
+        for _ in 0..3 {
+            extract_concepts(&store, &emb, Some(&stub)).await.unwrap();
+        }
         let concepts2 = cnt(
             store.db.clone(),
             "SELECT count() AS c FROM atlas_node WHERE kind='concept' GROUP ALL",
         )
         .await;
-        assert_eq!(concepts2, 2, "no concept duplication on re-run");
+        assert_eq!(concepts2, 2, "no concept duplication after 3 more runs");
+        let edges2 = cnt(
+            store.db.clone(),
+            "SELECT count() AS c FROM atlas_edge GROUP ALL",
+        )
+        .await;
+        assert_eq!(edges2, 3, "edge count STABLE across re-runs (B1 fixed)");
     }
 
     #[tokio::test]

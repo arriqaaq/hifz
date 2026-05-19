@@ -3,9 +3,12 @@ pub mod error;
 
 use anyhow::Result;
 use axum::Router;
+use axum::http::StatusCode;
+use axum::response::{Html, IntoResponse};
+use axum::routing::get;
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
-use tower_http::services::{ServeDir, ServeFile};
+use tower_http::services::ServeDir;
 
 use crate::Hifz;
 

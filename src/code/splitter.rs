@@ -3,7 +3,15 @@
 //! Wraps `text_splitter::CodeSplitter` for languages with a registered
 //! tree-sitter grammar; falls back to `crate::chunk::split` for `Plain`.
 //!
-//! Defaults mirror cocoindex-code: target ~1000 chars, overlap 150, min 250.
+//! Target ~1000 chars, overlap 150 (inherited from cocoindex-code). The
+//! sub-min-size chunk **drop was removed** (the `min_chars` knob is gone): a
+//! faithfulness-gated 6-cell ablation on the hifz corpus showed it
+//! *consistently lost* retrieval (−2.7…−3.6pp chunk-hit@10 across all
+//! overlaps, corroborated by strict-span coverage loss) for only ~4% byte
+//! saving. Overlap is left at 150 pending a decision — the same ablation
+//! found it has no measured retrieval effect (0/150/300 flat) but it improves
+//! whole-symbol coverage, which the retrieval metric cannot score; changing
+//! it awaits a consuming-agent metric. Evidence: docs/eval/code-retrieval.md.
 //! The byte-offset → 1-indexed line mapping is computed once per file and
 //! reused for every chunk via binary search on a `line_starts` vector.
 
@@ -14,7 +22,6 @@ use crate::code::lang::Language;
 
 const DEFAULT_TARGET_CHARS: usize = 1000;
 const DEFAULT_OVERLAP_CHARS: usize = 150;
-const DEFAULT_MIN_CHARS: usize = 250;
 
 #[derive(Debug, Clone)]
 pub struct RawChunk {
@@ -31,7 +38,6 @@ pub struct RawChunk {
 pub struct CodeSplitter {
     target_chars: usize,
     overlap_chars: usize,
-    min_chars: usize,
 }
 
 impl Default for CodeSplitter {
@@ -39,17 +45,15 @@ impl Default for CodeSplitter {
         Self {
             target_chars: DEFAULT_TARGET_CHARS,
             overlap_chars: DEFAULT_OVERLAP_CHARS,
-            min_chars: DEFAULT_MIN_CHARS,
         }
     }
 }
 
 impl CodeSplitter {
-    pub fn new(target_chars: usize, overlap_chars: usize, min_chars: usize) -> Self {
+    pub fn new(target_chars: usize, overlap_chars: usize) -> Self {
         Self {
             target_chars,
             overlap_chars,
-            min_chars,
         }
     }
 
@@ -71,9 +75,6 @@ impl CodeSplitter {
             let splitter = TsCodeSplitter::new(ts_lang, cfg)?;
             for (start, chunk) in splitter.chunk_indices(source) {
                 let end = start + chunk.len();
-                if chunk.len() < self.min_chars && !out.is_empty() {
-                    continue;
-                }
                 let start_line = byte_to_line(start, &line_starts);
                 let end_line = byte_to_line(end.saturating_sub(1).max(start), &line_starts);
                 out.push(RawChunk {
@@ -176,7 +177,7 @@ mod tests {
 
     #[test]
     fn line_numbers_are_one_indexed() {
-        let s = CodeSplitter::new(80, 20, 30); // small chunks to force splits
+        let s = CodeSplitter::new(80, 20); // small chunks to force splits
         let mut src = String::new();
         for i in 0..20 {
             src.push_str(&format!("fn f{i}() {{ let x = {i}; }}\n"));

@@ -97,7 +97,7 @@ async fn main() -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&r)?);
         }
         Cmd::Query { text, limit } => {
-            let r = atlas::query::query(&store, &text, limit).await?;
+            let r = atlas::query::query(&store, &embedder, &text, limit).await?;
             println!("{}", serde_json::to_string_pretty(&r)?);
         }
         Cmd::Serve { port } => {

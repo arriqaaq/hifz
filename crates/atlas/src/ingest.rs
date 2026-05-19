@@ -119,11 +119,20 @@ pub async fn ingest_path(store: &Store, embedder: &Embedder, root: &Path) -> Res
         // Node embedding = label + summary (captures topic for clustering).
         let node_emb = embedder.embed_single(&format!("{label}\n{summary}")).ok();
 
+        // Source-agnostic provenance trio. `source_uri` is the one openable
+        // locator (a `file://` URI now; a connector later writes an https URL
+        // into this same field). Canonicalize so it's an absolute, symlink-
+        // resolved path; fall back to the walked path if that fails.
+        let source_kind = if ext == "pdf" { "pdf" } else { "file" };
+        let abs = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
+        let source_uri = format!("file://{}", abs.to_string_lossy());
+
         store
             .db
             .query(
                 "UPSERT type::record($id) SET project=$p, kind='document', \
                  label=$label, path=$rel, summary=$summary, embedding=$emb, \
+                 source_kind=$skind, source_uri=$suri, source_ref=$rel, \
                  cluster=-1, created_at=$now",
             )
             .bind(("id", nid.clone()))
@@ -132,6 +141,8 @@ pub async fn ingest_path(store: &Store, embedder: &Embedder, root: &Path) -> Res
             .bind(("rel", rel.clone()))
             .bind(("summary", summary))
             .bind(("emb", node_emb))
+            .bind(("skind", source_kind.to_string()))
+            .bind(("suri", source_uri))
             .bind(("now", now.clone()))
             .await?
             .check()?;
@@ -213,6 +224,33 @@ mod tests {
             rows.into_iter().next().and_then(|x| x.c),
             Some(2),
             "no node duplication on re-ingest"
+        );
+
+        // Provenance trio is populated and openable.
+        #[derive(Debug, SurrealValue)]
+        struct P {
+            source_kind: Option<String>,
+            source_uri: Option<String>,
+            source_ref: Option<String>,
+        }
+        let mut pr = store
+            .db
+            .query("SELECT source_kind, source_uri, source_ref FROM atlas_node WHERE label='notes.txt'")
+            .await
+            .unwrap();
+        let p = pr
+            .take::<Vec<P>>(0)
+            .unwrap()
+            .into_iter()
+            .next()
+            .expect("notes.txt node");
+        assert_eq!(p.source_kind.as_deref(), Some("file"), "txt → file kind");
+        assert_eq!(p.source_ref.as_deref(), Some("notes.txt"), "rel ref");
+        let uri = p.source_uri.expect("source_uri set");
+        assert!(uri.starts_with("file://"), "openable file:// uri: {uri}");
+        assert!(
+            uri.ends_with("notes.txt"),
+            "absolute path to the file: {uri}"
         );
     }
 }

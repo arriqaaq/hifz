@@ -320,8 +320,10 @@ async fn main() -> Result<()> {
         // gate's baseline loop is coupled to commit_files/export).
         let mut bfirst: Vec<Option<usize>> = Vec::new();
         let mut br10 = Vec::new();
-        let mut cfg = SearchConfig::default();
-        cfg.skip_vector = true;
+        let cfg = SearchConfig {
+            skip_vector: true,
+            ..Default::default()
+        };
         for r in &sruns {
             let oracle: Vec<&MemRec> = smems
                 .iter()
@@ -451,7 +453,7 @@ async fn main() -> Result<()> {
         } else {
             Verdict::Fail(reasons)
         };
-        return std::process::exit(v.emit());
+        std::process::exit(v.emit());
     }
 
     let Export {
@@ -462,7 +464,7 @@ async fn main() -> Result<()> {
     } = match load_export(export_json.as_deref(), &base).await {
         Ok(e) => e,
         Err(e) => {
-            return std::process::exit(Verdict::Skip(format!("corpus unavailable: {e}")).emit());
+            std::process::exit(Verdict::Skip(format!("corpus unavailable: {e}")).emit());
         }
     };
 
@@ -545,6 +547,7 @@ async fn main() -> Result<()> {
     // Evaluate one signal arm end-to-end. `file_set` extracts the run's
     // ground-truth file set; results are seeded into a fresh per-run in-mem DB
     // (no `run` rows → no `# Recent task outcomes` leak).
+    #[allow(clippy::too_many_arguments)] // benchmark harness helper; cohesive arg set
     async fn eval_arm<F>(
         runrecs: &[RunRec],
         mems: &[MemRec],
@@ -817,7 +820,7 @@ async fn main() -> Result<()> {
                 commit_m.n_runs, commit_m.n_pairs
             )
         };
-        return std::process::exit(Verdict::Skip(why).emit());
+        std::process::exit(Verdict::Skip(why).emit());
     }
 
     // Commit-grounded gate: beat BM25-only on the user's own data + floors.
@@ -825,8 +828,10 @@ async fn main() -> Result<()> {
     // keep the bench bounded we recompute MRR/R@10 on the gate signal only.)
     let mut bm25_first: Vec<Option<usize>> = Vec::new();
     let mut bm25_r10 = Vec::new();
-    let mut cfg = SearchConfig::default();
-    cfg.skip_vector = true;
+    let cfg = SearchConfig {
+        skip_vector: true,
+        ..Default::default()
+    };
     for r in commit_runs.iter().filter(|r| r.project == target) {
         let fset = r.obs_ids.clone(); // shipped files (commit-derived)
         if fset.is_empty() {

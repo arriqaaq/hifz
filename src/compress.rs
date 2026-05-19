@@ -222,28 +222,28 @@ fn build_title(tool_name: &str, data: &serde_json::Value) -> String {
 
 fn extract_facts(data: &serde_json::Value) -> Vec<String> {
     let mut facts = Vec::new();
-    if let Some(input) = data.get("tool_input").or_else(|| data.get("toolInput")) {
-        if let Some(obj) = input.as_object() {
-            for (key, val) in obj {
-                let val_str = match val {
-                    serde_json::Value::String(s) => {
-                        if s.len() > 200 {
-                            format!("{}...", crate::truncate_at_char_boundary(s, 200))
-                        } else {
-                            s.clone()
-                        }
+    if let Some(input) = data.get("tool_input").or_else(|| data.get("toolInput"))
+        && let Some(obj) = input.as_object()
+    {
+        for (key, val) in obj {
+            let val_str = match val {
+                serde_json::Value::String(s) => {
+                    if s.len() > 200 {
+                        format!("{}...", crate::truncate_at_char_boundary(s, 200))
+                    } else {
+                        s.clone()
                     }
-                    _ => {
-                        let s = val.to_string();
-                        if s.len() > 200 {
-                            format!("{}...", crate::truncate_at_char_boundary(&s, 200))
-                        } else {
-                            s
-                        }
+                }
+                _ => {
+                    let s = val.to_string();
+                    if s.len() > 200 {
+                        format!("{}...", crate::truncate_at_char_boundary(&s, 200))
+                    } else {
+                        s
                     }
-                };
-                facts.push(format!("{key}: {val_str}"));
-            }
+                }
+            };
+            facts.push(format!("{key}: {val_str}"));
         }
     }
 
@@ -253,21 +253,19 @@ fn extract_facts(data: &serde_json::Value) -> Vec<String> {
         .or_else(|| data.get("toolName"))
         .and_then(|v| v.as_str())
         .unwrap_or("");
-    if tool_name == "Bash" || tool_name == "Shell" {
-        if let Some(output) = data
+    if (tool_name == "Bash" || tool_name == "Shell")
+        && let Some(output) = data
             .get("tool_output")
             .or_else(|| data.get("toolOutput"))
             .and_then(|v| v.as_str())
-        {
-            if !output.is_empty() {
-                let truncated = if output.len() > 300 {
-                    format!("{}...", crate::truncate_at_char_boundary(output, 300))
-                } else {
-                    output.to_string()
-                };
-                facts.push(format!("output: {truncated}"));
-            }
-        }
+        && !output.is_empty()
+    {
+        let truncated = if output.len() > 300 {
+            format!("{}...", crate::truncate_at_char_boundary(output, 300))
+        } else {
+            output.to_string()
+        };
+        facts.push(format!("output: {truncated}"));
     }
 
     facts

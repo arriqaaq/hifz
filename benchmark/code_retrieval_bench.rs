@@ -17,16 +17,17 @@
 //!   cargo run --release --bin code-retrieval-bench
 //!   cargo run --release --bin code-retrieval-bench -- --root . --project coderetr
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use anyhow::Result;
 use hifz::code::index::{IndexOpts, index_repo};
-use hifz::code::search::{CodeSearchOpts, search_code};
+use hifz::code::search::{CodeSearchOpts, CodeSearchResult, search_code};
 use hifz::db::{self, Db, init_schema};
 use hifz::embed::Embedder;
+use hifz::models::RrfResult;
 use kernel::code_parse::walker::{WalkOpts, walk};
 use surrealdb::Surreal;
-use surrealdb::types::SurrealValue;
+use surrealdb::types::{RecordId, SurrealValue};
 
 #[path = "corpus_common.rs"]
 mod corpus_common;
@@ -289,6 +290,175 @@ async fn bm25_file_present(
         .any(|h| h.path.as_deref() == Some(p.path.as_str()))
 }
 
+#[derive(Debug, SurrealValue)]
+struct CRow {
+    id: Option<RecordId>,
+    path: Option<String>,
+    language: Option<String>,
+    content: Option<String>,
+    start_line: Option<i64>,
+    end_line: Option<i64>,
+    distance: Option<f64>,
+    ft_score: Option<f64>,
+}
+
+fn crow_to_result(r: CRow, score: f64, via: &'static str) -> CodeSearchResult {
+    CodeSearchResult {
+        id: String::new(),
+        file_id: String::new(),
+        path: r.path.unwrap_or_default(),
+        language: r.language.unwrap_or_default(),
+        start_line: r.start_line.unwrap_or(0).max(0) as usize,
+        end_line: r.end_line.unwrap_or(0).max(0) as usize,
+        snippet: r.content.unwrap_or_default(),
+        score,
+        via,
+    }
+}
+
+/// A1 — EXACT replica of `search_code`'s two-branch `max(1-d, ft/4)` fusion
+/// (src/code/search.rs:87-200) but with a WIDE per-branch candidate pool,
+/// truncated to `k`. Isolates "is the ≤limit pool alone the bottleneck?".
+/// Production `search_code` is NOT modified — this is bench-local.
+async fn arm_widen_max(
+    db: &Surreal<Db>,
+    emb: &Embedder,
+    project: &str,
+    q: &str,
+    wide: usize,
+    k: usize,
+) -> Vec<CodeSearchResult> {
+    let Ok(qv) = emb.embed_single(q) else {
+        return vec![];
+    };
+    let vsql = format!(
+        "SELECT id, path, language, content, start_line, end_line, \
+         vector::distance::knn() AS distance FROM code_chunk \
+         WHERE embedding <|{wide},80|> $qv AND (project=$p OR project='global')"
+    );
+    let fsql = format!(
+        "SELECT id, path, language, content, start_line, end_line, \
+         search::score(1) AS ft_score FROM code_chunk \
+         WHERE content @1@ $q AND (project=$p OR project='global') \
+         ORDER BY ft_score DESC LIMIT {wide}"
+    );
+    let vrows: Vec<CRow> = match db
+        .query(&vsql)
+        .bind(("qv", qv.to_vec()))
+        .bind(("p", project.to_string()))
+        .await
+    {
+        Ok(mut r) => r.take(0).unwrap_or_default(),
+        Err(_) => vec![],
+    };
+    let frows: Vec<CRow> = match db
+        .query(&fsql)
+        .bind(("q", q.to_string()))
+        .bind(("p", project.to_string()))
+        .await
+    {
+        Ok(mut r) => r.take(0).unwrap_or_default(),
+        Err(_) => vec![],
+    };
+    struct M {
+        rec: CRow,
+        score: f64,
+    }
+    let mut by: HashMap<String, M> = HashMap::new();
+    for h in vrows {
+        let key = format!("{:?}", h.id);
+        let score = h.distance.map(|d| (1.0 - d).clamp(0.0, 1.0)).unwrap_or(0.0);
+        by.entry(key).or_insert(M { rec: h, score });
+    }
+    for h in frows {
+        let key = format!("{:?}", h.id);
+        let score = h.ft_score.map(|s| (s / 4.0).clamp(0.0, 1.0)).unwrap_or(0.0);
+        by.entry(key)
+            .and_modify(|m| {
+                if score > m.score {
+                    m.score = score;
+                }
+            })
+            .or_insert(M { rec: h, score });
+    }
+    let mut out: Vec<M> = by.into_values().collect();
+    out.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    out.truncate(k);
+    out.into_iter()
+        .map(|m| crow_to_result(m.rec, m.score, "a1"))
+        .collect()
+}
+
+/// A2 — WIDE pool + SurrealDB `search::rrf` fusion, the EXACT pattern hifz's
+/// own memory search uses (src/search.rs:142-153), ported to `code_chunk`
+/// (2-branch: vector + content BM25). Bench-local; production untouched.
+async fn arm_rrf(
+    db: &Surreal<Db>,
+    emb: &Embedder,
+    project: &str,
+    q: &str,
+    wide: usize,
+    k: usize,
+    rrf_k: u64,
+) -> Vec<CodeSearchResult> {
+    let Ok(qv) = emb.embed_single(q) else {
+        return vec![];
+    };
+    let sql = format!(
+        "search::rrf([\
+             (SELECT id, vector::distance::knn() AS distance \
+              FROM code_chunk WHERE embedding <|{wide},80|> $qv \
+              AND (project=$p OR project='global')),\
+             (SELECT id, search::score(1) AS ft_score \
+              FROM code_chunk WHERE content @1@ $q \
+              AND (project=$p OR project='global') \
+              ORDER BY ft_score DESC LIMIT {wide})\
+         ], {k}, {rrf_k})"
+    );
+    let fused: Vec<RrfResult> = match db
+        .query(&sql)
+        .bind(("qv", qv.to_vec()))
+        .bind(("q", q.to_string()))
+        .bind(("p", project.to_string()))
+        .await
+    {
+        Ok(mut r) => r.take(0).unwrap_or_default(),
+        Err(_) => vec![],
+    };
+    let ids: Vec<RecordId> = fused.iter().filter_map(|f| f.id.clone()).collect();
+    if ids.is_empty() {
+        return vec![];
+    }
+    // Fetch the fused chunks' fields, then re-emit in RRF order.
+    let rows: Vec<CRow> = match db
+        .query(
+            "SELECT id, path, language, content, start_line, end_line \
+             FROM code_chunk WHERE id IN $ids",
+        )
+        .bind(("ids", ids.clone()))
+        .await
+    {
+        Ok(mut r) => r.take(0).unwrap_or_default(),
+        Err(_) => vec![],
+    };
+    let mut by: HashMap<String, CRow> = rows
+        .into_iter()
+        .map(|r| (format!("{:?}", r.id), r))
+        .collect();
+    fused
+        .iter()
+        .filter_map(|f| {
+            let id = f.id.clone()?;
+            let r = by.remove(&format!("{:?}", Some(id)))?;
+            Some(crow_to_result(r, f.rrf_score.unwrap_or(0.0), "a2"))
+        })
+        .collect()
+}
+
 /// Does an indexed chunk for the symbol even exist? (catches the
 /// `splitter.rs:74` min_chars=250 drop / indexing gap.)
 async fn oracle_chunk_exists(db: &Surreal<Db>, project: &str, p: &Probe) -> bool {
@@ -493,9 +663,13 @@ async fn main() -> Result<()> {
     let mut tax = Tax::default();
     let mut raw_file_hit = 0usize;
     let mut raw_chunk_hit = 0usize;
+    // raw-doc chunk-hit per arm — the pre-registered easy-query regression
+    // guard (gate criterion 3).
+    let (mut a0_raw, mut a1_raw, mut a2_raw) = (0usize, 0usize, 0usize);
     let mut hit_cs_tok: Vec<usize> = Vec::new(); // tokens on the CORRECT set only
     let mut grep_tok: Vec<usize> = Vec::new();
     let mut grep_file_hit = 0usize;
+    const RRF_K: u64 = 10; // hifz memory-search default (src/search.rs:50)
 
     for p in &probes {
         let rh = run_search(&db, &embedder, &project, &p.raw, K).await;
@@ -504,9 +678,29 @@ async fn main() -> Result<()> {
         }
         if chunk_rank(&rh, p).is_some() {
             raw_chunk_hit += 1;
+            a0_raw += 1;
+        }
+        if chunk_rank(
+            &arm_widen_max(&db, &embedder, &project, &p.raw, WIDE, K).await,
+            p,
+        )
+        .is_some()
+        {
+            a1_raw += 1;
+        }
+        if chunk_rank(
+            &arm_rrf(&db, &embedder, &project, &p.raw, WIDE, K, RRF_K).await,
+            p,
+        )
+        .is_some()
+        {
+            a2_raw += 1;
         }
     }
-    for p in &para {
+    // A0's recoverable misses (indices into `para`) — the pre-registered
+    // denominator for gate criterion 2 (no post-hoc redefinition).
+    let mut recoverable_idx: Vec<usize> = Vec::new();
+    for (pi, p) in para.iter().enumerate() {
         let q = p.paraphrase.as_deref().unwrap();
         let hits_k = run_search(&db, &embedder, &project, q, K).await;
         let f_hit = file_rank(&hits_k, p).is_some();
@@ -533,6 +727,7 @@ async fn main() -> Result<()> {
             let wide = run_search(&db, &embedder, &project, q, WIDE).await;
             if chunk_rank(&wide, p).is_some() {
                 tax.region_recoverable += 1;
+                recoverable_idx.push(pi);
             } else {
                 tax.region_deep += 1;
             }
@@ -544,6 +739,7 @@ async fn main() -> Result<()> {
             let in_bm25_wide = bm25_file_present(&db, &project, q, WIDE, p).await;
             if in_wide || in_bm25_wide {
                 tax.file_recoverable += 1;
+                recoverable_idx.push(pi);
             } else {
                 tax.file_deep += 1;
             }
@@ -627,6 +823,144 @@ async fn main() -> Result<()> {
         pct(grep_file_hit, n),
     );
 
+    // ── EXPERIMENT: A0 control vs A1 widen+max vs A2 widen+RRF.
+    // Production search_code is NOT modified; A1/A2 are bench-local raw SQL. ──
+    let (mut a0_hit, mut a1_hit, mut a2_hit) = (0usize, 0usize, 0usize);
+    let (mut a0_ms, mut a1_ms, mut a2_ms): (Vec<f64>, Vec<f64>, Vec<f64>) =
+        (vec![], vec![], vec![]);
+    let (mut a0_tok, mut a1_tok, mut a2_tok): (Vec<usize>, Vec<usize>, Vec<usize>) =
+        (vec![], vec![], vec![]);
+    let (mut conv1, mut conv2) = (0usize, 0usize);
+    for (pi, p) in para.iter().enumerate() {
+        let q = p.paraphrase.as_deref().unwrap();
+        let t = std::time::Instant::now();
+        let h0 = run_search(&db, &embedder, &project, q, K).await;
+        a0_ms.push(t.elapsed().as_secs_f64() * 1000.0);
+        let t = std::time::Instant::now();
+        let h1 = arm_widen_max(&db, &embedder, &project, q, WIDE, K).await;
+        a1_ms.push(t.elapsed().as_secs_f64() * 1000.0);
+        let t = std::time::Instant::now();
+        let h2 = arm_rrf(&db, &embedder, &project, q, WIDE, K, RRF_K).await;
+        a2_ms.push(t.elapsed().as_secs_f64() * 1000.0);
+        let (c0, c1, c2) = (
+            chunk_rank(&h0, p).is_some(),
+            chunk_rank(&h1, p).is_some(),
+            chunk_rank(&h2, p).is_some(),
+        );
+        if c0 {
+            a0_hit += 1;
+            a0_tok.push(h0.iter().map(|h| est_tokens(&h.snippet)).sum());
+        }
+        if c1 {
+            a1_hit += 1;
+            a1_tok.push(h1.iter().map(|h| est_tokens(&h.snippet)).sum());
+        }
+        if c2 {
+            a2_hit += 1;
+            a2_tok.push(h2.iter().map(|h| est_tokens(&h.snippet)).sum());
+        }
+        if recoverable_idx.contains(&pi) {
+            if c1 {
+                conv1 += 1;
+            }
+            if c2 {
+                conv2 += 1;
+            }
+        }
+    }
+    let pctf = |x: usize| 100.0 * x as f64 / n as f64;
+    let meanf = |v: &[f64]| {
+        if v.is_empty() {
+            0.0
+        } else {
+            v.iter().sum::<f64>() / v.len() as f64
+        }
+    };
+    let meanu = |v: &[usize]| {
+        if v.is_empty() {
+            0.0
+        } else {
+            v.iter().sum::<usize>() as f64 / v.len() as f64
+        }
+    };
+    let p90 = |v: &[f64]| {
+        if v.is_empty() {
+            return 0.0;
+        }
+        let mut s = v.to_vec();
+        s.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        s[((s.len() as f64 * 0.9) as usize).min(s.len() - 1)]
+    };
+    let nrec = recoverable_idx.len();
+    println!();
+    println!(
+        "── EXPERIMENT: A0 control · A1 widen+max · A2 widen+RRF \
+         (n={n}, WIDE={WIDE}, rrf_k={RRF_K}) ──"
+    );
+    let row = |a: &str, hit: usize, conv: usize, raw: usize, ms: &[f64], tok: &[usize]| {
+        println!(
+            "  {a:<3} chunk-hit {hit:>4} [{:>5.1}%]  Δ{:+5.1}pp  recov→hit {conv:>3}/{nrec:<3}  \
+             raw {raw:>4}/{:<4}  avg {:>6.1}ms  p90 {:>6.1}ms  tok {:>6.0}",
+            pctf(hit),
+            pctf(hit) - pctf(a0_hit),
+            probes.len(),
+            meanf(ms),
+            p90(ms),
+            meanu(tok),
+        );
+    };
+    row("A0", a0_hit, 0, a0_raw, &a0_ms, &a0_tok);
+    row("A1", a1_hit, conv1, a1_raw, &a1_ms, &a1_tok);
+    row("A2", a2_hit, conv2, a2_raw, &a2_ms, &a2_tok);
+
+    // ── Pre-registered ADOPT/REJECT gate — thresholds fixed in the plan
+    // BEFORE this run, evaluated mechanically (no post-hoc reinterpretation). ──
+    // Tie-break: prefer A1 unless A2 leads by > 0.5pp (Occam — less change).
+    let prefer_a1 = a1_hit >= a2_hit || (pctf(a2_hit) - pctf(a1_hit)) <= 0.5;
+    let (best_name, best_hit, best_conv, best_raw, best_ms): (&str, usize, usize, usize, &[f64]) =
+        if prefer_a1 {
+            ("A1", a1_hit, conv1, a1_raw, &a1_ms)
+        } else {
+            ("A2", a2_hit, conv2, a2_raw, &a2_ms)
+        };
+    let d_delta = pctf(best_hit) - pctf(a0_hit);
+    let best_p90 = p90(best_ms);
+    let a0_p90 = p90(&a0_ms);
+    let c1ok = d_delta >= 1.0;
+    let c2ok = nrec == 0 || (best_conv as f64 / nrec as f64) >= 0.5;
+    let c3ok = (best_raw as f64) >= (a0_raw as f64) - 0.005 * probes.len() as f64;
+    let c4ok = best_p90 <= 2.5 * a0_p90.max(0.001);
+    let adopt = c1ok && c2ok && c3ok && c4ok;
+    let yn = |b: bool| if b { "PASS" } else { "FAIL" };
+    println!();
+    println!("── PRE-REGISTERED GATE (thresholds fixed in plan before run) ──");
+    println!(
+        "  C1 Δchunk-hit ≥ +1.0pp        : {d_delta:+.1}pp  {}",
+        yn(c1ok)
+    );
+    println!(
+        "  C2 ≥50% recoverable converted : {best_conv}/{nrec}  {}",
+        yn(c2ok)
+    );
+    println!(
+        "  C3 no raw-doc regression      : {best_name} raw {best_raw} vs A0 {a0_raw}  {}",
+        yn(c3ok)
+    );
+    println!(
+        "  C4 p90 ≤ 2.5× A0 p90          : {best_p90:.1}ms vs A0 {a0_p90:.1}ms  {}",
+        yn(c4ok)
+    );
+    println!(
+        "  EXPERIMENT VERDICT: {}",
+        if adopt {
+            format!(
+                "ADOPT {best_name} — follow-up: port into src/code/search.rs (separate, re-verified)"
+            )
+        } else {
+            "REJECT — null/insufficient; do NOT modify search_code".to_string()
+        }
+    );
+
     let json = serde_json::json!({
         "root": root, "project": project, "k": K, "wide": WIDE,
         "code_files": files.len(), "code_symbols": idx.symbols,
@@ -643,7 +977,18 @@ async fn main() -> Result<()> {
             "code_search_avg_tok_on_correct": cs_avg,
             "grep_avg_tok": g_avg, "grep_file_hit": grep_file_hit
         },
-        "raw_sanity": { "n": probes.len(), "file_hit": raw_file_hit, "chunk_hit": raw_chunk_hit }
+        "raw_sanity": { "n": probes.len(), "file_hit": raw_file_hit, "chunk_hit": raw_chunk_hit },
+        "experiment": {
+            "n": n, "wide": WIDE, "rrf_k": RRF_K, "recoverable_n": nrec,
+            "a0": { "chunk_hit": a0_hit, "raw_chunk_hit": a0_raw,
+                    "avg_ms": meanf(&a0_ms), "p90_ms": p90(&a0_ms), "avg_tok": meanu(&a0_tok) },
+            "a1": { "chunk_hit": a1_hit, "raw_chunk_hit": a1_raw, "recov_converted": conv1,
+                    "avg_ms": meanf(&a1_ms), "p90_ms": p90(&a1_ms), "avg_tok": meanu(&a1_tok) },
+            "a2": { "chunk_hit": a2_hit, "raw_chunk_hit": a2_raw, "recov_converted": conv2,
+                    "avg_ms": meanf(&a2_ms), "p90_ms": p90(&a2_ms), "avg_tok": meanu(&a2_tok) },
+            "gate": { "best": best_name, "c1_delta_ge_1pp": c1ok, "c2_recov_ge_50pct": c2ok,
+                      "c3_no_raw_regression": c3ok, "c4_p90_le_2_5x": c4ok, "adopt": adopt }
+        }
     });
     let _ = std::fs::create_dir_all("benchmark/data");
     match std::fs::write(&export, serde_json::to_string_pretty(&json)?) {
@@ -773,5 +1118,72 @@ mod tests {
         let other = vec![res("crate/x.rs", 44, 90)];
         assert_eq!(file_rank(&other, &p), None);
         assert_eq!(chunk_rank(&other, &p), None);
+    }
+
+    // Smoke: the A1/A2 raw SurrealQL must PARSE and return rows on a tiny
+    // in-mem corpus — i.e. don't ship unparsed SurrealQL (same discipline as
+    // the doc_top tests). The helpers swallow query errors into `vec![]`, so a
+    // malformed query manifests as an empty result on a corpus where
+    // `search_code` itself returns hits — the assertion below catches that.
+    async fn tiny_corpus() -> (Surreal<Db>, Embedder, String) {
+        let db = db::connect_mem().await.unwrap();
+        let emb = Embedder::new().unwrap();
+        init_schema(&db, emb.dimension()).await.unwrap();
+        let dir = std::env::temp_dir().join(format!(
+            "crb_arms_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(dir.join("src")).unwrap();
+        std::fs::write(dir.join("Cargo.toml"), "[package]\nname=\"x\"\n").unwrap();
+        std::fs::write(
+            dir.join("src/lib.rs"),
+            "/// Parses a configuration file from disk and returns settings.\n\
+             pub fn load_configuration(path: &str) -> u32 { path.len() as u32 }\n\n\
+             /// Computes the arithmetic mean of a slice of integers.\n\
+             pub fn average(xs: &[i64]) -> i64 { xs.iter().sum::<i64>() / xs.len() as i64 }\n",
+        )
+        .unwrap();
+        let rep = index_repo(
+            &db,
+            &emb,
+            "t",
+            std::path::Path::new(&dir),
+            &IndexOpts::default(),
+        )
+        .await
+        .unwrap();
+        assert!(rep.symbols > 0, "fixture must index ≥1 symbol");
+        (db, emb, "t".to_string())
+    }
+
+    #[tokio::test]
+    async fn arm_widen_max_sql_parses_and_returns_rows() {
+        let (db, emb, proj) = tiny_corpus().await;
+        // sanity: production search_code finds something on this corpus…
+        let base = run_search(&db, &emb, &proj, "configuration file", 10).await;
+        assert!(
+            !base.is_empty(),
+            "search_code returned nothing — corpus bug"
+        );
+        // …so an empty A1 here means the raw widen+max SurrealQL failed to parse.
+        let r = arm_widen_max(&db, &emb, &proj, "configuration file", 50, 10).await;
+        assert!(!r.is_empty(), "A1 widen+max SurrealQL parsed to zero rows");
+    }
+
+    #[tokio::test]
+    async fn arm_rrf_sql_parses_and_returns_rows() {
+        let (db, emb, proj) = tiny_corpus().await;
+        let base = run_search(&db, &emb, &proj, "arithmetic mean", 10).await;
+        assert!(
+            !base.is_empty(),
+            "search_code returned nothing — corpus bug"
+        );
+        // Empty here means the `search::rrf([...])` SurrealQL failed to parse.
+        let r = arm_rrf(&db, &emb, &proj, "arithmetic mean", 50, 10, 10).await;
+        assert!(!r.is_empty(), "A2 widen+RRF SurrealQL parsed to zero rows");
     }
 }

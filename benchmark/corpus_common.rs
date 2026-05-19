@@ -90,10 +90,10 @@ impl Verdict {
 /// else the last component, else the raw string — all lowercased.
 pub fn norm_project(p: &str) -> String {
     let parts: Vec<&str> = p.split('/').filter(|s| !s.is_empty()).collect();
-    if let Some(i) = parts.iter().position(|s| *s == "projects") {
-        if let Some(name) = parts.get(i + 1) {
-            return name.to_lowercase();
-        }
+    if let Some(i) = parts.iter().position(|s| *s == "projects")
+        && let Some(name) = parts.get(i + 1)
+    {
+        return name.to_lowercase();
     }
     parts
         .last()

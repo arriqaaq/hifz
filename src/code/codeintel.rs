@@ -234,45 +234,45 @@ pub async fn index_code_graph(
         }
         // qualified vanished. Same body in exactly one new symbol →
         // structural rename (unique match only — never guess).
-        if let Some(bh) = ps.body_hash.as_deref() {
-            if let Some(cands) = new_by_bodyhash.get(bh).filter(|v| v.len() == 1) {
-                let new_q = cands[0];
-                let new_id = surrealdb::types::RecordId::new("code_symbol", key(project, new_q));
-                // A relation edge's `out` endpoint is immutable, so re-RELATE
-                // each inbound memory→symbol edge onto the renamed target
-                // (preserving via/score/reason), then the stale-delete below
-                // removes the old symbol + its now-superseded edges.
-                #[derive(Debug, SurrealValue)]
-                struct Inb {
-                    r#in: RecordId,
-                    via: Option<String>,
-                    score: Option<f64>,
-                    reason: Option<String>,
-                }
-                let mut ir = db
-                    .query(
-                        "SELECT in, via, score, reason FROM edge \
-                         WHERE relation = 'references_symbol' AND out = $old",
-                    )
-                    .bind(("old", old_id.clone()))
-                    .await?;
-                let inbound: Vec<Inb> = ir.take(0).unwrap_or_default();
-                for ib in inbound {
-                    let _ = db
-                        .query(
-                            "RELATE $m->edge->$new SET relation='references_symbol', \
-                             via=$via, score=$score, reason=$reason, created_at=$now",
-                        )
-                        .bind(("m", ib.r#in))
-                        .bind(("new", new_id.clone()))
-                        .bind(("via", ib.via.unwrap_or_else(|| "rename".into())))
-                        .bind(("score", ib.score.unwrap_or(0.9)))
-                        .bind(("reason", ib.reason))
-                        .bind(("now", now.clone()))
-                        .await;
-                }
-                report.renamed += 1;
+        if let Some(bh) = ps.body_hash.as_deref()
+            && let Some(cands) = new_by_bodyhash.get(bh).filter(|v| v.len() == 1)
+        {
+            let new_q = cands[0];
+            let new_id = surrealdb::types::RecordId::new("code_symbol", key(project, new_q));
+            // A relation edge's `out` endpoint is immutable, so re-RELATE
+            // each inbound memory→symbol edge onto the renamed target
+            // (preserving via/score/reason), then the stale-delete below
+            // removes the old symbol + its now-superseded edges.
+            #[derive(Debug, SurrealValue)]
+            struct Inb {
+                r#in: RecordId,
+                via: Option<String>,
+                score: Option<f64>,
+                reason: Option<String>,
             }
+            let mut ir = db
+                .query(
+                    "SELECT in, via, score, reason FROM edge \
+                         WHERE relation = 'references_symbol' AND out = $old",
+                )
+                .bind(("old", old_id.clone()))
+                .await?;
+            let inbound: Vec<Inb> = ir.take(0).unwrap_or_default();
+            for ib in inbound {
+                let _ = db
+                    .query(
+                        "RELATE $m->edge->$new SET relation='references_symbol', \
+                             via=$via, score=$score, reason=$reason, created_at=$now",
+                    )
+                    .bind(("m", ib.r#in))
+                    .bind(("new", new_id.clone()))
+                    .bind(("via", ib.via.unwrap_or_else(|| "rename".into())))
+                    .bind(("score", ib.score.unwrap_or(0.9)))
+                    .bind(("reason", ib.reason))
+                    .bind(("now", now.clone()))
+                    .await;
+            }
+            report.renamed += 1;
         }
         let _ = db
             .query("DELETE edge WHERE in = $old OR out = $old")

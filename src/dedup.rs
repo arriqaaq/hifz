@@ -13,6 +13,12 @@ pub struct DedupMap {
     cleanup_handle: Option<JoinHandle<()>>,
 }
 
+impl Default for DedupMap {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DedupMap {
     pub fn new() -> Self {
         let entries = Arc::new(DashMap::new());

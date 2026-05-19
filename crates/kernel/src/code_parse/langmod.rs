@@ -105,13 +105,11 @@ fn read_crate_name(cargo_toml: &Path) -> Option<String> {
             in_package = l == "[package]";
             continue;
         }
-        if in_package {
-            if let Some(rest) = l.strip_prefix("name") {
-                let rest = rest.trim_start_matches([' ', '=']).trim();
-                let name = rest.trim_matches(['"', '\'']);
-                if !name.is_empty() {
-                    return Some(name.to_string());
-                }
+        if in_package && let Some(rest) = l.strip_prefix("name") {
+            let rest = rest.trim_start_matches([' ', '=']).trim();
+            let name = rest.trim_matches(['"', '\'']);
+            if !name.is_empty() {
+                return Some(name.to_string());
             }
         }
     }

@@ -703,6 +703,7 @@ impl EdgeRelation {
     }
 
     /// Parse a relation string into the typed enum. Unknown strings map to `Other`.
+    #[allow(clippy::should_implement_trait)] // infallible parser, not the Result-based FromStr contract
     pub fn from_str(s: &str) -> Self {
         match s {
             "co_occurs_files" => Self::CoOccursFiles,
@@ -838,6 +839,7 @@ impl Category {
 
     /// Parse a string into the typed category. Unknown values map to `Note`
     /// (lossy by design — agents should not crash on a typo'd category).
+    #[allow(clippy::should_implement_trait)] // infallible parser, not the Result-based FromStr contract
     pub fn from_str(s: &str) -> Self {
         match s {
             "observation" => Self::Observation,

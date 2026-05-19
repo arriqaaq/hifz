@@ -262,7 +262,7 @@ async fn main() -> Result<()> {
         report.indexed, report.chunks, report.symbols
     );
     if report.symbols == 0 {
-        return std::process::exit(
+        std::process::exit(
             Verdict::Skip("0 symbols indexed (is --root a code dir?)".into()).emit(),
         );
     }
@@ -314,7 +314,7 @@ async fn main() -> Result<()> {
     );
 
     if probes.len() < MIN_DOCUMENTED {
-        return std::process::exit(
+        std::process::exit(
             Verdict::Skip(format!(
                 "only {} usable documented symbols; need ≥{MIN_DOCUMENTED}",
                 probes.len()
@@ -372,7 +372,7 @@ async fn main() -> Result<()> {
     const FLOOR_R5: f64 = 0.50;
     let mut reasons = Vec::new();
     if ph.n < MIN_DOCUMENTED {
-        return std::process::exit(
+        std::process::exit(
             Verdict::Skip(format!(
                 "only {} paraphrasable symbols; need ≥{MIN_DOCUMENTED}",
                 ph.n

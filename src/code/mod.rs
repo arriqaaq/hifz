@@ -16,7 +16,7 @@
 //! - `lang`     — extension → tree-sitter `Language` mapping
 //! - `walker`   — gitignore-honest file walking with binary + size guards
 //! - `splitter` — language-aware chunking via `text-splitter::CodeSplitter`,
-//!                fallback to `crate::chunk::split` for unsupported types
+//!   fallback to `crate::chunk::split` for unsupported types
 //! - `symbols`  — function/struct/enum/... extraction via tree-sitter `Query`
 //!
 //! ## M2+ adds

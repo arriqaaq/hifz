@@ -102,10 +102,10 @@ pub async fn close(
         .await
     {
         let s_rows: Vec<SessionRow> = s_resp.take(0).unwrap_or_default();
-        if let Some(sid) = s_rows.into_iter().next().and_then(|r| r.session_id) {
-            if let Err(e) = crate::link::create_run_structure_edges(db, run_id, &sid).await {
-                tracing::warn!("run structure edges failed for {run_id:?}: {e}");
-            }
+        if let Some(sid) = s_rows.into_iter().next().and_then(|r| r.session_id)
+            && let Err(e) = crate::link::create_run_structure_edges(db, run_id, &sid).await
+        {
+            tracing::warn!("run structure edges failed for {run_id:?}: {e}");
         }
     }
 

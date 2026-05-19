@@ -193,10 +193,10 @@ fn record_str(v: &serde_json::Value) -> Option<String> {
 
 fn label_from(row: &serde_json::Value, fields: &[&str]) -> String {
     for field in fields {
-        if let Some(s) = row.get(*field).and_then(|v| v.as_str()) {
-            if !s.is_empty() {
-                return s.to_string();
-            }
+        if let Some(s) = row.get(*field).and_then(|v| v.as_str())
+            && !s.is_empty()
+        {
+            return s.to_string();
         }
     }
     String::new()

@@ -50,6 +50,7 @@ impl RerankerChoice {
     }
 
     /// Parse a user-supplied tag (matching `as_str` output).
+    #[allow(clippy::should_implement_trait)] // Option-returning parser, not the Result-based FromStr contract
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "bge-base" => Some(RerankerChoice::BgeBase),

@@ -350,14 +350,14 @@ async fn tier_decay(db: &Surreal<Db>, decay_days: i64) -> Result<usize> {
                 let current_strength = mem.get("strength").and_then(|v| v.as_f64()).unwrap_or(1.0);
                 let new_strength = (current_strength * 0.9_f64.powi(periods as i32)).max(0.1);
 
-                if (new_strength - current_strength).abs() > 0.001 {
-                    if let Some(id) = mem.get("id").and_then(|v| v.as_str()) {
-                        db.query("UPDATE type::record($id) SET strength = $strength")
-                            .bind(("id", id.to_string()))
-                            .bind(("strength", new_strength))
-                            .await?;
-                        decayed += 1;
-                    }
+                if (new_strength - current_strength).abs() > 0.001
+                    && let Some(id) = mem.get("id").and_then(|v| v.as_str())
+                {
+                    db.query("UPDATE type::record($id) SET strength = $strength")
+                        .bind(("id", id.to_string()))
+                        .bind(("strength", new_strength))
+                        .await?;
+                    decayed += 1;
                 }
             }
         }

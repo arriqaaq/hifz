@@ -464,8 +464,10 @@ async fn long_horizon_memory_still_recallable() {
     let query = "how are vector embeddings generated";
 
     // Clock removed: pure relevance must put the old memory first.
-    let mut cfg = SearchConfig::default();
-    cfg.skip_recency_access = true;
+    let cfg = SearchConfig {
+        skip_recency_access: true,
+        ..Default::default()
+    };
     let pure = search::search_hybrid_with_config(&db, &embedder, query, 10, Some(PROJECT), cfg)
         .await
         .expect("search no-decay");
@@ -502,27 +504,24 @@ fn corpus_memory_bench_oracle_is_non_circular() {
         env!("CARGO_MANIFEST_DIR"),
         "/benchmark/corpus_memory_bench.rs"
     );
-    match std::fs::read_to_string(path) {
-        Ok(src) => {
-            // Allow the substring inside comments that explain *why* it is not
-            // used; forbid it in any non-comment line (an actual field read).
-            let offending: Vec<(usize, &str)> = src
-                .lines()
-                .enumerate()
-                .filter(|(_, l)| {
-                    let t = l.trim_start();
-                    !t.starts_with("//") && !t.starts_with("*") && l.contains("recalled_ids")
-                })
-                .map(|(i, l)| (i + 1, l))
-                .collect();
-            assert!(
-                offending.is_empty(),
-                "corpus_memory_bench.rs must not read run.recalled_ids \
-                 (circular oracle). Offending lines: {offending:?}"
-            );
-        }
-        // Bench not present yet (e.g. running this test in isolation before
-        // Track B lands): nothing to guard.
-        Err(_) => {}
+    // Bench not present yet (e.g. running this test in isolation before
+    // Track B lands): nothing to guard.
+    if let Ok(src) = std::fs::read_to_string(path) {
+        // Allow the substring inside comments that explain *why* it is not
+        // used; forbid it in any non-comment line (an actual field read).
+        let offending: Vec<(usize, &str)> = src
+            .lines()
+            .enumerate()
+            .filter(|(_, l)| {
+                let t = l.trim_start();
+                !t.starts_with("//") && !t.starts_with("*") && l.contains("recalled_ids")
+            })
+            .map(|(i, l)| (i + 1, l))
+            .collect();
+        assert!(
+            offending.is_empty(),
+            "corpus_memory_bench.rs must not read run.recalled_ids \
+             (circular oracle). Offending lines: {offending:?}"
+        );
     }
 }

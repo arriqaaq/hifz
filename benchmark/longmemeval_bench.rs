@@ -281,7 +281,7 @@ async fn exec_sql_block(db: &Surreal<Db>, block: &str) -> Result<()> {
         .map(|s| s.trim())
         .filter(|s| !s.is_empty() && !s.starts_with("--"))
     {
-        db.query(&format!("{stmt};")).await?.check()?;
+        db.query(format!("{stmt};")).await?.check()?;
     }
     Ok(())
 }

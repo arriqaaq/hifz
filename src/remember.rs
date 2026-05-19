@@ -13,6 +13,7 @@ use crate::models::Category;
 /// This wrapper exists for benchmarks and any out-of-tree callers that still
 /// pass positional args; it forces `enable_llm = false` so behavior is
 /// deterministic and reproducible (no Ollama variance in benchmark numbers).
+#[allow(clippy::too_many_arguments)] // positional-args compat wrapper by design; see doc above
 pub async fn save(
     db: &Surreal<Db>,
     embedder: &Embedder,

@@ -130,4 +130,35 @@ exists so a reviewer can see exactly how much it moves the number.
 - Single project (hifz); `--root` makes it repeatable. Diagnose-only: no
   retrieval behavior changed here.
 
+## Experiment — widen+RRF hypothesis: REJECTED (pre-registered, --root .)
+
+The diagnosis localized the ~2% residual as "recoverable" (oracle present in a
+WIDE=200 pool but buried by the `≤limit` pool + `max(vec,bm25/4)` + no-rerank
+fusion). A pre-registered, in-benchmark A/B tested that fix **without touching
+production `search_code`** (A1/A2 are bench-local raw SurrealQL; the RRF SQL is
+unit-smoke-tested):
+
+```
+arm           chunk-hit@10   Δ vs A0   recov→hit   raw chunk-hit   p90 ms
+A0 control    385 [97.7%]    --        0/8         444/451         13.7
+A1 widen+max  385 [97.7%]    +0.0pp    0/8         443/451         15.6
+A2 widen+RRF  384 [97.5%]    −0.3pp    0/8         444/451         35.0
+GATE: C1 FAIL(+0.0pp<+1.0) · C2 FAIL(0/8<50%) · C3 PASS · C4 PASS → REJECT
+```
+
+**Verdict: REJECT — `search_code` is NOT modified.** Widening the pool to 200
+converted **0 of 8** recoverable misses; RRF was slightly *worse* and 2.7×
+slower. Internal validity holds (A1/A2 reproduce A0 on easy raw-doc queries;
+10/10 unit + SQL-smoke tests pass) — the null is real.
+
+**Why the hypothesis was wrong (honest correction).** "Recoverable" only meant
+the oracle appeared *somewhere* in a 200-wide pool — not that a wider pool or
+better fusion lifts it into the top-10. Those chunks are buried by **score**
+(both vector and BM25 rank them ~30+), not by pool truncation; RRF of two
+poor ranks is still a poor fused rank. The ~2% residual is **not** a
+candidate-pool or fusion-arithmetic problem — it is a deeper representation
+limit or near the irreducible floor for this oracle/corpus. The experiment did
+its job: it falsified a plausible fix *before* any production change. No
+further fix is pursued (closing it = the anti-goalpost-moving discipline).
+
 See also: [graphify-parity.md](graphify-parity.md).

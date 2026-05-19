@@ -136,12 +136,11 @@ async fn index_walked(
     let existing: Vec<CodeFileRow> = resp.take(0).unwrap_or_default();
     let existing = existing.into_iter().next();
 
-    if let Some(ref e) = existing {
-        if let Some(stored_mtime) = e.mtime_ns {
-            if (stored_mtime as i128) == f.mtime_ns {
-                return Ok(IndexFileOutcome::Skipped);
-            }
-        }
+    if let Some(ref e) = existing
+        && let Some(stored_mtime) = e.mtime_ns
+        && (stored_mtime as i128) == f.mtime_ns
+    {
+        return Ok(IndexFileOutcome::Skipped);
     }
 
     // -- Step 2: content hash check ---------------------------------------
@@ -154,18 +153,18 @@ async fn index_walked(
     };
     let content_hash = sha256_hex(&bytes);
 
-    if let Some(ref e) = existing {
-        if e.content_hash.as_deref() == Some(content_hash.as_str()) {
-            // Same hash, just touch mtime so future cheap checks skip too.
-            if let Some(ref id) = e.id {
-                let _ = db
-                    .query("UPDATE type::record($id) SET mtime_ns = $m")
-                    .bind(("id", id.clone()))
-                    .bind(("m", f.mtime_ns as i64))
-                    .await;
-            }
-            return Ok(IndexFileOutcome::Skipped);
+    if let Some(ref e) = existing
+        && e.content_hash.as_deref() == Some(content_hash.as_str())
+    {
+        // Same hash, just touch mtime so future cheap checks skip too.
+        if let Some(ref id) = e.id {
+            let _ = db
+                .query("UPDATE type::record($id) SET mtime_ns = $m")
+                .bind(("id", id.clone()))
+                .bind(("m", f.mtime_ns as i64))
+                .await;
         }
+        return Ok(IndexFileOutcome::Skipped);
     }
 
     // -- Step 3: chunk + extract symbols ----------------------------------

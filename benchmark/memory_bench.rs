@@ -17,7 +17,7 @@
 //! Modes:
 //!   - `base`    — BM25 + vector + RRF, strength-only (Phase-0 baseline)
 //!   - `full`    — Phase 1 stack: project-scoped, richer-text embed,
-//!                 strength·recency·access, query-aware injection
+//!     strength·recency·access, query-aware injection
 //!
 //! Usage:
 //!   cargo run --release --bin memory-bench -- full

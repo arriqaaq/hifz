@@ -61,10 +61,25 @@ fn atlas_tool_defs() -> Vec<serde_json::Value> {
 /// Dispatch a tool call — proxies to the REST server via HTTP.
 pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<serde_json::Value> {
     let name = params.get("name").and_then(|v| v.as_str()).unwrap_or("");
-    let args = params
-        .get("arguments")
-        .cloned()
-        .unwrap_or(serde_json::json!({}));
+
+    // Robust arg extraction. The MCP spec says `params.arguments` is an
+    // object, but clients have been observed to double-encode it as a JSON
+    // *string*; naive `.unwrap_or({})` would then make `validate_required`
+    // report a misleading "Received keys: []" even though args WERE sent.
+    // Tolerate the string form, and record the actual shape to the wire log
+    // so an empty-args failure's cause is *evidenced*, not assumed
+    // (client-drop vs stringified-quirk vs model-sent-nothing).
+    let (args, shape) = match params.get("arguments") {
+        None => (serde_json::json!({}), "absent"),
+        Some(serde_json::Value::Null) => (serde_json::json!({}), "null"),
+        Some(serde_json::Value::String(s)) => match serde_json::from_str::<serde_json::Value>(s) {
+            Ok(v) if v.is_object() => (v, "string->object(recovered)"),
+            _ => (serde_json::json!({}), "string(unparseable)"),
+        },
+        Some(v) if v.is_object() => (v.clone(), "object"),
+        Some(v) => (v.clone(), "non-object"),
+    };
+    crate::mcp::wire_append("SHAPE", &format!("name={name} arguments={shape}"));
 
     // One uniform, self-correcting `-32602` for every tool's required args —
     // fails fast before the HTTP round-trip, no per-tool guards.
@@ -617,21 +632,22 @@ fn mcp_content(result: &serde_json::Value) -> Result<Vec<serde_json::Value>> {
     let mut blocks = Vec::new();
 
     if let Some(d) = result.get("delta") {
-        if let Ok(delta) = serde_json::from_value::<memdiff::MemoryDelta>(d.clone()) {
-            if !delta.lines.is_empty() {
-                blocks.push(serde_json::json!({
-                    "type": "text",
-                    "text": memdiff::sink_text::render(&delta, &opts),
-                }));
-            }
-        }
-    } else if result.get("header").is_some() && result.get("rows").is_some() {
-        if let Ok(view) = serde_json::from_value::<memdiff::MemoryView>(result.clone()) {
+        if let Ok(delta) = serde_json::from_value::<memdiff::MemoryDelta>(d.clone())
+            && !delta.lines.is_empty()
+        {
             blocks.push(serde_json::json!({
                 "type": "text",
-                "text": memdiff::sink_text::render_view(&view, &opts),
+                "text": memdiff::sink_text::render(&delta, &opts),
             }));
         }
+    } else if result.get("header").is_some()
+        && result.get("rows").is_some()
+        && let Ok(view) = serde_json::from_value::<memdiff::MemoryView>(result.clone())
+    {
+        blocks.push(serde_json::json!({
+            "type": "text",
+            "text": memdiff::sink_text::render_view(&view, &opts),
+        }));
     }
 
     blocks.push(serde_json::json!({

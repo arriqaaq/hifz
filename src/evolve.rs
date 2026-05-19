@@ -120,7 +120,7 @@ pub async fn evolve_one(
 
     let edges = link::expand_graph(
         db,
-        &[memory_id.clone()],
+        std::slice::from_ref(memory_id),
         &link::GraphExpandConfig {
             max_hops: 1,
             direction: link::Direction::Outgoing,
@@ -311,26 +311,26 @@ async fn apply_updates(
         };
         let rid_str = crate::rid_to_string(&rid);
 
-        if let Some(ltn) = &upd.link_to_new {
-            if ltn.create {
-                let score = ltn.score.clamp(0.0, 1.0);
-                let relation = if ltn.relation.is_empty() {
-                    "related"
-                } else {
-                    &ltn.relation
-                };
-                let reason = format!("LLM evolve link: relation={relation}, score={score:.2}");
-                link::upsert_edge(db, &rid, new_id, relation, "llm", score, Some(&reason)).await?;
-                report.links_added += 1;
-                changes.push(Change::Linked {
-                    from: rid_str.clone(),
-                    to: new_id_str.clone(),
-                    relation: relation.to_string(),
-                    score,
-                    reason: Some(reason),
-                    via: "llm".to_string(),
-                });
-            }
+        if let Some(ltn) = &upd.link_to_new
+            && ltn.create
+        {
+            let score = ltn.score.clamp(0.0, 1.0);
+            let relation = if ltn.relation.is_empty() {
+                "related"
+            } else {
+                &ltn.relation
+            };
+            let reason = format!("LLM evolve link: relation={relation}, score={score:.2}");
+            link::upsert_edge(db, &rid, new_id, relation, "llm", score, Some(&reason)).await?;
+            report.links_added += 1;
+            changes.push(Change::Linked {
+                from: rid_str.clone(),
+                to: new_id_str.clone(),
+                relation: relation.to_string(),
+                score,
+                reason: Some(reason),
+                via: "llm".to_string(),
+            });
         }
 
         if upd.supersedes_new {

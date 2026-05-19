@@ -39,10 +39,8 @@ pub async fn observe(
             // Check if run already open for this session
             if let Some(open_run) = run::find_open(db, &payload.session_id).await.ok().flatten() {
                 let _ = run::append_prompt(db, &open_run, &prompt).await;
-            } else {
-                if let Some(session_rid) = run::resolve_session(db, &payload.session_id).await {
-                    let _ = run::start(db, &session_rid, &payload.project, &prompt).await;
-                }
+            } else if let Some(session_rid) = run::resolve_session(db, &payload.session_id).await {
+                let _ = run::start(db, &session_rid, &payload.project, &prompt).await;
             }
         }
         crate::models::HifzEvent::SessionStop | crate::models::HifzEvent::TaskCompleted => {

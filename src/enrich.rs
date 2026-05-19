@@ -373,12 +373,11 @@ pub async fn save_enriched(
     // Long-form artifact categories own intentional links (Plans link via
     // `supersedes` to prior Plans, etc.); skip the noisy kNN co-occurrence
     // pass for them.
-    if !category.is_long_form() {
-        if let Err(e) =
+    if !category.is_long_form()
+        && let Err(e) =
             link::generate_links(db, &new_id, project, &final_embedding, &keywords, &files).await
-        {
-            tracing::warn!("co-occurrence link generation failed for {new_id:?}: {e}");
-        }
+    {
+        tracing::warn!("co-occurrence link generation failed for {new_id:?}: {e}");
     }
 
     // Long-form artifacts: split content_long into chunks for retrieval.
@@ -418,69 +417,69 @@ pub async fn save_enriched(
     }
 
     // ---- Step 7: provenance edges ----------------------------------------
-    if let Some(sid) = session_id {
-        if let Ok(Some(run_id)) = crate::run::find_open(db, sid).await {
-            let _ = link::upsert_edge(
-                db,
-                &new_id,
-                &run_id,
-                "generated_by",
-                "system",
-                1.0,
-                Some("memory created during this run"),
-            )
-            .await;
-            if let Ok(recalled) = crate::run::get_recalled_ids(db, &run_id).await {
-                for rid in &recalled {
-                    let _ = link::upsert_edge(
-                        db,
-                        &new_id,
-                        rid,
-                        "derived_from",
-                        "system",
-                        0.8,
-                        Some("authored after recalling this memory"),
-                    )
-                    .await;
-                }
+    if let Some(sid) = session_id
+        && let Ok(Some(run_id)) = crate::run::find_open(db, sid).await
+    {
+        let _ = link::upsert_edge(
+            db,
+            &new_id,
+            &run_id,
+            "generated_by",
+            "system",
+            1.0,
+            Some("memory created during this run"),
+        )
+        .await;
+        if let Ok(recalled) = crate::run::get_recalled_ids(db, &run_id).await {
+            for rid in &recalled {
+                let _ = link::upsert_edge(
+                    db,
+                    &new_id,
+                    rid,
+                    "derived_from",
+                    "system",
+                    0.8,
+                    Some("authored after recalling this memory"),
+                )
+                .await;
             }
         }
     }
 
     // ---- Step 8: lifecycle edges (explicit) ------------------------------
-    if let Some(target_id_str) = closes_memory_id {
-        if let Some(target) = resolve_memory_id(db, target_id_str).await {
-            let _ = link::upsert_edge(
-                db,
-                &new_id,
-                &target,
-                "closes",
-                "system",
-                1.0,
-                Some("explicit `closes_memory_id` from caller"),
-            )
-            .await;
-        }
+    if let Some(target_id_str) = closes_memory_id
+        && let Some(target) = resolve_memory_id(db, target_id_str).await
+    {
+        let _ = link::upsert_edge(
+            db,
+            &new_id,
+            &target,
+            "closes",
+            "system",
+            1.0,
+            Some("explicit `closes_memory_id` from caller"),
+        )
+        .await;
     }
-    if let Some(target_id_str) = supersedes_memory_id {
-        if let Some(target) = resolve_memory_id(db, target_id_str).await {
-            let _ = link::upsert_edge(
-                db,
-                &new_id,
-                &target,
-                "supersedes",
-                "system",
-                1.0,
-                Some("explicit `supersedes_memory_id` from caller"),
-            )
+    if let Some(target_id_str) = supersedes_memory_id
+        && let Some(target) = resolve_memory_id(db, target_id_str).await
+    {
+        let _ = link::upsert_edge(
+            db,
+            &new_id,
+            &target,
+            "supersedes",
+            "system",
+            1.0,
+            Some("explicit `supersedes_memory_id` from caller"),
+        )
+        .await;
+        // Mark the old memory non-latest so retrieval skips it by default.
+        let _ = db
+            .query("UPDATE type::record($id) SET is_latest = false, updated_at = $now")
+            .bind(("id", target.clone()))
+            .bind(("now", now.clone()))
             .await;
-            // Mark the old memory non-latest so retrieval skips it by default.
-            let _ = db
-                .query("UPDATE type::record($id) SET is_latest = false, updated_at = $now")
-                .bind(("id", target.clone()))
-                .bind(("now", now.clone()))
-                .await;
-        }
     }
 
     // ---- Step 9: async bounded neighbor evolution ------------------------

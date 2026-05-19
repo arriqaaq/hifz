@@ -192,15 +192,15 @@ fn walk_node(
     }
 
     // Call site (bound by the resolver).
-    if let Some(RefKind::Call) = cfg.ref_kind(kind) {
-        if let Some(raw) = cfg.ref_name(node, src) {
-            out.refs.push(RefSite {
-                from_qualified: parent_qual.clone(),
-                raw,
-                kind: RefKind::Call,
-                start_line: node.start_position().row + 1,
-            });
-        }
+    if let Some(RefKind::Call) = cfg.ref_kind(kind)
+        && let Some(raw) = cfg.ref_name(node, src)
+    {
+        out.refs.push(RefSite {
+            from_qualified: parent_qual.clone(),
+            raw,
+            kind: RefKind::Call,
+            start_line: node.start_position().row + 1,
+        });
     }
 
     let mut cursor = node.walk();

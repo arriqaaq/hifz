@@ -145,29 +145,29 @@ pub async fn search_agentic(
             Err(e) => return Err(ApiError::from(e)),
         };
 
-    if let Some(ref sid) = body.session_id {
-        if let Ok(Some(run_id)) = crate::run::find_open(&state.db, sid).await {
-            let mem_hits: Vec<(surrealdb::types::RecordId, f64)> = results
-                .iter()
-                .filter(|sr| sr.obs_type.starts_with("memory:"))
-                .filter_map(|sr| Some((sr.id.clone()?, sr.score.unwrap_or(0.0))))
-                .collect();
-            if !mem_hits.is_empty() {
-                let mem_ids: Vec<_> = mem_hits.iter().map(|(id, _)| id.clone()).collect();
-                let _ = crate::run::append_recalled(&state.db, &run_id, &mem_ids).await;
-                for (mid, score) in &mem_hits {
-                    let reason = format!("recalled by search rank {score:.3}");
-                    let _ = crate::link::upsert_edge(
-                        &state.db,
-                        mid,
-                        &run_id,
-                        "informed_by",
-                        "system",
-                        *score,
-                        Some(&reason),
-                    )
-                    .await;
-                }
+    if let Some(ref sid) = body.session_id
+        && let Ok(Some(run_id)) = crate::run::find_open(&state.db, sid).await
+    {
+        let mem_hits: Vec<(surrealdb::types::RecordId, f64)> = results
+            .iter()
+            .filter(|sr| sr.obs_type.starts_with("memory:"))
+            .filter_map(|sr| Some((sr.id.clone()?, sr.score.unwrap_or(0.0))))
+            .collect();
+        if !mem_hits.is_empty() {
+            let mem_ids: Vec<_> = mem_hits.iter().map(|(id, _)| id.clone()).collect();
+            let _ = crate::run::append_recalled(&state.db, &run_id, &mem_ids).await;
+            for (mid, score) in &mem_hits {
+                let reason = format!("recalled by search rank {score:.3}");
+                let _ = crate::link::upsert_edge(
+                    &state.db,
+                    mid,
+                    &run_id,
+                    "informed_by",
+                    "system",
+                    *score,
+                    Some(&reason),
+                )
+                .await;
             }
         }
     }
@@ -206,50 +206,46 @@ pub async fn remember(
             // Side-effect: opt-in Memory Evolution after the write commits.
             // Lifted from the legacy handler. Looks up the freshly-created
             // memory by title+project, then calls evolve_one in the background.
-            if llm_evolve {
-                if let Some(ollama) = ollama_clone {
-                    let probe_title = v
-                        .get("title")
-                        .and_then(|t| t.as_str())
-                        .unwrap_or("")
-                        .to_string();
-                    if !probe_title.is_empty() {
-                        tokio::spawn(async move {
-                            let mut resp = match db_clone
-                                .query(
-                                    "SELECT id, created_at FROM memory \
+            if llm_evolve && let Some(ollama) = ollama_clone {
+                let probe_title = v
+                    .get("title")
+                    .and_then(|t| t.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                if !probe_title.is_empty() {
+                    tokio::spawn(async move {
+                        let mut resp = match db_clone
+                            .query(
+                                "SELECT id, created_at FROM memory \
                                      WHERE title = $title AND project = $project \
                                      ORDER BY created_at DESC LIMIT 1",
-                                )
-                                .bind(("title", probe_title))
-                                .bind(("project", project_for_evolve))
-                                .await
-                            {
-                                Ok(r) => r,
-                                Err(e) => {
-                                    tracing::warn!("evolve: id lookup failed: {e}");
-                                    return;
-                                }
-                            };
-                            #[derive(
-                                serde::Deserialize,
-                                serde::Serialize,
-                                surrealdb::types::SurrealValue,
-                                Debug,
-                            )]
-                            struct Row {
-                                id: Option<surrealdb::types::RecordId>,
+                            )
+                            .bind(("title", probe_title))
+                            .bind(("project", project_for_evolve))
+                            .await
+                        {
+                            Ok(r) => r,
+                            Err(e) => {
+                                tracing::warn!("evolve: id lookup failed: {e}");
+                                return;
                             }
-                            let rows: Vec<Row> = resp.take(0).unwrap_or_default();
-                            if let Some(id) = rows.into_iter().next().and_then(|r| r.id) {
-                                if let Err(e) =
-                                    crate::evolve::evolve_one(&db_clone, &ollama, &id).await
-                                {
-                                    tracing::warn!("evolve failed for {id:?}: {e}");
-                                }
-                            }
-                        });
-                    }
+                        };
+                        #[derive(
+                            serde::Deserialize,
+                            serde::Serialize,
+                            surrealdb::types::SurrealValue,
+                            Debug,
+                        )]
+                        struct Row {
+                            id: Option<surrealdb::types::RecordId>,
+                        }
+                        let rows: Vec<Row> = resp.take(0).unwrap_or_default();
+                        if let Some(id) = rows.into_iter().next().and_then(|r| r.id)
+                            && let Err(e) = crate::evolve::evolve_one(&db_clone, &ollama, &id).await
+                        {
+                            tracing::warn!("evolve failed for {id:?}: {e}");
+                        }
+                    });
                 }
             }
             Ok(Json(v))

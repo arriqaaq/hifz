@@ -12,6 +12,34 @@ pub struct McpState {
     pub base_url: String,
 }
 
+/// Best-effort raw-wire diagnostic: append a `tools/call` line exactly as it
+/// arrived on stdin to `~/.hifz/logs/mcp-wire.log`. This is ground truth for
+/// "what did the Claude Code client actually send" — used to settle whether an
+/// empty-args failure is a client drop, a stringified-args interop quirk we
+/// mis-parse, or the model emitting no arguments. Never fails the request.
+pub(crate) fn wire_append(tag: &str, msg: &str) {
+    use std::io::Write;
+    let Ok(home) = std::env::var("HOME") else {
+        return;
+    };
+    let dir = std::path::Path::new(&home).join(".hifz/logs");
+    let _ = std::fs::create_dir_all(&dir);
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dir.join("mcp-wire.log"))
+    {
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        // Truncate very large payloads (big content_long) — the args *shape*
+        // is what matters for the diagnosis, not the full body.
+        let preview: String = msg.chars().take(4096).collect();
+        let _ = writeln!(f, "{ts} {tag} {preview}");
+    }
+}
+
 /// Run the MCP server over stdio (JSON-RPC 2.0, line-delimited).
 /// Proxies all tool calls to the REST server via HTTP.
 pub async fn serve_stdio(state: McpState) -> Result<()> {
@@ -58,7 +86,10 @@ pub async fn serve_stdio(state: McpState) -> Result<()> {
             "initialize" => handle_initialize(),
             "initialized" => continue,
             "tools/list" => tools::list_tools(),
-            "tools/call" => tools::call_tool(&state, &params).await,
+            "tools/call" => {
+                wire_append("RAW", &line);
+                tools::call_tool(&state, &params).await
+            }
             "resources/list" => handle_resources_list(),
             "prompts/list" => handle_prompts_list(),
             _ => Err(anyhow::anyhow!("Unknown method: {method}")),

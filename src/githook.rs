@@ -82,15 +82,15 @@ fn repo_root(at: &Path) -> Result<PathBuf> {
 
 /// Resolve the hooks directory, honoring `core.hooksPath` (Husky/pre-commit).
 fn hooks_dir(root: &Path) -> Result<PathBuf> {
-    if let Ok(p) = git(&["config", "--get", "core.hooksPath"], root) {
-        if !p.is_empty() {
-            let pb = if Path::new(&p).is_absolute() {
-                PathBuf::from(&p)
-            } else {
-                root.join(&p)
-            };
-            return Ok(pb);
-        }
+    if let Ok(p) = git(&["config", "--get", "core.hooksPath"], root)
+        && !p.is_empty()
+    {
+        let pb = if Path::new(&p).is_absolute() {
+            PathBuf::from(&p)
+        } else {
+            root.join(&p)
+        };
+        return Ok(pb);
     }
     let gp = git(&["rev-parse", "--git-path", "hooks"], root)?;
     let pb = if Path::new(&gp).is_absolute() {

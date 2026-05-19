@@ -216,6 +216,8 @@ async fn expand_from_graph(db: &Surreal<Db>, results: &mut Vec<SearchResult>, li
     // Phase 6: observation→memory bridging via `touches_file` + `commits_for`.
     expand_from_observations(db, results).await;
 
+    // RecordId's interior mutability (Value→Regex) is never mutated here; it's a stable key.
+    #[allow(clippy::mutable_key_type)]
     let seed_by_id: HashMap<surrealdb::types::RecordId, f64> = results
         .iter()
         .filter(|r| r.obs_type.starts_with("memory:"))
@@ -437,6 +439,8 @@ async fn expand_from_observations(db: &Surreal<Db>, results: &mut Vec<SearchResu
     };
     let rows: Vec<NRow> = resp.take(0).unwrap_or_default();
 
+    // RecordId's interior mutability (Value→Regex) is never mutated here; it's a stable key.
+    #[allow(clippy::mutable_key_type)]
     let seed_score_map: HashMap<&surrealdb::types::RecordId, f64> =
         obs_seeds.iter().map(|(id, s)| (id, *s)).collect();
 
@@ -446,9 +450,9 @@ async fn expand_from_observations(db: &Surreal<Db>, results: &mut Vec<SearchResu
         let best = edges
             .iter()
             .filter(|e| e.to == rid)
-            .filter_map(|e| {
+            .map(|e| {
                 let seed_s = seed_score_map.get(&e.from).copied().unwrap_or(0.0);
-                Some((e, seed_s * 0.3 * e.score))
+                (e, seed_s * 0.3 * e.score)
             })
             .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
         let Some((edge, score)) = best else { continue };

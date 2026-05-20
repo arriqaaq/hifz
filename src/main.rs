@@ -102,7 +102,7 @@ enum Command {
         #[arg(long)]
         memories: bool,
     },
-    /// Phase 4.6: dump every memory in a project to a directory of
+    /// Dump every memory in a project to a directory of
     /// frontmatter-rich markdown files. The directory layout is flat:
     /// `<out>/<id>.md`. Open the directory in Obsidian or any editor;
     /// hand-edits round-trip via `hifz import`.
@@ -120,7 +120,7 @@ enum Command {
         #[arg(long)]
         out: PathBuf,
     },
-    /// Phase 4.6: ingest a directory of edited markdown files. Each file
+    /// Ingest a directory of edited markdown files. Each file
     /// must have an `id:` frontmatter field referring to a memory; the
     /// import writes a NEW version that supersedes the old.
     Import {
@@ -131,7 +131,7 @@ enum Command {
         #[arg(long)]
         from: PathBuf,
     },
-    /// Index a code repo into the persistent store (M2+).
+    /// Index a code repo into the persistent store.
     /// Walks the root, chunks every supported file, embeds the chunks, and
     /// extracts named symbols. Idempotent — unchanged files are skipped.
     Index {
@@ -148,7 +148,7 @@ enum Command {
         #[arg(long, default_value = "2097152")]
         max_file_bytes: u64,
     },
-    /// Reconcile the code-index against the filesystem (M5+).
+    /// Reconcile the code-index against the filesystem.
     /// Drops chunks/symbols/edges for files no longer on disk and (optionally)
     /// decays cold chunks.
     CodeGc {

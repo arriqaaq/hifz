@@ -14,7 +14,7 @@ pub struct Config {
     pub consolidation_enabled: bool,
     pub token_budget: usize,
     pub max_obs_per_session: usize,
-    /// A-MEM Memory Evolution on write. Requires Ollama; defaults to off.
+    /// Memory Evolution on write. Requires Ollama; defaults to off.
     pub llm_evolve: bool,
 }
 
@@ -102,7 +102,6 @@ pub fn load_config() -> Config {
     let mut cfg = Config::default();
     let file_env = load_env_file();
 
-    // Helper to get from file env or process env
     let get = |key: &str| -> Option<String> {
         file_env
             .get(key)

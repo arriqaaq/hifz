@@ -32,6 +32,7 @@
     }
     if (path === '/observations') return [...out, { label: 'Observations', href: null }];
     if (path === '/memories') return [...out, { label: 'Memories', href: null }];
+    if (path === '/code') return [...out, { label: 'Code search', href: null }];
     if (path === '/graph') return [...out, { label: 'Graph', href: null }];
     if (path === '/commits') return [...out, { label: 'Commits', href: null }];
     if (path.startsWith('/commits/') && params.sha) {

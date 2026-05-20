@@ -12,14 +12,14 @@
 //!
 //! Compiled into every hifz build — no feature flag.
 //!
-//! ## M1 surface (this module set)
+//! ## Surface (this module set)
 //! - `lang`     — extension → tree-sitter `Language` mapping
 //! - `walker`   — gitignore-honest file walking with binary + size guards
 //! - `splitter` — language-aware chunking via `text-splitter::CodeSplitter`,
 //!   fallback to `crate::chunk::split` for unsupported types
 //! - `symbols`  — function/struct/enum/... extraction via tree-sitter `Query`
 //!
-//! ## M2+ adds
+//! ## Also provides
 //! - `index`, `search`, `link`, `gc`, `watcher`
 
 pub mod codeintel;

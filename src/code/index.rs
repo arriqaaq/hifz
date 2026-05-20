@@ -5,7 +5,7 @@
 //! and `code_symbol` rows. Idempotent via `(mtime_ns, content_hash)`
 //! short-circuiting.
 //!
-//! M2: delete-then-create per file. M3 layers `re_anchor_references` in front
+//! Delete-then-create per file, layering `re_anchor_references` in front
 //! of the delete so memory→chunk edges survive edits.
 
 use std::path::Path;
@@ -103,7 +103,7 @@ pub async fn index_repo(
                 report.errors += 1;
             }
         }
-        // Yield to let memory_search/memory_save interleave (G2).
+        // Yield to let memory_search/memory_save interleave.
         tokio::task::yield_now().await;
     }
 
@@ -127,7 +127,7 @@ async fn index_walked(
     project: &str,
     f: &WalkedFile,
 ) -> Result<IndexFileOutcome> {
-    // -- Step 1: cheap mtime check ----------------------------------------
+    // cheap mtime check
     let mut resp = db
         .query("SELECT id, mtime_ns, content_hash FROM code_file WHERE project = $p AND path = $r LIMIT 1")
         .bind(("p", project.to_string()))
@@ -143,7 +143,7 @@ async fn index_walked(
         return Ok(IndexFileOutcome::Skipped);
     }
 
-    // -- Step 2: content hash check ---------------------------------------
+    // content hash check
     let bytes = match std::fs::read(&f.abs) {
         Ok(b) => b,
         Err(e) => {
@@ -167,7 +167,7 @@ async fn index_walked(
         return Ok(IndexFileOutcome::Skipped);
     }
 
-    // -- Step 3: chunk + extract symbols ----------------------------------
+    // chunk + extract symbols
     let source = match std::str::from_utf8(&bytes) {
         Ok(s) => s.to_string(),
         Err(_) => {
@@ -184,7 +184,7 @@ async fn index_walked(
     // Symbols + the code graph are built project-wide by `codeintel`
     // (called once at the end of `index_repo`), not per-file here.
 
-    // -- Step 4: embed ----------------------------------------------------
+    // embed
     let texts: Vec<String> = chunks.iter().map(|c| c.content.clone()).collect();
     let embeddings = embedder.embed_batch(&texts).context("embed_batch failed")?;
     if embeddings.len() != chunks.len() {
@@ -197,7 +197,7 @@ async fn index_walked(
 
     let now = chrono::Utc::now().to_rfc3339();
 
-    // -- Step 5: upsert code_file -----------------------------------------
+    // upsert code_file
     let file_id = match existing.as_ref().and_then(|e| e.id.clone()) {
         Some(id) => {
             db.query(
@@ -243,14 +243,14 @@ async fn index_walked(
         }
     };
 
-    // -- Step 6a: snapshot inbound chunk references for re-anchoring (G6).
+    // snapshot inbound chunk references for re-anchoring.
     // (Symbol-level re-anchoring is gone — `codeintel` keeps symbol ids
     // stable across reindex and reconciles renames structurally.)
     let archived_chunks = crate::code::link::snapshot_references(db, &file_id)
         .await
         .unwrap_or_default();
 
-    // -- Step 6b: wipe old chunks + their part_of edges (symbols are
+    // wipe old chunks + their part_of edges (symbols are
     // owned by `codeintel` via stable-id UPSERT, not wiped per file).
     let _ = db
         .query(
@@ -264,7 +264,7 @@ async fn index_walked(
         .bind(("fid", file_id.clone()))
         .await;
 
-    // -- Step 7: write new chunks -----------------------------------------
+    // write new chunks
     let mut chunk_ids: Vec<RecordId> = Vec::with_capacity(chunks.len());
     for (idx, (c, emb)) in chunks.iter().zip(embeddings.into_iter()).enumerate() {
         let chunk_hash = sha256_hex(c.content.as_bytes());
@@ -307,12 +307,12 @@ async fn index_walked(
         chunk_ids.push(cid);
     }
 
-    // -- Step 8: symbols + code graph are built project-wide by
+    // symbols + code graph are built project-wide by
     // `codeintel::index_code_graph` (called once from `index_repo` after
     // all chunks exist), keyed on a deterministic `(project,qualified)` id
     // so `references_symbol` edges survive reindex by construction.
 
-    // -- Step 9: re-anchor archived *chunk* references to new chunks (G6).
+    // re-anchor archived *chunk* references to new chunks.
     if !archived_chunks.is_empty() {
         let _ = crate::code::link::re_anchor_references(db, project, &archived_chunks).await;
     }

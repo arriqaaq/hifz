@@ -1,4 +1,4 @@
-//! Core memory — MemGPT-style per-project always-on block.
+//! Core memory — per-project always-on block.
 //!
 //! One row per project, always prepended to injected context so identity,
 //! active goals, invariants, and watched items never drift out on compaction.

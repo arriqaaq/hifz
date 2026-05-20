@@ -8,6 +8,7 @@
     Workflow,
     Activity,
     Brain,
+    FileCode2,
     GitCommit,
     Coins,
     Search,
@@ -96,6 +97,10 @@
       <a href="/ask" class="link" class:active={page.url.pathname.startsWith('/ask')}>
         <span class="link-icon" style="color: var(--neon-dim)"><MessageCircleQuestion size={14} strokeWidth={1.7} /></span>
         <span class="link-label">Ask</span>
+      </a>
+      <a href="/code" class="link" class:active={page.url.pathname.startsWith('/code')}>
+        <span class="link-icon" style="color: var(--ink-muted)"><FileCode2 size={14} strokeWidth={1.7} /></span>
+        <span class="link-label">Code search</span>
       </a>
       <a href="/" class="link" class:active={page.url.pathname === '/'}>
         <span class="link-icon" style="color: var(--ink-muted)"><Home size={14} strokeWidth={1.7} /></span>

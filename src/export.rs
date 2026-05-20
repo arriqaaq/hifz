@@ -22,7 +22,10 @@ pub async fn run(db: &Surreal<Db>, params: ExportReq) -> Result<serde_json::Valu
         ));
     }
     if params.project.is_some() {
-        obs_conditions.push("project = $project".to_string());
+        // `project` lives on the linked `session` record, not the observation
+        // row — traverse the `session_id` `record<session>` link (mirrors the
+        // search path in `observe.rs`).
+        obs_conditions.push("session_id.project = $project".to_string());
     }
     if let Some(ref types) = params.obs_type {
         let parts: Vec<String> = types
@@ -116,8 +119,16 @@ pub async fn run(db: &Surreal<Db>, params: ExportReq) -> Result<serde_json::Valu
         .and_then(|mut r| r.take(0).ok())
         .unwrap_or_default();
 
-    let runs: Vec<serde_json::Value> = db
-        .query("SELECT * FROM run ORDER BY started_at DESC")
+    let runs_sql = if params.project.is_some() {
+        "SELECT * FROM run WHERE project = $project ORDER BY started_at DESC"
+    } else {
+        "SELECT * FROM run ORDER BY started_at DESC"
+    };
+    let mut runs_q = db.query(runs_sql);
+    if let Some(ref project) = params.project {
+        runs_q = runs_q.bind(("project", project.clone()));
+    }
+    let runs: Vec<serde_json::Value> = runs_q
         .await
         .ok()
         .and_then(|mut r| r.take(0).ok())
@@ -139,7 +150,22 @@ pub async fn run(db: &Surreal<Db>, params: ExportReq) -> Result<serde_json::Valu
         .unwrap_or_default();
 
     let nodes = build_nodes(&sessions, &runs, &observations, &memories);
-    let edges = build_edges(&runs, &observations, &edge_rows);
+    let mut edges = build_edges(&runs, &observations, &edge_rows);
+
+    // Drop orphan edges — any edge whose source or target is not in the node
+    // set. Cytoscape throws when an edge references a nonexistent node, which
+    // blanks the entire canvas, so this guarantee must hold regardless of which
+    // entity sets were filtered (project filter, the `unknown call`/conversation
+    // node skip in `build_nodes`, or the unfiltered `DISTILLED_FROM` memory edges).
+    let node_ids: std::collections::HashSet<&str> = nodes
+        .iter()
+        .filter_map(|n| n.get("id").and_then(|v| v.as_str()))
+        .collect();
+    edges.retain(|e| {
+        let s = e.get("source").and_then(|v| v.as_str());
+        let t = e.get("target").and_then(|v| v.as_str());
+        matches!((s, t), (Some(s), Some(t)) if node_ids.contains(s) && node_ids.contains(t))
+    });
 
     Ok(serde_json::json!({
         "version": env!("CARGO_PKG_VERSION"),
@@ -156,9 +182,7 @@ pub async fn run(db: &Surreal<Db>, params: ExportReq) -> Result<serde_json::Valu
     }))
 }
 
-// ---------------------------------------------------------------------------
 // Graph projection — typed nodes + relationship edges
-// ---------------------------------------------------------------------------
 
 /// Convert a SurrealDB record-id JSON value to its canonical `"table:key"`
 /// string. Handles every shape the SDK has emitted across versions.

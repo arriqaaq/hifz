@@ -1,6 +1,6 @@
-//! Corpus retrieval: a **ranked hybrid** search over the atlas graph —
-//! vector KNN ⊕ BM25, fused with SurrealDB's `search::rrf`, exactly the
-//! idiom hifz-core uses (`src/search.rs` `search_hybrid_with_config`).
+//! Corpus retrieval: hybrid search over the atlas graph — vector KNN and
+//! BM25, fused with SurrealDB's `search::rrf`, the same idiom hifz-core uses
+//! (`src/search.rs` `search_hybrid_with_config`).
 //!
 //! Every branch is project-scoped. Document *content* lives in `atlas_chunk`;
 //! topical labels/summaries live in `atlas_node`. We fuse five branches
@@ -85,10 +85,7 @@ pub async fn query(store: &Store, embedder: &Embedder, q: &str, limit: usize) ->
     let pid = store.pid();
     let qvec = embedder.embed_single(q)?;
 
-    // Five RRF branches, all project-scoped, mirroring core search's
-    // `search::rrf([...], limit, k)` shape (vector = `vector::distance::knn`
-    // over the HNSW index; BM25 = `field @N,OR@ $q` + `search::score(N)`,
-    // numbered refs unique per predicate). Chunk content carries the real
+    // Five RRF branches, all project-scoped. Chunk content carries the
     // answer text; node label/summary catch topical/title matches.
     let sql = format!(
         "search::rrf([\

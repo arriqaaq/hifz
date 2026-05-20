@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { page } from '$app/state';
-  import { getExport, getSessions } from '$lib/api';
+  import { getExport, getSessions, getAtlasGraph, listProjects } from '$lib/api';
   import CytoscapeGraph, {
     type GraphInputNode,
     type GraphInputEdge,
@@ -28,13 +28,23 @@
   let loading = $state(true);
   let error = $state('');
   let projects = $state<string[]>([]);
+  let atlasProjects = $state<string[]>([]);
   let selectedId = $state<string | undefined>(undefined);
   let localMode = $state(false);
   let localDepth = $state(2);
-  let lastSearch = '';
+  let lastKey = '';
 
   let filters = $derived<Filters>(readFilters(page.url));
   let split = $derived(page.url.searchParams.get('split') ?? '');
+  // `Atlas` (corpus graph) is the default; `Activity` is the hifz
+  // observation/session/run/memory graph. Lives in the URL so links/reloads
+  // keep it (default `atlas` is omitted from the query string).
+  let source = $derived<'atlas' | 'activity'>(
+    page.url.searchParams.get('source') === 'activity' ? 'activity' : 'atlas',
+  );
+  // Project namespaces differ: Atlas uses slugs (`dst`), Activity uses hifz
+  // session projects (full paths). Show the source-appropriate list.
+  let projectOptions = $derived(source === 'atlas' ? atlasProjects : projects);
 
   function toggleSplit() {
     const url = new URL(page.url);
@@ -66,6 +76,10 @@
     loading = true;
     error = '';
     try {
+      if (source === 'atlas') {
+        await loadAtlas(f.project);
+        return;
+      }
       const apiParams = toApiParams(f);
       const data = (await getExport({
         project: apiParams.project,
@@ -131,6 +145,41 @@
     }
   }
 
+  // Atlas corpus graph — `atlas_node` / `atlas_edge` for the selected project
+  // slug. Colors + shapes for the atlas kinds (document/concept/code_symbol/
+  // external/file) already live in graphStyles.ts, keyed off `kind`/`type`.
+  async function loadAtlas(project: string) {
+    rawById = new Map();
+    if (!project) {
+      // Guard the reassignment: the $effect tracks `allNodes`, so handing it a
+      // fresh empty array on every run would retrigger the effect in a loop.
+      if (allNodes.length) allNodes = [];
+      if (allEdges.length) allEdges = [];
+      nodes = [];
+      edges = [];
+      return;
+    }
+    const data = await getAtlasGraph(project);
+    const ns: GraphInputNode[] = data.nodes.map((n) => {
+      const id = extractId((n as { id?: unknown }).id);
+      return {
+        id,
+        label: String((n as { label?: unknown }).label ?? ''),
+        kind: (n as { kind?: GraphInputNode['kind'] }).kind ?? 'concept',
+        type: String((n as { kind?: unknown }).kind ?? 'other'),
+        raw: n,
+      } satisfies GraphInputNode;
+    });
+    const es: GraphInputEdge[] = data.edges.map((e) => ({
+      source: extractId((e as { in?: unknown }).in),
+      target: extractId((e as { out?: unknown }).out),
+      rel: String((e as { relation?: unknown }).relation ?? ''),
+    }));
+    allNodes = ns;
+    allEdges = es;
+    applyLocalView();
+  }
+
   function typeForNode(n: RawNode, raw: unknown): string {
     // The Cytoscape stylesheet keys node colour off `data(type)`. For
     // observations + commits we want the obs_type colour; for memories
@@ -178,6 +227,9 @@
   }
 
   onMount(async () => {
+    // Activity projects come from hifz sessions; Atlas projects from the
+    // atlas project registry (slugs) — union both so neither namespace's
+    // projects go missing from the dropdown.
     try {
       const r = await getSessions(200);
       const seen = new Set<string>();
@@ -186,12 +238,19 @@
     } catch {
       // ignore
     }
+    try {
+      const r = await listProjects();
+      atlasProjects = r.projects.map((p) => p.slug).sort();
+    } catch {
+      // ignore
+    }
   });
 
   $effect(() => {
-    const cur = page.url.search;
-    if (cur === lastSearch && allNodes.length > 0) return;
-    lastSearch = cur;
+    // Reload when either the filters (URL search) or the source change.
+    const key = `${source}|${page.url.search}`;
+    if (key === lastKey && allNodes.length > 0) return;
+    lastKey = key;
     void load(filters);
   });
 
@@ -231,8 +290,36 @@
     applyLocalView();
   }
 
+  // `applyFilters` rebuilds the query string from filters alone and would drop
+  // our `source` param, so navigate through a helper that re-appends it.
+  function navigate(f: Filters, src: 'atlas' | 'activity') {
+    const p = new URLSearchParams();
+    if (f.query) p.set('q', f.query);
+    if (f.sessionId) p.set('session', f.sessionId);
+    if (f.project) p.set('project', f.project);
+    if (f.obsTypes.length) p.set('type', f.obsTypes.join(','));
+    if (f.since) p.set('since', f.since);
+    if (f.until) p.set('until', f.until);
+    if (f.minImportance > 0) p.set('min_importance', String(f.minImportance));
+    if (split) p.set('split', split);
+    if (src !== 'atlas') p.set('source', src); // default `atlas` stays implicit
+    const qs = p.toString();
+    void goto(qs ? `${page.url.pathname}?${qs}` : page.url.pathname, {
+      replaceState: true,
+      keepFocus: true,
+      noScroll: true,
+    });
+  }
+
   function onFiltersChange(next: Filters) {
-    void applyFilters(next);
+    navigate(next, source);
+  }
+
+  function setSource(src: 'atlas' | 'activity') {
+    if (src === source) return;
+    // Project slugs (Atlas) and session paths (Activity) are different
+    // namespaces — clear the selection when switching.
+    navigate({ ...filters, project: '' }, src);
   }
 
   function filterToSession(sid: string) {
@@ -242,7 +329,26 @@
 </script>
 
 <div class="page">
-  <FilterBar {filters} {projects} onChange={onFiltersChange} />
+  <div class="source-toggle" role="group" aria-label="Graph source">
+    <button
+      type="button"
+      class="source-btn"
+      class:active={source === 'atlas'}
+      onclick={() => setSource('atlas')}
+    >
+      Atlas
+    </button>
+    <button
+      type="button"
+      class="source-btn"
+      class:active={source === 'activity'}
+      onclick={() => setSource('activity')}
+    >
+      Activity
+    </button>
+  </div>
+
+  <FilterBar {filters} projects={projectOptions} onChange={onFiltersChange} />
 
   <div class="graph-controls">
     <label class="local-toggle">
@@ -280,7 +386,11 @@
           <p style="color: var(--danger); margin: 0;">{error}</p>
         </div>
       {:else if nodes.length === 0}
-        <p class="empty">No data to visualize. Try clearing filters or check the server is running.</p>
+        {#if source === 'atlas' && !filters.project}
+          <p class="empty">Select an Atlas project to visualize its corpus graph.</p>
+        {:else}
+          <p class="empty">No data to visualize. Try clearing filters or check the server is running.</p>
+        {/if}
       {:else}
         <CytoscapeGraph {nodes} {edges} bind:selectedId {onSelect} {onExpand} />
       {/if}
@@ -327,6 +437,30 @@
     display: flex;
     flex-direction: column;
     height: calc(100vh - 100px);
+  }
+
+  .source-toggle {
+    display: inline-flex;
+    align-self: flex-start;
+    border: 1px solid var(--line-strong);
+    margin-bottom: 12px;
+  }
+  .source-btn {
+    padding: 5px 16px;
+    font-family: var(--font-ui);
+    font-size: 11px;
+    font-weight: 600;
+    background: var(--bg);
+    border: none;
+    color: var(--ink-muted);
+    cursor: pointer;
+  }
+  .source-btn + .source-btn {
+    border-left: 1px solid var(--line-strong);
+  }
+  .source-btn.active {
+    background: var(--neon);
+    color: var(--ink);
   }
 
   .graph-controls {

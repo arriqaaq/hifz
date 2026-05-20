@@ -111,7 +111,7 @@ export default async function (pi: ExtensionAPI): Promise<void> {
           const errSnippet = errorSnippet(e);
           const q = `${tool} ${errSnippet}`.trim().slice(0, 240);
           if (q) {
-            const r = await client.searchAgentic({ query: q, limit: 5, project: ctx.cwd });
+            const r = await client.searchSession({ query: q, limit: 5, project: ctx.cwd });
             const similar = (r?.results ?? [])
               .map((x: any) => ({
                 title: x?.title,
@@ -240,7 +240,7 @@ export default async function (pi: ExtensionAPI): Promise<void> {
         return;
       }
       try {
-        const r = await client.searchAgentic({ query, limit: 5, project: ctx.cwd });
+        const r = await client.searchSession({ query, limit: 5, project: ctx.cwd });
         const lines = (r?.results ?? [])
           .map((x: any) => `• ${x?.title ?? "(untitled)"} [${x?.obs_type ?? "?"}]`)
           .join("\n");

@@ -39,7 +39,7 @@ pub async fn generate_context_with_query(
     let mut context = String::new();
     let mut tokens_used = 0;
 
-    // 0. Core memory — always prepended, per-project.
+    // Core memory — always prepended, per-project.
     if let Ok(core_row) = core_mem::get(db, project).await {
         let rendered = core_mem::render(&core_row);
         if !rendered.is_empty() {
@@ -65,7 +65,7 @@ pub async fn generate_context_with_query(
         }
     };
 
-    // 1. Saved memories.
+    // Saved memories.
     let memory_entries = if let (Some(q), Some(e)) = (effective_query, embedder) {
         query_aware_memories(db, e, project, q, 20).await?
     } else {
@@ -93,9 +93,9 @@ pub async fn generate_context_with_query(
         context.push('\n');
     }
 
-    // 2. Consolidated semantic facts (from tier_semantic). After the schema
-    //    trim these live in `memory` with `category='semantic_fact'`;
-    //    confidence is stored under `metadata.confidence`.
+    // Consolidated semantic facts (from tier_semantic). After the schema
+    // trim these live in `memory` with `category='semantic_fact'`;
+    // confidence is stored under `metadata.confidence`.
     let mut sem_resp = db
         .query(
             "SELECT content AS fact, metadata.confidence AS confidence \
@@ -128,9 +128,9 @@ pub async fn generate_context_with_query(
         context.push('\n');
     }
 
-    // 3. Consolidated procedural knowledge (from tier_procedural). Same
-    //    schema-trim story: lives in `memory` with `category='procedure'`,
-    //    structured fields under `metadata`.
+    // Consolidated procedural knowledge (from tier_procedural). Same
+    // schema-trim story: lives in `memory` with `category='procedure'`,
+    // structured fields under `metadata`.
     let mut proc_resp = db
         .query(
             "SELECT title AS name, metadata.steps AS steps, \
@@ -174,7 +174,7 @@ pub async fn generate_context_with_query(
         context.push('\n');
     }
 
-    // 4. Recent high-importance observations for this project.
+    // Recent high-importance observations for this project.
     let mut obs_resp = db
         .query(
             "SELECT title, narrative, obs_type, importance, timestamp \
@@ -202,7 +202,7 @@ pub async fn generate_context_with_query(
         }
     }
 
-    // 5. Recent task outcomes from closed runs (lessons learned).
+    // Recent task outcomes from closed runs (lessons learned).
     let runs = run::recent_with_lessons(db, project, effective_query, 8)
         .await
         .unwrap_or_default();
@@ -236,7 +236,7 @@ pub async fn generate_context_with_query(
     Ok(context)
 }
 
-// --- Memory retrieval paths ---
+// Memory retrieval paths
 
 struct MemoryEntry {
     title: String,
@@ -389,7 +389,6 @@ async fn synthesise_query(db: &Surreal<Db>, project: &str) -> Result<String> {
 
 /// MMR-lite: dedup by (category, first keyword) so we don't return 10 variants
 /// of the same pattern. Cheap, deterministic, no embedding round-trip required.
-/// Phase-3 graph expansion and Phase-1c proper cosine-based MMR will build on this.
 fn mmr_lite(entries: Vec<MemoryEntry>, limit: usize) -> Vec<MemoryEntry> {
     let mut seen = std::collections::HashSet::new();
     let mut out = Vec::new();

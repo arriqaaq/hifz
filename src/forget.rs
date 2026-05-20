@@ -8,7 +8,7 @@ use crate::db::Db;
 pub async fn run_forget(db: &Surreal<Db>, dry_run: bool) -> Result<ForgetResult> {
     let mut result = ForgetResult::default();
 
-    // 1. TTL expiry
+    // TTL expiry
     let expired = find_expired_memories(db).await?;
     result.ttl_expired = expired.len();
     if !dry_run {
@@ -19,7 +19,7 @@ pub async fn run_forget(db: &Surreal<Db>, dry_run: bool) -> Result<ForgetResult>
         }
     }
 
-    // 2. Contradiction detection via Jaccard similarity
+    // Contradiction detection via Jaccard similarity
     let contradictions = find_contradictions(db).await?;
     result.contradictions = contradictions.len();
     if !dry_run {
@@ -30,7 +30,7 @@ pub async fn run_forget(db: &Surreal<Db>, dry_run: bool) -> Result<ForgetResult>
         }
     }
 
-    // 3. Low-value observation cleanup (>180 days, importance ≤ 2)
+    // Low-value observation cleanup (>180 days, importance ≤ 2)
     let low_value = find_low_value_observations(db).await?;
     result.low_value_cleaned = low_value.len();
     if !dry_run {
@@ -41,7 +41,7 @@ pub async fn run_forget(db: &Surreal<Db>, dry_run: bool) -> Result<ForgetResult>
         }
     }
 
-    // 4. Weak memory cleanup (strength < 0.1)
+    // Weak memory cleanup (strength < 0.1)
     let weak = find_weak_memories(db).await?;
     result.weak_memories_cleaned = weak.len();
     if !dry_run {
@@ -52,9 +52,9 @@ pub async fn run_forget(db: &Surreal<Db>, dry_run: bool) -> Result<ForgetResult>
         }
     }
 
-    // 5. (M5) Orphan code-reference edges + tombstoned code_file sweep.
-    //    `code/gc.rs::reconcile_deletions` is the heavyweight pass that needs
-    //    a project root path; this lighter pass works without one.
+    // Orphan code-reference edges + tombstoned code_file sweep.
+    // `code/gc.rs::reconcile_deletions` is the heavyweight pass that needs
+    // a project root path; this lighter pass works without one.
     if !dry_run {
         // Drop references / references_symbol edges whose target row no
         // longer exists (the writer should have done this, but stragglers

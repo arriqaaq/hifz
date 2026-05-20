@@ -1,13 +1,9 @@
 //! Reference binding. Every call/import is bound to exactly one outcome —
 //! `Resolved` (one indexed symbol), `External` (outside the indexed set), or
-//! `Ambiguous` (undecidable, candidates recorded). **Nothing is dropped.**
+//! `Ambiguous` (undecidable, candidates recorded). Nothing is dropped.
 //!
-//! E3 baseline: scope-preferring unique-match resolution + explicit
-//! External/Ambiguous (already strictly better than the reference tool,
-//! which silently drops ambiguous cross-file calls). E3b deepens Rust
-//! precision with the real `use`/import table + lexical shadowing; E3c
-//! extends per language. The *contract* (three honest outcomes, no loss)
-//! is final now; only intra-`Resolved`/`Ambiguous` precision deepens.
+//! Resolution is scope-preferring unique-match plus explicit External/Ambiguous,
+//! with the Rust `use`/import table and lexical shadowing applied.
 
 use std::collections::HashMap;
 
@@ -157,21 +153,21 @@ fn resolve_call(
     by_qualified: &HashMap<String, ()>,
     by_name: &HashMap<String, Vec<String>>,
 ) -> (String, Resolution, Vec<String>) {
-    // 1. Lexical/same-module: a def named `last` in the caller's own module
-    //    shadows any import (Rust name resolution). Precise: the candidate's
-    //    qualified path is exactly `<caller_module>::<last>`.
+    // Lexical/same-module: a def named `last` in the caller's own module
+    // shadows any import (Rust name resolution). The candidate's
+    // qualified path is exactly `<caller_module>::<last>`.
     let same_module = format!("{caller_module}::{last}");
     if by_qualified.contains_key(&same_module) {
         return (same_module, Resolution::Resolved, vec![]);
     }
 
-    // 2. Exact qualified path as written.
+    // Exact qualified path as written.
     if by_qualified.contains_key(raw) {
         return (raw.to_string(), Resolution::Resolved, vec![]);
     }
 
-    // 3. `use` alias substitution: rewrite leading segment via the import
-    //    table, then require an exact hit (precise — no guessing).
+    // `use` alias substitution: rewrite leading segment via the import
+    // table, then require an exact hit (no guessing).
     if let Some(base) = aliases.get(first) {
         let rest = raw
             .strip_prefix(first)
@@ -191,7 +187,7 @@ fn resolve_call(
         }
     }
 
-    // 4. Scope-preferring name table.
+    // Scope-preferring name table.
     let cands = by_name.get(last).cloned().unwrap_or_default();
     match cands.len() {
         0 => (raw.to_string(), Resolution::External, vec![]),

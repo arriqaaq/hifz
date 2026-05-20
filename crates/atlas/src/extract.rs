@@ -177,12 +177,10 @@ pub async fn extract_concepts(
         return Ok(report);
     };
 
-    // -- LLM concept extraction -----------------------------------------
-    // Within-run dedupe (the second half of the B1 fix): a concept the LLM
-    // names in multiple chunks/docs must be counted/UPSERTed once, a
-    // (doc,concept) `mentions` edge created once, a (src,tgt,rel)
-    // concept→concept edge created once — otherwise a doc whose N chunks each
-    // mention "JWT" produced N identical edges in a single pass.
+    // LLM concept extraction.
+    // Within-run dedupe: a concept the LLM names in multiple chunks/docs is
+    // counted/UPSERTed once, with one (doc,concept) `mentions` edge and one
+    // (src,tgt,rel) concept→concept edge per pass.
     let mut seen_concept: HashSet<String> = HashSet::new();
     let mut seen_mention: HashSet<(String, String)> = HashSet::new();
     let mut seen_cc: HashSet<(String, String, String)> = HashSet::new();

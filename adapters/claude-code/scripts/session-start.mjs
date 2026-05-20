@@ -7,8 +7,6 @@ const WARMUP_TOP_N = Number.parseInt(process.env["HIFZ_WARMUP_TOP_N"] || "15", 1
 
 /**
  * Format a warmup digest as a human-readable system-context block.
- * Compact-by-design — the agent gets a "here's where you are" snapshot
- * without burning the conversation budget.
  */
 function formatWarmup(digest) {
 	const lines = [];

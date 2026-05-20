@@ -2,7 +2,7 @@
 //! language-semantic module prefix so symbol identity is the real
 //! qualified path, not file-stem string-mangling.
 //!
-//! Rust today (E3c adds the rest): nearest `Cargo.toml` → crate name;
+//! Rust today (the rest is added per language later): nearest `Cargo.toml` → crate name;
 //! path under `src/` → `crate_name::a::b`; `lib.rs`/`main.rs`/`mod.rs`
 //! collapse to their directory module.
 
@@ -153,7 +153,7 @@ fn python_module_path(file: &Path, root: &Path) -> String {
 
 /// JS/TS: repo-root-relative path, drop extension, `index` collapses to
 /// its directory, `::`-joined. Deterministic + collision-safe (full
-/// tsconfig/extension specifier resolution is the bounded JS/TS deepening).
+/// tsconfig/extension specifier resolution is not performed here).
 fn js_module_path(file: &Path, root: &Path) -> String {
     let rel = match file.strip_prefix(root) {
         Ok(r) => r,

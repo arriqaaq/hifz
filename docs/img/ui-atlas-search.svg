@@ -1,0 +1,197 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 720" font-family="'Inter', system-ui, -apple-system, sans-serif">
+  <defs>
+    <style>
+      .bg     { fill: #f2f1eb; }
+      .surf   { fill: #f8f8f5; }
+      .alt    { fill: #ecebe4; }
+      .ink    { fill: #1a1a1a; }
+      .muted  { fill: #6a6a63; }
+      .faint  { fill: #9a9a91; }
+      .sec    { fill: #3a3a36; }
+      .line   { stroke: #dedcd2; stroke-width: 1; }
+      .strong { stroke: #1a1a1a; }
+      .mono   { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+      .ic     { fill: none; stroke: #6a6a63; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+      .ic-on  { fill: none; stroke: #1a1a1a; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+      .lbl    { font-size: 13px; fill: #3a3a36; }
+      .h11    { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; }
+      .dtype  { font-size: 10px; fill: #6a6a63; letter-spacing: 0.04em; }
+      .title  { font-size: 11.5px; font-weight: 600; fill: #2563EB; }
+      .snip   { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; fill: #3a3a36; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1120" height="720"/>
+
+  <!-- ===== RAIL (Ask active) ===== -->
+  <rect class="surf" x="0" y="0" width="48" height="720"/>
+  <line class="line" x1="48" y1="0" x2="48" y2="720"/>
+  <rect class="ink" x="8" y="8" width="32" height="32" rx="6"/>
+  <text x="24" y="31" text-anchor="middle" fill="#ffffff" font-size="16" font-weight="700">h</text>
+  <rect x="8" y="88" width="32" height="32" rx="6" fill="#d9f400"/>
+  <rect class="ink" x="0" y="94" width="2" height="20" rx="1"/>
+  <path class="ic" d="M17 69 L24 63 L31 69 M19 67 L19 75 L29 75 L29 67"/>
+  <path class="ic-on" d="M17 99 h14 v8 h-8 l-4 4 v-4 h-2 z"/>
+  <path class="ic" d="M24 134 l7 4 -7 4 -7 -4 z M17 142 l7 4 7 -4"/>
+  <path class="ic" d="M18 171 h6 v6 h-6 z M24 174 h5 M29 168 h5 v6 h-5 z M29 180 h5 v6 h-5 z M24 177 v6 h5"/>
+  <path class="ic" d="M17 212 h4 l3 -7 4 14 3 -7 h3"/>
+  <circle class="ic" cx="24" cy="248" r="6"/><path class="ic" d="M24 242 v12 M21 245 q3 3 0 6 M27 245 q-3 3 0 6"/>
+  <!-- Code glyph -->
+  <path class="ic" d="M20 278 l-4 6 4 6 M28 278 l4 6 -4 6"/>
+  <circle class="ic" cx="18" cy="318" r="2.5"/><circle class="ic" cx="31" cy="314" r="2.5"/><circle class="ic" cx="28" cy="326" r="2.5"/><path class="ic" d="M20 317 L29 315 M20 320 L27 325"/>
+  <path class="ic" d="M24 349 l7 4 v8 l-7 4 -7 -4 v-8 z M24 349 v8 M24 357 l7 -4 M24 357 l-7 -4"/>
+  <circle class="ic" cx="24" cy="392" r="4"/><path class="ic" d="M24 384 v4 M24 396 v4"/>
+  <path class="ic" d="M18 428 a6 6 0 1 0 2 -4 M18 422 v4 h4"/><path class="ic" d="M24 425 v4 l3 2"/>
+  <ellipse class="ic" cx="24" cy="461" rx="6" ry="2.6"/><path class="ic" d="M18 461 v4 a6 2.6 0 0 0 12 0 v-4"/>
+  <circle class="ic" cx="24" cy="688" r="6"/><path class="ic" d="M22 686 a2 2 0 1 1 2.5 2 q-0.5 0.4 -0.5 1.4 M24 692 v0.4"/>
+
+  <!-- ===== PANEL (Ask active) ===== -->
+  <rect class="surf" x="48" y="0" width="280" height="720"/>
+  <line class="line" x1="328" y1="0" x2="328" y2="720"/>
+  <rect class="alt" x="58" y="12" width="260" height="30" rx="6"/><rect x="58" y="12" width="260" height="30" rx="6" fill="none" class="line"/>
+  <circle class="ic" cx="74" cy="27" r="4"/><path class="ic" d="M77 30 l3 3"/>
+  <text class="faint" x="88" y="31" font-size="12">Quick filter…</text>
+  <text class="faint h11" x="66" y="68">Workspace</text>
+  <g transform="translate(0,74)">
+    <rect class="alt" x="58" y="11" width="260" height="26" rx="6"/>
+    <rect x="66" y="13" width="8" height="8" rx="2" fill="#c2db00"/>
+    <text x="86" y="24" font-size="13" fill="#1a1a1a" font-weight="500">Ask</text>
+  </g>
+  <g transform="translate(0,102)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#6a6a63"/><text class="lbl" x="86" y="24">Code search</text></g>
+  <g transform="translate(0,130)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#6a6a63"/><text class="lbl" x="86" y="24">Home</text></g>
+  <text class="faint h11" x="66" y="178">Entities</text>
+  <g font-size="13">
+    <g transform="translate(0,184)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#2563EB"/><text class="lbl" x="86" y="24">Sessions</text><text class="faint mono" x="312" y="24" text-anchor="end" font-size="11">312</text></g>
+    <g transform="translate(0,212)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#15803D"/><text class="lbl" x="86" y="24">Runs</text><text class="faint mono" x="312" y="24" text-anchor="end" font-size="11">1,204</text></g>
+    <g transform="translate(0,240)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#B45309"/><text class="lbl" x="86" y="24">Observations</text><text class="faint mono" x="312" y="24" text-anchor="end" font-size="11">8,431</text></g>
+    <g transform="translate(0,268)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#6B3FA0"/><text class="lbl" x="86" y="24">Memories</text><text class="faint mono" x="312" y="24" text-anchor="end" font-size="11">347</text></g>
+    <g transform="translate(0,296)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#C2410C"/><text class="lbl" x="86" y="24">Commits</text><text class="faint mono" x="312" y="24" text-anchor="end" font-size="11">529</text></g>
+  </g>
+  <text class="faint h11" x="66" y="344">Atlas</text>
+  <g transform="translate(0,350)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#475569"/><text class="lbl" x="86" y="24">Atlas</text></g>
+  <g transform="translate(0,378)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#475569"/><text class="lbl" x="86" y="24">Knowledge graph</text></g>
+
+  <!-- ===== HEADER ===== -->
+  <rect class="bg" x="328" y="0" width="792" height="48"/>
+  <line class="line" x1="328" y1="48" x2="1120" y2="48"/>
+  <rect x="344" y="14" width="20" height="20" rx="4" fill="none" class="line"/>
+  <path class="ic" d="M350 20 h8 M350 24 h8 M350 28 h8"/>
+  <text class="ink" x="376" y="30" font-size="13" font-weight="600">Ask</text>
+  <rect class="surf" x="724" y="10" width="240" height="28" rx="6"/><rect x="724" y="10" width="240" height="28" rx="6" fill="none" class="line"/>
+  <circle class="ic" cx="740" cy="24" r="4"/><path class="ic" d="M743 27 l3 3"/>
+  <text class="faint" x="754" y="28" font-size="12">Search…</text>
+  <rect class="bg" x="928" y="16" width="28" height="16" rx="4"/><rect x="928" y="16" width="28" height="16" rx="4" fill="none" class="line"/>
+  <text class="faint mono" x="942" y="28" text-anchor="middle" font-size="10">⌘K</text>
+  <circle cx="1024" cy="24" r="4" fill="#15803D"/><text class="muted mono" x="1034" y="28" font-size="12">v0.4.2</text>
+
+  <!-- ===== MAIN ===== -->
+  <!-- project picker + new project (top-right) -->
+  <text class="muted" x="812" y="79" font-size="12">Project</text>
+  <rect class="bg" x="862" y="64" width="96" height="26" rx="6"/><rect x="862" y="64" width="96" height="26" rx="6" fill="none" class="strong" stroke-width="1"/>
+  <text class="sec mono" x="874" y="81" font-size="12">dst</text><path class="ic" d="M940 73 l4 4 4 -4"/>
+  <rect class="surf" x="968" y="64" width="120" height="26" rx="6"/><rect x="968" y="64" width="120" height="26" rx="6" fill="none" class="strong" stroke-width="1.5"/>
+  <text class="ink" x="1028" y="81" text-anchor="middle" font-size="11" font-weight="600">+ New project</text>
+
+  <!-- ask bar -->
+  <rect class="ink" x="356" y="104" width="732" height="52" rx="10"/>
+  <rect class="surf" x="352" y="100" width="732" height="52" rx="10"/>
+  <rect x="352" y="100" width="732" height="52" rx="10" fill="none" class="strong" stroke-width="1"/>
+  <text class="ink" x="372" y="131" font-size="16">time</text>
+  <circle cx="1058" cy="126" r="19" fill="#d9f400" stroke="#1a1a1a" stroke-width="1"/>
+  <path class="ic-on" d="M1050 126 h14 M1058 120 l6 6 -6 6" stroke-width="2"/>
+
+  <!-- modes: Ask (ghost) / Search (accent) -->
+  <g font-size="11" font-weight="600">
+    <text class="muted" x="352" y="182">Ask</text>
+    <rect x="392" y="166" width="62" height="24" rx="6" fill="#d9f400" stroke="#1a1a1a" stroke-width="1.5"/>
+    <text class="ink" x="423" y="182" text-anchor="middle">Search</text>
+  </g>
+
+  <!-- facet chips -->
+  <g font-size="12">
+    <rect x="352" y="204" width="64" height="24" rx="12" fill="#d9f400" stroke="#1a1a1a" stroke-width="1"/>
+    <text class="ink" x="372" y="220">All <tspan class="ink">20</tspan></text>
+    <rect x="424" y="204" width="128" height="24" rx="12" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1"/>
+    <text class="sec" x="436" y="220">Code_symbol <tspan class="faint">14</tspan></text>
+    <rect x="560" y="204" width="92" height="24" rx="12" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1"/>
+    <text class="sec" x="572" y="220">External <tspan class="faint">6</tspan></text>
+  </g>
+
+  <!-- ===== RESULTS (left) ===== -->
+  <!-- row 1 -->
+  <g transform="translate(0,0)">
+    <text class="mono" x="352" y="264" fill="#6a6a63" font-size="11">&lt;&gt;</text>
+    <text class="dtype" x="374" y="264">CODE_SYMBOL</text>
+    <text class="title" x="462" y="264">release_before_original_delivery_keeps_original_due_time</text>
+    <text class="faint mono" x="834" y="264" text-anchor="end" font-size="11">0.046</text>
+    <text class="snip" x="352" y="282">fn release_before_original_delivery_keeps_original_due_time() {</text>
+    <line class="line" x1="352" y1="296" x2="834" y2="296"/>
+  </g>
+  <!-- row 2 -->
+  <g transform="translate(0,46)">
+    <text class="mono" x="352" y="264" fill="#6a6a63" font-size="11">&lt;&gt;</text>
+    <text class="dtype" x="374" y="264">CODE_SYMBOL</text>
+    <text class="title" x="462" y="264">clock_hook_uses_sim_time_inside_dst_context</text>
+    <text class="faint mono" x="834" y="264" text-anchor="end" font-size="11">0.045</text>
+    <text class="snip" x="352" y="282">fn clock_hook_uses_sim_time_inside_dst_context() {</text>
+    <line class="line" x1="352" y1="296" x2="834" y2="296"/>
+  </g>
+  <!-- row 3 (external, no snippet) -->
+  <g transform="translate(0,92)">
+    <path class="ic" d="M352 257 h7 l3 3 v7 h-10 z" stroke-width="1.3"/>
+    <text class="dtype" x="370" y="264">EXTERNAL</text>
+    <text class="title" x="436" y="264">enable_time</text>
+    <text class="faint mono" x="834" y="264" text-anchor="end" font-size="11">0.016</text>
+    <line class="line" x1="352" y1="278" x2="834" y2="278"/>
+  </g>
+  <!-- row 4 -->
+  <g transform="translate(0,120)">
+    <text class="mono" x="352" y="264" fill="#6a6a63" font-size="11">&lt;&gt;</text>
+    <text class="dtype" x="374" y="264">CODE_SYMBOL</text>
+    <text class="title" x="462" y="264">REAL_CLOCK_GETTIME</text>
+    <text class="faint mono" x="834" y="264" text-anchor="end" font-size="11">0.016</text>
+    <text class="snip" x="352" y="282">static REAL_CLOCK_GETTIME: OnceLock&lt;Option&lt;ClockGettimeFn&gt;&gt; = OnceLock::new();</text>
+    <line class="line" x1="352" y1="296" x2="834" y2="296"/>
+  </g>
+  <!-- row 5 -->
+  <g transform="translate(0,166)">
+    <text class="mono" x="352" y="264" fill="#6a6a63" font-size="11">&lt;&gt;</text>
+    <text class="dtype" x="374" y="264">CODE_SYMBOL</text>
+    <text class="title" x="462" y="264">sim_elapsed</text>
+    <text class="faint mono" x="834" y="264" text-anchor="end" font-size="11">0.016</text>
+    <text class="snip" x="352" y="282">pub fn sim_elapsed() -&gt; Option&lt;std::time::Duration&gt; {</text>
+    <line class="line" x1="352" y1="296" x2="834" y2="296"/>
+  </g>
+  <!-- row 6 -->
+  <g transform="translate(0,212)">
+    <text class="mono" x="352" y="264" fill="#6a6a63" font-size="11">&lt;&gt;</text>
+    <text class="dtype" x="374" y="264">CODE_SYMBOL</text>
+    <text class="title" x="462" y="264">publish_sim_elapsed</text>
+    <text class="faint mono" x="834" y="264" text-anchor="end" font-size="11">0.016</text>
+    <text class="snip" x="352" y="282">pub fn publish_sim_elapsed(_elapsed: std::time::Duration) {}</text>
+    <line class="line" x1="352" y1="296" x2="834" y2="296"/>
+  </g>
+  <!-- row 7 (external) -->
+  <g transform="translate(0,258)">
+    <path class="ic" d="M352 257 h7 l3 3 v7 h-10 z" stroke-width="1.3"/>
+    <text class="dtype" x="370" y="264">EXTERNAL</text>
+    <text class="title" x="436" y="264">std::time::Duration</text>
+    <text class="faint mono" x="834" y="264" text-anchor="end" font-size="11">0.016</text>
+  </g>
+
+  <!-- ===== FILTER-BY-TYPE SIDEBAR (right) ===== -->
+  <text class="muted h11" x="852" y="208">Filter by type</text>
+  <rect class="surf" x="1000" y="194" width="88" height="22" rx="6"/><rect x="1000" y="194" width="88" height="22" rx="6" fill="none" class="strong" stroke-width="1.5"/>
+  <text class="ink" x="1044" y="209" text-anchor="middle" font-size="11" font-weight="600">New answer</text>
+  <line class="line" x1="852" y1="222" x2="1088" y2="222"/>
+  <!-- All (active) -->
+  <rect class="alt" x="852" y="232" width="236" height="30" rx="6"/>
+  <text class="ink" x="864" y="252" font-size="13" font-weight="600">All</text>
+  <text class="ink mono" x="1076" y="252" text-anchor="end" font-size="12">20</text>
+  <!-- Code_symbol -->
+  <text class="sec" x="864" y="284" font-size="13">Code_symbol</text>
+  <text class="faint mono" x="1076" y="284" text-anchor="end" font-size="12">14</text>
+  <!-- External -->
+  <text class="sec" x="864" y="314" font-size="13">External</text>
+  <text class="faint mono" x="1076" y="314" text-anchor="end" font-size="12">6</text>
+</svg>

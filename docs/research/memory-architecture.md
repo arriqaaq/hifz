@@ -1,21 +1,18 @@
 # hifz Memory Architecture — Research
 
-This doc captures the *why* behind hifz's memory design: prior art, tradeoffs, and the verified SurrealDB syntax we rely on. Companion to `ARCHITECTURE.md` which describes the *how*.
+This doc captures the *why* behind hifz's memory design: the design decisions, tradeoffs, and the verified SurrealDB syntax we rely on. Companion to `ARCHITECTURE.md` which describes the *how*.
 
 ## Goal
 
-Turn hifz from log-with-search into a system whose injected context the LLM consistently reaches for. Bias: deterministic / local-first. **LLM only runs when `HIFZ_LLM_EVOLVE=true`** and only for A-MEM–style Memory Evolution (on new-memory write, select neighbours and rewrite their metadata). All retrieval, linking, and injection work without an LLM.
+Turn hifz from log-with-search into a system whose injected context the LLM consistently reaches for. Bias: deterministic / local-first. **LLM only runs when `HIFZ_LLM_EVOLVE=true`** and only for Memory Evolution (on new-memory write, select neighbours and rewrite their metadata). All retrieval, linking, and injection work without an LLM.
 
-## A. Prior art synthesis
+## A. Design decisions
 
-| System | What we borrow | What we don't |
-|---|---|---|
-| **A-MEM** ([arxiv:2502.12110](https://arxiv.org/pdf/2502.12110)) | Memory Evolution: on new-memory write, LLM mutates *neighbours'* tags/context/links. Zettelkasten-style graph. | Always-on LLM in the write path — we make it opt-in. |
-| **Mem0** ([arxiv:2504.19413](https://arxiv.org/pdf/2504.19413)) | BM25 + vector + graph RRF; recency decay `exp(-age/30)`; access reinforcement `+0.1 per retrieval, cap +2.0`. | Their proprietary orchestrator; we use SurrealDB RRF. |
-| **MemGPT** ([arxiv:2310.08560](https://arxiv.org/abs/2310.08560)) | "Core memory" tier always prepended. | OS-style paging between tiers — hifz doesn't need it given SurrealDB is local. |
-| **MIRIX** ([Agent-Memory-Paper-List](https://github.com/Shichun-Liu/Agent-Memory-Paper-List)) | Typed memory modules (semantic / procedural / episodic) — hifz has `semantic_memory`, `procedural_memory`, and `run` for task-scoped trajectories (episodic layer). | Full multimodal / resource / knowledge-vault tiers. |
-| **Position: Episodic Memory is Missing** ([arxiv:2502.06975](https://arxiv.org/pdf/2502.06975)) | Task-scoped **run** as the unit of replay (paper: “episode”). | Separate episodic index per agent persona. |
-| **MemoryBank** | Ebbinghaus forgetting curve — informs the `exp(-age/30)` default. | |
+- **Memory Evolution is opt-in, on curated tiers only.** When `HIFZ_LLM_EVOLVE=true`, a new-memory write triggers the LLM to inspect the note's KNN/graph neighbours and rewrite *their* tags/context/links. We deliberately keep this off the write path by default and run it only on `memory`, `semantic_memory`, and `procedural_memory` — never on raw observations, where it would cost tokens with no retrieval payoff.
+- **Retrieval is deterministic and local-first.** Hybrid BM25 + vector + graph fused with SurrealDB RRF, recency decay `exp(-age/30)`, and access reinforcement (`+0.1` per retrieval, capped). No external service is required for any retrieval, linking, or injection path.
+- **Always-on core memory.** A small per-project block (identity, goals, invariants, watchlist) is always prepended to injected context so it never drifts out under compaction. SurrealDB is local, so we don't need OS-style paging between tiers.
+- **Typed memory layers.** `semantic_memory`, `procedural_memory`, and task-scoped `run` give us distinct fact / how-to / episodic layers without a heavyweight multi-module store.
+- **Recency default.** The `exp(-age/30)` half-life follows a forgetting-curve intuition; the 30-day constant is a tunable default, not a claim.
 
 ## B. Design tradeoffs
 
@@ -53,7 +50,7 @@ All patterns were verified against local copies of the SurrealDB source and the 
 
 1. **Memory scoping — project-scoped.** `project: string` is present on `memory`, `semantic_memory`, `procedural_memory`, `core_memory`, `run`, `edge`, `entity`. All search and context queries filter on `project`. Existing rows backfill from `session_ids[0].project`.
 2. **Embedding input — richer text.** We embed `title + "\n" + content + "\nconcepts: " + concepts + "\nfiles: " + files`. Ablations can compare against title+content only.
-3. **Evolution scope — curated tiers only.** Evolution runs on `memory`, `semantic_memory`, `procedural_memory`. Observations stay ephemeral — evolving them would be cost-prohibitive with no retrieval benefit, and it matches A-MEM's intent (curated notes, not raw traces).
+3. **Evolution scope — curated tiers only.** Evolution runs on `memory`, `semantic_memory`, `procedural_memory`. Observations stay ephemeral — evolving them would be cost-prohibitive with no retrieval benefit, and evolution is meant for curated notes, not raw traces.
 
 ## E. LLM-as-reranker: the debate
 

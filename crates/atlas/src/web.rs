@@ -5,9 +5,9 @@
 //! Project is **per-request** (`?project=`), not process-fixed. Build
 //! endpoints (`/build`, `/code`, `/ingest`, `/extract`, `/cluster`,
 //! `/upload`) are **asynchronous**: they spawn a background job and return
-//! `{started:true}` immediately; `/status?project=` reports progress. This
-//! matches the Glean async-index pattern — a synchronous walk+embed+LLM
-//! over a real repo would time out the request/UI.
+//! `{started:true}` immediately; `/status?project=` reports progress. A
+//! synchronous walk+embed+LLM over a real repo would time out the
+//! request/UI.
 
 use std::path::PathBuf;
 use std::process::Command;

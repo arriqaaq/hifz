@@ -36,7 +36,7 @@ async function main() {
 	const query = [...files, ...terms].join(" ");
 
 	try {
-		const res = await fetch(`${REST_URL}/api/v1/search/agentic`, {
+		const res = await fetch(`${REST_URL}/api/v1/search/session`, {
 			method: "POST",
 			headers: HEADERS,
 			body: JSON.stringify({ query, limit: 5, sessionId }),

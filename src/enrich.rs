@@ -1,8 +1,8 @@
-//! A-MEM-style insert pipeline for memories.
+//! Enrich-and-link insert pipeline for memories.
 //!
 //! Replaces the deterministic-only `remember::save` flow with an
-//! enrich-and-link loop modeled on A-MEM (Xu et al., 2502.12110), but with
-//! typed edges (PROV-O / SKOS / IBIS, see `models::EdgeRelation`).
+//! enrich-and-link loop with typed edges (PROV-O / SKOS / IBIS, see
+//! `models::EdgeRelation`).
 //!
 //! ## The pipeline
 //!
@@ -55,7 +55,7 @@ use crate::models::Category;
 use crate::ollama::OllamaClient;
 
 /// Top-K embedding-nearest neighbors considered for LLM link judgment +
-/// bounded evolution. Mirrors A-MEM's default and caps the per-insert cost.
+/// bounded evolution. Caps the per-insert cost.
 const ENRICH_KNN_K: usize = 10;
 
 /// Memories with `content` shorter than this skip LLM enrichment entirely.
@@ -63,7 +63,7 @@ const ENRICH_KNN_K: usize = 10;
 /// is not worth the round-trip.
 const SALIENCE_MIN_CHARS: usize = 80;
 
-/// Hard cap on neighbor mutations applied per insert. Matches A-MEM's bound.
+/// Hard cap on neighbor mutations applied per insert.
 const MAX_NEIGHBOR_MUTATIONS: usize = 10;
 
 /// Regex for file-path-like tokens in free text. Greedy-but-safe: requires
@@ -81,9 +81,7 @@ static FILE_PATH_RE: LazyLock<Regex> = LazyLock::new(|| {
     .expect("file path regex")
 });
 
-// ---------------------------------------------------------------------------
 // LLM payload shapes
-// ---------------------------------------------------------------------------
 
 /// Wire shape returned by the single combined enrich+link LLM call.
 #[derive(Debug, Default, Deserialize)]
@@ -135,9 +133,7 @@ fn default_score() -> f64 {
     0.6
 }
 
-// ---------------------------------------------------------------------------
 // Title derivation
-// ---------------------------------------------------------------------------
 
 /// Strip leading markdown heading / blockquote / bullet / ordered-list markers
 /// from a line so a derived headline reads cleanly (`## Foo` → `Foo`,
@@ -193,9 +189,7 @@ pub fn derive_title(content: &str, category: &str) -> String {
     sentence.trim().to_string()
 }
 
-// ---------------------------------------------------------------------------
 // Public entry point
-// ---------------------------------------------------------------------------
 
 /// One enriched memory insert.
 ///
@@ -223,7 +217,7 @@ pub async fn save_enriched(
 ) -> Result<String> {
     let now = chrono::Utc::now().to_rfc3339();
 
-    // ---- Step 2: deterministic file-path extraction ----------------------
+    // Deterministic file-path extraction.
     extract_files_into(content, &mut files);
     if let Some(long) = content_long.as_deref() {
         extract_files_into(long, &mut files);
@@ -232,7 +226,7 @@ pub async fn save_enriched(
     dedup_in_place(&mut keywords);
     dedup_in_place(&mut tags);
 
-    // ---- Step 3: LLM enrichment + link judgment (if salient + available) -
+    // LLM enrichment + link judgment (if salient + available).
     let llm_enrich_eligible = enable_llm
         && ollama.is_some()
         && content.len() >= SALIENCE_MIN_CHARS
@@ -300,7 +294,7 @@ pub async fn save_enriched(
         tags.push(category.as_str().to_string());
     }
 
-    // ---- Step 4: re-embed if we got new fields ---------------------------
+    // Re-embed if we got new fields.
     let final_embedding = if context_summary.is_some() || keywords.len() > files.len()
     // cheap heuristic: if anything changed, re-embed
     {
@@ -315,7 +309,7 @@ pub async fn save_enriched(
         provisional_embed
     };
 
-    // ---- Step 5: persist memory row --------------------------------------
+    // Persist memory row.
     #[derive(Debug, SurrealValue)]
     struct Created {
         id: Option<RecordId>,
@@ -362,7 +356,7 @@ pub async fn save_enriched(
         anyhow::bail!("memory insert returned no id");
     };
 
-    // ---- Step 6: link generation -----------------------------------------
+    // Link generation.
     // Long-form artifact categories own intentional links (Plans link via
     // `supersedes` to prior Plans, etc.); skip the noisy kNN co-occurrence
     // pass for them.
@@ -395,7 +389,7 @@ pub async fn save_enriched(
     // LLM-proposed typed edges (synchronous — they're the immediate value).
     apply_llm_links(db, &new_id, &llm_output.links, &neighbors).await;
 
-    // ---- Step 6.5: code cross-linking (M3+) ------------------------------
+    // Code cross-linking.
     // Auto-extract `path:line[-line]` and qualified-symbol patterns from the
     // memory text and create `references` / `references_symbol` edges to
     // already-indexed code chunks/symbols. Failure is logged + swallowed so
@@ -408,7 +402,7 @@ pub async fn save_enriched(
         }
     }
 
-    // ---- Step 7: provenance edges ----------------------------------------
+    // Provenance edges.
     if let Some(sid) = session_id
         && let Ok(Some(run_id)) = crate::run::find_open(db, sid).await
     {
@@ -438,7 +432,7 @@ pub async fn save_enriched(
         }
     }
 
-    // ---- Step 8: lifecycle edges (explicit) ------------------------------
+    // Lifecycle edges (explicit).
     if let Some(target_id_str) = closes_memory_id
         && let Some(target) = resolve_memory_id(db, target_id_str).await
     {
@@ -474,7 +468,7 @@ pub async fn save_enriched(
             .await;
     }
 
-    // ---- Step 9: async bounded neighbor evolution ------------------------
+    // Async bounded neighbor evolution.
     // Fire-and-forget; the new memory is durable. The rewrites are
     // append-only via `evolution_history` so concurrent reads see consistent
     // state (worst case: a stale `context_summary` for a few hundred ms).
@@ -491,9 +485,7 @@ pub async fn save_enriched(
     Ok(crate::rid_to_string(&new_id))
 }
 
-// ---------------------------------------------------------------------------
-// Step 2 helpers
-// ---------------------------------------------------------------------------
+// File-path extraction helpers
 
 fn extract_files_into(text: &str, out: &mut Vec<String>) {
     for m in FILE_PATH_RE.find_iter(text) {
@@ -519,9 +511,7 @@ fn dedup_in_place(v: &mut Vec<String>) {
     });
 }
 
-// ---------------------------------------------------------------------------
 // Embedding text builder (extends the legacy `remember::build_embed_text`)
-// ---------------------------------------------------------------------------
 
 fn build_embed_text(
     title: &str,
@@ -549,9 +539,7 @@ fn build_embed_text(
     s
 }
 
-// ---------------------------------------------------------------------------
-// Step 3: kNN candidate fetch + LLM call
-// ---------------------------------------------------------------------------
+// kNN candidate fetch + LLM call
 
 #[derive(Debug, Clone, SurrealValue)]
 struct NeighborRow {
@@ -682,9 +670,7 @@ fn parse_enrich_json(raw: &str) -> Result<LlmEnrichOutput> {
     serde_json::from_str::<LlmEnrichOutput>(slice).context("parse enrich JSON")
 }
 
-// ---------------------------------------------------------------------------
-// Step 6 helper — entity-shared linking (lifted from old remember.rs)
-// ---------------------------------------------------------------------------
+// Entity-shared linking (lifted from old remember.rs)
 
 async fn link_by_shared_entities(
     db: &Surreal<Db>,
@@ -754,9 +740,7 @@ async fn link_by_shared_entities(
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Step 6b — apply LLM-proposed typed edges
-// ---------------------------------------------------------------------------
+// Apply LLM-proposed typed edges
 
 async fn apply_llm_links(
     db: &Surreal<Db>,
@@ -808,9 +792,7 @@ async fn apply_llm_links(
     }
 }
 
-// ---------------------------------------------------------------------------
-// Step 9 — bounded async neighbor evolution
-// ---------------------------------------------------------------------------
+// Bounded async neighbor evolution
 
 async fn apply_neighbor_evolutions(
     db: &Surreal<Db>,
@@ -902,9 +884,7 @@ async fn apply_neighbor_evolutions(
     }
 }
 
-// ---------------------------------------------------------------------------
-// Shared helper — resolve "memory:abc" / "memory:⟨ulid⟩" string to RecordId
-// ---------------------------------------------------------------------------
+// Resolve "memory:abc" / "memory:⟨ulid⟩" string to RecordId
 
 async fn resolve_memory_id(db: &Surreal<Db>, id_str: &str) -> Option<RecordId> {
     let normalized = if id_str.starts_with("memory:") {
@@ -924,10 +904,6 @@ async fn resolve_memory_id(db: &Surreal<Db>, id_str: &str) -> Option<RecordId> {
     let rows: Vec<Row> = resp.take(0).ok()?;
     rows.into_iter().next().and_then(|r| r.id)
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {

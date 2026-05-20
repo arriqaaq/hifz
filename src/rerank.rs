@@ -4,7 +4,7 @@
 //! rerank path in [`crate::llm_rerank`] — public cross-encoders are
 //! cheaper per call (~100–500ms CPU) but tend to underperform on
 //! domain-technical text because their training distributions (MS-MARCO +
-//! web QA) don't cover code/config terminology. Phase 10 bench: `bge-base`
+//! web QA) don't cover code/config terminology. A bench showed `bge-base`
 //! dropped Recall@5 from 0.944 → 0.900 on the hifz corpus. Jina variants
 //! are plausible alternatives worth measuring before concluding.
 //!

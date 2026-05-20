@@ -201,7 +201,7 @@
 
       {#if memory.context_summary}
         <div class="card">
-          <h3>Context summary <span class="hint">(LLM-enriched)</span></h3>
+          <h3>Context summary</h3>
           <blockquote>{memory.context_summary}</blockquote>
         </div>
       {/if}

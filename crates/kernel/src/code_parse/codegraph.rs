@@ -5,8 +5,7 @@
 //! Identity is the language-semantic fully-qualified path
 //! (`crate::module::Type::method`), derived from the project module path
 //! (`langmod`) + the in-file AST scope chain. Two same-named symbols in
-//! different scopes are therefore distinct *by construction* — this is the
-//! collision fix the whole plan turns on.
+//! different scopes are therefore distinct *by construction*.
 
 use super::lang::Language;
 use super::langcfg::LanguageConfig;

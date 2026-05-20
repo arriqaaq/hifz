@@ -47,7 +47,9 @@
     source: string;
     target: string;
     kind?: EdgeClass;
-    rel?: EdgeRel;
+    // hifz activity rels (EdgeRel) or atlas relations
+    // (calls/imports/contains/related/mentions, …) — accept any string.
+    rel?: EdgeRel | string;
   }
 
   let {
@@ -79,10 +81,12 @@
       degree.set(e.source, (degree.get(e.source) ?? 0) + 1);
       degree.set(e.target, (degree.get(e.target) ?? 0) + 1);
     }
+    const nodeIds = new Set<string>();
     for (const n of ns) {
       const deg = degree.get(n.id) ?? 0;
       const baseSize = n.kind === 'memory' ? 26 : 14;
       const size = Math.max(baseSize, Math.min(48, baseSize + deg * 2));
+      nodeIds.add(n.id);
       els.push({
         data: {
           id: n.id,
@@ -97,6 +101,10 @@
       });
     }
     for (const e of es) {
+      // Cytoscape throws on an edge whose source/target node is absent, which
+      // blanks the whole canvas — skip orphans defensively (the backend also
+      // prunes them, but atlas graphs can exceed the node cap and dangle).
+      if (!nodeIds.has(e.source) || !nodeIds.has(e.target)) continue;
       els.push({
         data: {
           id: `${e.source}__${e.target}`,
@@ -111,26 +119,32 @@
   }
 
   function layoutOpts(name: string): LayoutOptions {
+    // Large graphs (corpus/activity exports run into the thousands of nodes)
+    // freeze the tab if we animate a 2500-iteration force layout — every
+    // iteration repaints. Above the threshold, compute the layout once
+    // (animate off) with cheaper settings.
+    const big = nodes.length > 150;
     if (name === 'fcose') {
       return {
         name: 'fcose',
-        animate: true,
+        quality: big ? 'draft' : 'default',
+        animate: !big,
         animationDuration: 600,
-        randomize: false,
+        randomize: big,
         nodeSeparation: 80,
         idealEdgeLength: 100,
         nodeRepulsion: () => 6000,
         gravity: 0.25,
         gravityRange: 3.5,
-        numIter: 2500,
-        tile: true,
-        packComponents: true,
+        numIter: big ? 500 : 2500,
+        tile: !big,
+        packComponents: !big,
       } as unknown as LayoutOptions;
     }
     if (name === 'concentric') {
       return {
         name: 'concentric',
-        animate: true,
+        animate: !big,
         animationDuration: 500,
         concentric: (n) => {
           const raw = (n.data('raw') as GraphInputNode | undefined) ?? null;
@@ -140,9 +154,9 @@
       };
     }
     if (name === 'breadthfirst') {
-      return { name: 'breadthfirst', animate: true, animationDuration: 500, spacingFactor: 1.4 };
+      return { name: 'breadthfirst', animate: !big, animationDuration: 500, spacingFactor: 1.4 };
     }
-    return { name: 'circle', animate: true };
+    return { name: 'circle', animate: !big };
   }
 
   function applyLabelMode() {

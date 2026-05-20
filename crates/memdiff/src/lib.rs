@@ -6,9 +6,6 @@
 //! same value to terminal text, JSON, or — via the serialized form — the
 //! web UI. No surrealdb / kernel / hifz types leak in here (record ids are
 //! plain strings), so this crate stays a pure presentation layer.
-//!
-//! Clean-room: the design pattern is shared with another project but no code,
-//! comments, or type definitions were copied; names and logic are original.
 
 pub mod compute;
 pub mod model;

@@ -54,7 +54,7 @@ pub async fn run(action: HookAction) -> Result<()> {
     }
 }
 
-// ---- git helpers -----------------------------------------------------------
+// git helpers
 
 fn git(args: &[&str], cwd: &Path) -> Result<String> {
     let out = Proc::new("git")
@@ -101,10 +101,10 @@ fn hooks_dir(root: &Path) -> Result<PathBuf> {
     Ok(pb)
 }
 
-// ---- hook script bodies ----------------------------------------------------
+// hook script bodies
 
 /// The hifz block for a given hook. Captures the SHA list *synchronously*
-/// (inside git, before detaching) — graphify's lesson — then backgrounds the
+/// (inside git, before detaching) — then backgrounds the
 /// ingest so `git` returns immediately. Never blocks or fails git.
 fn hook_block(event: &str) -> String {
     let capture = match event {
@@ -152,7 +152,7 @@ fn strip_block(body: &str) -> String {
     out
 }
 
-// ---- actions ---------------------------------------------------------------
+// actions
 
 fn install() -> Result<()> {
     let at = cwd()?;
@@ -421,7 +421,7 @@ async fn ingest_one(
     Ok(())
 }
 
-// ---- small utils -----------------------------------------------------------
+// small utils
 
 fn rest_url() -> String {
     std::env::var("HIFZ_URL").unwrap_or_else(|_| "http://127.0.0.1:3111".to_string())

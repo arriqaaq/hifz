@@ -37,10 +37,10 @@ This document is the ground truth for hifz's memory model. It is updated at the 
 - **`memory`** — curated, project-scoped long-term knowledge. Embedded + indexed + linked. `pinned=true` marks always-on entries (e.g. active plans). May be evolved.
 - **`semantic_memory`** — facts consolidated from sessions (tier 1 consolidation). May be evolved.
 - **`procedural_memory`** — workflows consolidated from observations (tier 3 consolidation). May be evolved.
-- **`run`** — task-scoped trajectory (Phase 4).
-- **`core_memory`** — per-project singleton: identity, goals, invariants, watchlist (Phase 2).
-- **`edge`** — typed graph edges between memories (Phase 3).
-- **`entity`** — typed named things mentioned by observations and memories (Phase 4).
+- **`run`** — task-scoped trajectory.
+- **`core_memory`** — per-project singleton: identity, goals, invariants, watchlist.
+- **`edge`** — typed graph edges between memories.
+- **`entity`** — typed named things mentioned by observations and memories.
 
 ---
 
@@ -93,7 +93,7 @@ Base graph is deterministic. Edges are created at write time.
 | `concept` | Jaccard on `concepts` ≥ 0.3 | Jaccard value |
 | `file` | Jaccard on `files` ≥ 0.3 | Jaccard value |
 | `entity` | shared entity count ≥ 1 | normalised count |
-| `semantic` | proposed by evolution (Phase 5, LLM) | LLM-proposed |
+| `semantic` | proposed by evolution (LLM) | LLM-proposed |
 
 ### Edge dedup
 
@@ -116,7 +116,7 @@ Neighbours are scored `seed_score * 0.5 * edge.score`, merged with primary candi
 
 ## 5. Memory Evolution (opt-in)
 
-Gated by `HIFZ_LLM_EVOLVE=true`. Matches A-MEM §*Memory Evolution*: on a new-memory write, the LLM inspects the new note + its KNN/graph neighbours, then proposes *updates to the neighbours*.
+Gated by `HIFZ_LLM_EVOLVE=true`. Memory Evolution: on a new-memory write, the LLM inspects the new note + its KNN/graph neighbours, then proposes *updates to the neighbours*.
 
 <p align="center"><img src="../img/evolve.svg" alt="memory evolution sequence" width="100%"></p>
 
@@ -143,7 +143,7 @@ Gated by `HIFZ_LLM_EVOLVE=true`. Matches A-MEM §*Memory Evolution*: on a new-me
 
 - Cap `neighbour_updates` to 5 per evolution call.
 - JSON-only contract — misbehaving prompts can't corrupt the graph.
-- Deterministic path (flag off) is fully functional; Phases 1–4 do not depend on this.
+- Deterministic path (flag off) is fully functional; retrieval, core memory, graph linking, and entities do not depend on this.
 
 ### Triggers
 
@@ -153,17 +153,17 @@ Gated by `HIFZ_LLM_EVOLVE=true`. Matches A-MEM §*Memory Evolution*: on a new-me
 
 ---
 
-## 6. Phase map
+## 6. Build order
 
-Build order (each block depends on the prior):
+Priorities, ordered so each block builds on the prior:
 
-1. **Phase 6 — Eval harness** (`memory-bench`). Foundation: nothing else lands without measurement.
-2. **Phase 1 — Retrieval quality**. Embedded memories, project scoping, Rust-side rank, query-aware injection.
-3. **Phase 2 — Core memory** and **Phase 3 — Graph linking** (parallel; both build on Phase 1).
-4. **Phase 4 — Entities + runs**. Builds on Phase 3.
-5. **Phase 5 — Evolution (LLM, opt-in)**. Builds on Phase 4.
+1. **Eval harness** (`memory-bench`). Foundation: nothing else lands without measurement.
+2. **Retrieval quality**. Embedded memories, project scoping, Rust-side rank, query-aware injection.
+3. **Core memory** and **graph linking** (parallel; both build on retrieval).
+4. **Entities + runs**. Builds on graph linking.
+5. **Evolution (LLM, opt-in)**. Builds on entities + runs.
 
-See the **Phase status** table at the top of this document for the current shipped/planned state of each phase.
+See the **status** table at the top of this document for the current shipped/planned state of each item.
 
 ## 7. Migrations
 

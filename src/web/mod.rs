@@ -28,7 +28,7 @@ pub async fn serve(state: Hifz, port: u16) -> Result<()> {
         tracing::error!("atlas schema init failed: {e}");
     }
 
-    // --- Core Memory API (no session/hook/git dependency, scoped by project) ---
+    // Core Memory API (no session/hook/git dependency, scoped by project)
     let core_api = Router::new()
         .route("/health", axum::routing::get(api::health))
         .route("/livez", axum::routing::get(api::livez))
@@ -38,8 +38,8 @@ pub async fn serve(state: Hifz, port: u16) -> Result<()> {
                 .get(api::memories_search)
                 .delete(api::forget),
         )
-        .route("/search", axum::routing::post(api::smart_search))
-        .route("/search/agentic", axum::routing::post(api::search_agentic))
+        .route("/search", axum::routing::post(api::search))
+        .route("/search/session", axum::routing::post(api::search_session))
         .route("/context", axum::routing::post(api::context))
         .route(
             "/core/{project}",
@@ -92,7 +92,7 @@ pub async fn serve(state: Hifz, port: u16) -> Result<()> {
         )
         .route("/code/gc", axum::routing::post(api::code_gc));
 
-    // --- Agent Pipeline API (sessions, observations, runs, git, plans) ---
+    // Agent Pipeline API (sessions, observations, runs, git, plans)
     let agent_api = Router::new()
         .route(
             "/sessions",

@@ -144,7 +144,7 @@ curl -s -X POST "$HIFZ/api/v1/agent/runs" \
   -d '{"query":"package.json","limit":3}' | jq
 
 # D. Semantic recall over Pi data
-curl -s -X POST "$HIFZ/api/v1/search/agentic" \
+curl -s -X POST "$HIFZ/api/v1/search/session" \
   -H 'content-type: application/json' \
   -d '{"query":"what files have we read","limit":5}' | jq '.results[]?.title'
 

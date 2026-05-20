@@ -10,7 +10,7 @@
 //! Causal/provenance edges (`derived_from`, `informed_by`, `generated_by`,
 //! `part_of`, `follows`) are created by callers at the appropriate lifecycle
 //! points. LLM-set conceptual / argumentative relations come from `evolve.rs`
-//! (Phase 2 will fold this into a single insert pipeline).
+//! (these will later fold into a single insert pipeline).
 //!
 //! Every edge insert is type-pair validated via `is_allowed_relation`.
 
@@ -231,7 +231,7 @@ pub fn is_allowed_relation(rel: EdgeRelation, from: RecordKind, to: RecordKind) 
         return true;
     }
     match rel {
-        // Co-occurrence: memory<->memory (and observation->memory in Phase 6 use of Mentions).
+        // Co-occurrence: memory<->memory (and observation->memory via Mentions).
         R::CoOccursFiles | R::CoOccursKeywords | R::CoOccursEmbedding => {
             from == K::Memory && to == K::Memory
         }
@@ -277,7 +277,7 @@ pub fn is_allowed_relation(rel: EdgeRelation, from: RecordKind, to: RecordKind) 
         R::References => from == K::Memory && (to == K::CodeChunk || to == K::CodeFile),
         R::ReferencesSymbol => from == K::Memory && to == K::CodeSymbol,
 
-        // Phase 0b code-graph: symbol→symbol structural / call / import edges
+        // Code-graph: symbol→symbol structural / call / import edges
         // from the code-intelligence core. External targets (`external_symbol`
         // table) ride the `to == K::Other` passthrough at the top of this fn
         // until E4 promotes `ExternalSymbol` to a first-class `RecordKind`
@@ -297,8 +297,8 @@ pub fn is_allowed_relation(rel: EdgeRelation, from: RecordKind, to: RecordKind) 
 ///
 /// Validates the `(from_kind, relation, to_kind)` triple via
 /// `is_allowed_relation`. Violations are logged at WARN level and skipped (the
-/// call returns `Ok(())` so writers don't fail catastrophically). Phase 10 may
-/// flip this to a hard error once the call sites are proven clean.
+/// call returns `Ok(())` so writers don't fail catastrophically). This may
+/// later flip to a hard error once the call sites are proven clean.
 ///
 /// `reason` is a one-line justification stored on the edge: deterministic
 /// callers pass a channel+score string; LLM callers pass the model's rationale.
@@ -374,9 +374,7 @@ pub async fn upsert_edge(
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
 // Graph expansion at retrieval time
-// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone)]
 pub struct EdgeHit {
@@ -539,9 +537,7 @@ async fn fetch_edges(
         .collect())
 }
 
-// ---------------------------------------------------------------------------
 // Lifecycle edge helpers
-// ---------------------------------------------------------------------------
 
 /// Create structural edges when a run closes:
 /// - run --part_of--> session
@@ -594,7 +590,7 @@ pub async fn create_run_structure_edges(
     Ok(())
 }
 
-// --- Memory links listing (lifted from web/api.rs::memory_links) ---
+// Memory links listing (lifted from web/api.rs::memory_links)
 
 /// List outbound graph edges from a memory. Returns the legacy wire shape
 /// `{"links": [...], "count": N}` with each link's title/category/relation/score.
@@ -665,7 +661,7 @@ mod tests {
 
     #[test]
     fn allowed_relation_permits_observation_generated_by_run() {
-        // Phase 1: PROV-O permits Memory|Observation -> Run via generated_by.
+        // PROV-O permits Memory|Observation -> Run via generated_by.
         let allowed = is_allowed_relation(
             EdgeRelation::GeneratedBy,
             RecordKind::Observation,

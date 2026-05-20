@@ -57,7 +57,7 @@ impl CodeSplitter {
         }
     }
 
-    /// Per-language defaults. M1 uses uniform values; M6 may tune by language.
+    /// Per-language defaults. Uses uniform values; may tune per language later.
     pub fn for_lang(_lang: Language) -> Self {
         Self::default()
     }

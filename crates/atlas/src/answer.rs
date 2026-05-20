@@ -1,7 +1,6 @@
-//! Query-time RAG: retrieve (Phase-1 ranked hybrid `query`) → ask the LLM to
-//! answer **only from the numbered sources, citing `[n]` inline** → return
-//! prose + structured citations. The UI's "Ask" calls this; Claude uses
-//! `atlas_query` directly and synthesizes itself.
+//! Query-time RAG: retrieve (hybrid `query`) → ask the LLM to answer only
+//! from the numbered sources, citing `[n]` inline → return prose +
+//! structured citations. Backs the UI's "Ask".
 //!
 //! Degrade-never-fail: with no LLM backend configured we still return the
 //! ranked evidence as citations + a `note`, so the UI shows sources instead

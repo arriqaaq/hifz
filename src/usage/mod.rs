@@ -315,7 +315,7 @@ pub async fn session_totals(
     Ok(aggregate::top_sessions(&calls, usize::MAX))
 }
 
-// --- internals ---
+// internals
 
 #[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
 struct AgentUsageInsert {

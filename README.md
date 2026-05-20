@@ -65,7 +65,7 @@ Recall pulls 1-hop neighbors from this graph, so a memory that doesn't match you
 
 ## Code search & indexing
 
-hifz indexes your repository with tree-sitter (Rust, Python, JavaScript/TypeScript, Go, Java, C, C++), chunks it language-aware, embeds every chunk, and extracts a symbol manifest. Search is hybrid — an identifier-aware BM25 index fused with vector KNN — and memories can be linked to a precise file + line range or to a named symbol.
+hifz indexes your repository with tree-sitter (Rust, Python, JavaScript/TypeScript, Go, Java, C, C++), chunks it language-aware, embeds every chunk, and extracts a symbol manifest. Search is hybrid — an identifier-aware BM25 index fused with vector KNN — and memories can be linked to a precise file + line range or to a named symbol. The `/code` page searches it directly; hits are located previews (file · line range · highlighted snippet) you can copy or open.
 
 <p align="center"><img src="docs/img/ui-code-search.svg" alt="hifz code search results" width="100%"></p>
 
@@ -75,7 +75,13 @@ hifz_code_index  { "project": "hifz", "root": "/path/to/repo" }
 hifz_code_search { "project": "hifz", "query": "session refresh token", "language": "rust" }
 ```
 
-Memory→code edges record the original `(path, start, end)` and **re-anchor on re-index**: when a file is re-split, the edge follows the lines it pointed at, or is dropped if those lines were deleted. Symbol links survive chunk re-splitting entirely. Indexing is idempotent (mtime + content hash), honors `.gitignore`, and reconciles deletions. Operator's guide: [`docs/code-indexing.md`](docs/code-indexing.md).
+Code lives in dedicated tables (`code_chunk`, `code_symbol`), so this search is **always code** — scoped by project, with optional language/path filters. Memory→code edges record the original `(path, start, end)` and **re-anchor on re-index**: when a file is re-split, the edge follows the lines it pointed at, or is dropped if those lines were deleted. Symbol links survive chunk re-splitting entirely. Indexing is idempotent (mtime + content hash), honors `.gitignore`, and reconciles deletions. Operator's guide: [`docs/code-indexing.md`](docs/code-indexing.md).
+
+### Finding code in a mixed corpus (Atlas)
+
+When a project mixes **documents and code**, [Atlas](#atlas--corpus-knowledge-graph--cited-qa) search (the `/ask` page in Search mode) returns every kind together and you narrow with the **type facet** — `Code_symbol`, `External`, `Document`, `Concept`. Atlas's `code_symbol` nodes are projected from the same core index above; this is the corpus-wide view, where core code search is the precise, line-level one.
+
+<p align="center"><img src="docs/img/ui-atlas-search.svg" alt="Atlas search faceted to code symbols" width="100%"></p>
 
 ---
 
@@ -234,6 +240,7 @@ Logs: `~/.hifz/logs/server.{out,err}.log`. DB: `~/.hifz/data`, port `3111`.
 | `/` | Health, digest, recent sessions, recent commits |
 | `/ask` | Corpus Q&A and search, with citations |
 | `/memories` | Search, filter, expand, delete |
+| `/code` | Core code search — file · line range · highlighted snippet |
 | `/graph` | Interactive knowledge graph |
 | `/atlas` | Build & inspect the corpus graph |
 | `/sessions`, `/runs`, `/observations` | Captured trajectory |

@@ -13,9 +13,8 @@
 //!   quality function — so this is "Leiden with the connectivity guarantee",
 //!   not a claim of provable γ-optimality.
 //! - **Deterministic:** all randomness flows from one fixed-seed PRNG
-//!   (`Rng`, seeded from `SEED`); a seeded PRNG is the textbook-correct way
-//!   to make Leiden reproducible (Traag's reference is randomized but
-//!   reproducible under a fixed seed) — not a hack. No `std::HashMap` is on
+//!   (`Rng`, seeded from `SEED`); Traag's reference is randomized but
+//!   reproducible under a fixed seed. No `std::HashMap` is on
 //!   any decision/accumulation path (its iteration order is process-random);
 //!   community accumulators are `BTreeMap`, sums are in sorted-index order,
 //!   every argmax breaks ties by index.
@@ -59,7 +58,7 @@ struct NodeRow {
     id: RecordId,
 }
 
-// --- deterministic PRNG (splitmix64 seed → xoshiro256**) -----------------
+// Deterministic PRNG (splitmix64 seed → xoshiro256**)
 
 struct Rng {
     s: [u64; 4],
@@ -102,7 +101,7 @@ impl Rng {
     }
 }
 
-// --- graph ---------------------------------------------------------------
+// Graph
 
 /// Undirected weighted graph. `adj[i]` is coalesced (one entry per neighbour,
 /// weight summed) and **sorted by neighbour index** for deterministic
@@ -161,7 +160,7 @@ fn modularity(g: &Graph, comm: &[usize]) -> f64 {
         .sum()
 }
 
-// --- local moving (fast) -------------------------------------------------
+// Local moving (fast)
 
 /// Move nodes to the neighbouring community of maximum modularity gain,
 /// queue-driven, until no positive move remains. Starts from whatever
@@ -218,7 +217,7 @@ fn move_nodes_fast(g: &Graph, part: &mut Vec<usize>, rng: &mut Rng) {
     }
 }
 
-// --- refinement ----------------------------------------------------------
+// Refinement
 
 /// Within each coarse community, build **connected** sub-communities: only a
 /// still-singleton node may merge, and only into a sub-community it shares an
@@ -314,7 +313,7 @@ fn refine(g: &Graph, part: &[usize], rng: &mut Rng) -> Vec<usize> {
     refined
 }
 
-// --- aggregation ---------------------------------------------------------
+// Aggregation
 
 /// Collapse `refined` (relabelled 0..R) into super-nodes. Returns the
 /// aggregate graph, the lifted coarse partition (super-node → coarse
@@ -370,7 +369,7 @@ fn aggregate(g: &Graph, refined: &[usize], coarse: &[usize]) -> (Graph, Vec<usiz
     )
 }
 
-// --- driver --------------------------------------------------------------
+// Driver
 
 /// Full Leiden. Returns a contiguous community id per original node.
 fn leiden(mut g: Graph, rng: &mut Rng) -> Vec<usize> {
@@ -411,7 +410,7 @@ fn leiden(mut g: Graph, rng: &mut Rng) -> Vec<usize> {
     relabel(&out)
 }
 
-// --- public entry --------------------------------------------------------
+// Public entry
 
 pub async fn cluster(store: &Store) -> Result<ClusterReport> {
     let pid = store.pid();
@@ -522,7 +521,7 @@ pub async fn cluster(store: &Store) -> Result<ClusterReport> {
 mod tests {
     use super::*;
 
-    // ---- in-memory graph builder + invariants (oracle helpers) ----------
+    // In-memory graph builder + invariants (oracle helpers)
 
     /// Build a `Graph` from an undirected weighted edge list.
     fn graph(n: usize, edges: &[(usize, usize, f64)]) -> Graph {
@@ -593,7 +592,7 @@ mod tests {
         (leiden(g, &mut rng), clone)
     }
 
-    // ---- T0: modularity helper, hand-computed oracle --------------------
+    // T0: modularity helper, hand-computed oracle
 
     #[test]
     fn t0_modularity_hand_computed() {
@@ -621,7 +620,7 @@ mod tests {
         assert!(q_single < q, "singletons {q_single} < split {q}");
     }
 
-    // ---- T1: Zachary karate club (cross-tool reference oracle) ----------
+    // T1: Zachary karate club (cross-tool reference oracle)
 
     /// Canonical Zachary karate club, 0-indexed, 78 undirected edges
     /// (identical to networkx `karate_club_graph`).
@@ -725,7 +724,7 @@ mod tests {
         );
     }
 
-    // ---- T2: planted partitions ----------------------------------------
+    // T2: planted partitions
 
     #[test]
     fn t2_two_cliques_and_three_clique_ring() {
@@ -770,7 +769,7 @@ mod tests {
         assert!(all_communities_connected(&g3, &c3));
     }
 
-    // ---- T3: connectivity invariant on a Louvain failure pattern -------
+    // T3: connectivity invariant on a Louvain failure pattern
 
     #[test]
     fn t3_no_disconnected_community() {
@@ -798,7 +797,7 @@ mod tests {
         );
     }
 
-    // ---- T4: determinism -----------------------------------------------
+    // T4: determinism
 
     #[test]
     fn t4_deterministic() {
@@ -862,7 +861,7 @@ mod tests {
         assert_eq!(build().await, build().await, "DB clustering reproducible");
     }
 
-    // ---- T2/T5: edge cases + the existing planted test (kept) ----------
+    // T2/T5: edge cases + the existing planted test (kept)
 
     #[tokio::test]
     async fn two_cliques_two_clusters() {
@@ -958,7 +957,7 @@ mod tests {
         assert!(all_communities_connected(&g2, &c2));
     }
 
-    // ---- T6: property/fuzz — universal invariants over random graphs ----
+    // T6: property/fuzz — universal invariants over random graphs
 
     #[test]
     fn t6_property_invariants_over_random_graphs() {

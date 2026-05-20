@@ -32,7 +32,7 @@ pub struct CodeSearchOpts {
     pub limit: usize,
     pub project: Option<String>,
     pub language: Option<String>,
-    /// Substring filter against `code_chunk.path`. (Glob support is M6+.)
+    /// Substring filter against `code_chunk.path`. (Glob support comes later.)
     pub path: Option<String>,
     pub group_by_file: bool,
 }

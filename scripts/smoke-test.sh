@@ -87,15 +87,15 @@ check "observe: Stop" '"status"' "$resp"
 echo ""
 echo "# Search"
 
-resp=$(curl -s -X POST "$BASE/hifz/smart-search" \
+resp=$(curl -s -X POST "$BASE/hifz/search" \
   -H 'Content-Type: application/json' \
   -d '{"query":"smoke test","limit":3,"project":"smoke-test"}' 2>&1)
-check "POST /hifz/smart-search" '"results"' "$resp"
+check "POST /hifz/search" '"results"' "$resp"
 
 resp=$(curl -s -X POST "$BASE/hifz/search" \
   -H 'Content-Type: application/json' \
   -d '{"query":"smoke test","limit":3}' 2>&1)
-check "POST /hifz/search (alias)" '"results"' "$resp"
+check "POST /hifz/search (no project)" '"results"' "$resp"
 
 # --- Remember / Forget ---
 echo ""
@@ -107,7 +107,7 @@ resp=$(curl -s -X POST "$BASE/hifz/remember" \
 check "POST /hifz/remember" '"status":"ok"' "$resp"
 
 sleep 1
-resp=$(curl -s -X POST "$BASE/hifz/smart-search" \
+resp=$(curl -s -X POST "$BASE/hifz/search" \
   -H 'Content-Type: application/json' \
   -d '{"query":"smoke test memory fact","limit":5,"project":"smoke-test"}' 2>&1)
 check "search finds saved memory" 'smoke test memory' "$resp"

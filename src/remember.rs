@@ -55,7 +55,7 @@ pub async fn forget(db: &Surreal<Db>, memory_id: &str) -> Result<()> {
 }
 
 /// Build the text that gets embedded for a memory.
-/// Phase 1a: richer-text input — title + content + keywords + files.
+/// Richer-text input — title + content + keywords + files.
 pub fn build_embed_text(
     title: &str,
     content: &str,
@@ -77,7 +77,7 @@ pub fn build_embed_text(
     s
 }
 
-// --- Memories search (lifted from web/api.rs::memories_search) ---
+// Memories search (lifted from web/api.rs::memories_search)
 
 /// Search memories. With BM25 when a query is supplied; otherwise lists newest
 /// first. Filters by project (with global fallback) and category. Returns the
@@ -99,7 +99,7 @@ pub async fn search(
     if let Some(ref category) = params.category {
         conditions.push(format!("category = '{}'", category.replace('\'', "")));
     }
-    // Phase 5: time + open filters.
+    // Time + open filters.
     if let Some(ref since) = params.since {
         conditions.push(format!("created_at >= '{}'", since.replace('\'', "")));
     }

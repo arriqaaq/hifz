@@ -16,7 +16,7 @@
   let error = $state('');
   let expandedId = $state<string | null>(null);
 
-  // Phase 8.3: typed filters (category, project, time, open-only) and sorts.
+  // Typed filters (category, project, time, open-only) and sorts.
   let filterCategory = $state<string>('');
   let filterProject = $state<string>('');
   let filterOpenOnly = $state(false);

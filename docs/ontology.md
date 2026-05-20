@@ -127,7 +127,7 @@ Every edge also carries:
 
 Per-relation `(from_kind, relation, to_kind)` triples are validated at
 write time in [src/link.rs](../src/link.rs)::`is_allowed_relation`.
-Violations are logged at WARN and skipped (Phase 10 may flip to
+Violations are logged at WARN and skipped (may later flip to
 hard-error). Unknown relation `Other` and unknown record kind `Other`
 short-circuit to permitted.
 

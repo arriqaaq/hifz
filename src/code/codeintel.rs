@@ -138,7 +138,7 @@ pub async fn index_code_graph(
     let now = chrono::Utc::now().to_rfc3339();
     let mut report = CodeGraphReport::default();
 
-    // -- Snapshot prior symbols (rename reconciliation + stale delete) ----
+    // Snapshot prior symbols (rename reconciliation + stale delete)
     let mut resp = db
         .query("SELECT id, qualified, body_hash FROM code_symbol WHERE project = $p")
         .bind(("p", project.to_string()))
@@ -157,7 +157,7 @@ pub async fn index_code_graph(
             .push(d.qualified.as_str());
     }
 
-    // -- UPSERT every symbol on its deterministic id --------------------
+    // UPSERT every symbol on its deterministic id
     for d in &pg.defs {
         let Some((file_id, rel, lang)) = qual2file.get(&d.qualified) else {
             continue;
@@ -224,7 +224,7 @@ pub async fn index_code_graph(
         report.symbols += 1;
     }
 
-    // -- Rename reconciliation + stale delete ---------------------------
+    // Rename reconciliation + stale delete
     for ps in &prior {
         let (Some(old_id), Some(oq)) = (ps.id.clone(), ps.qualified.as_deref()) else {
             continue;
@@ -285,7 +285,7 @@ pub async fn index_code_graph(
         report.deleted += 1;
     }
 
-    // -- Rebuild derived code edges (calls/imports/contains/part_of) -----
+    // Rebuild derived code edges (calls/imports/contains/part_of)
     // Fully recomputed each run → idempotent. references_symbol (memory→
     // code) is NOT in this set, so it is preserved across reindex.
     let _ = db

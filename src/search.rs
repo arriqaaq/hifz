@@ -28,7 +28,7 @@ pub struct SearchConfig {
     /// sharpen the gap between ranks (1/(k+rank) decays faster). Default 60
     /// matches the widely-cited literature baseline; lowering to ~20 trades
     /// robustness-to-noise for clearer separation when multiple weak matches
-    /// compete (verified via Phase 8.5 bench to be the dominant cause of
+    /// compete (verified via bench to be the dominant cause of
     /// close-competitor misses).
     pub rrf_k: u64,
 }
@@ -40,7 +40,7 @@ impl Default for SearchConfig {
             skip_recency_access: false,
             skip_graph: false,
             skip_diversify: false,
-            // Phase 9.1: default lowered from the TREC-literature 60 to 10
+            // Default lowered from the TREC-literature 60 to 10
             // based on the `memory-bench` sweep — at k=60 the small-corpus
             // regime dilutes cross-branch ordering (Recall@5 = 0.922), at
             // k=10 it's 0.944 with no regressions. k=5 was strictly better
@@ -169,7 +169,7 @@ pub async fn search_hybrid_with_config(
         search_memories_with_config(db, query_vec_for_mem, query, limit, project, cfg).await?;
     results.extend(mem_results);
 
-    // Phase 5.3: long-form chunk retrieval. Hits the `memory_chunk` table
+    // Long-form chunk retrieval. Hits the `memory_chunk` table
     // via vector + BM25, dedups by parent memory, and emits SearchResults
     // pointing at the parent (so graph expansion + dedup downstream still
     // work). Skipped when vector branch is disabled — chunks are
@@ -208,12 +208,12 @@ pub async fn search_hybrid_with_config(
 /// Graph expansion in-place. Seeds are existing memory results; edges pull in
 /// neighbours that may not have hit the vector or BM25 branches directly.
 ///
-/// Phase 6: also runs an observation→memory bridge pass — observation
+/// Also runs an observation→memory bridge pass — observation
 /// results expand outgoing on `touches_file` and `commits_for` to surface
 /// memories about files the agent recently worked with. Bridge edges get a
 /// 0.3 dampening (vs. 0.5 for memory→memory) so observations don't flood.
 async fn expand_from_graph(db: &Surreal<Db>, results: &mut Vec<SearchResult>, limit: usize) {
-    // Phase 6: observation→memory bridging via `touches_file` + `commits_for`.
+    // Observation→memory bridging via `touches_file` + `commits_for`.
     expand_from_observations(db, results).await;
 
     // RecordId's interior mutability (Value→Regex) is never mutated here; it's a stable key.
@@ -361,7 +361,7 @@ async fn expand_from_graph(db: &Surreal<Db>, results: &mut Vec<SearchResult>, li
     results.truncate(limit);
 }
 
-/// Phase 6: observation→memory bridge. For every observation in `results`,
+/// Observation→memory bridge. For every observation in `results`,
 /// walk outgoing on the bridge relations (`touches_file`, `commits_for`)
 /// and bring in any memories it touches that weren't already in the
 /// result set. Dampening 0.3 keeps observation-derived hits from
@@ -502,12 +502,8 @@ async fn search_memories(
 /// - Always project-scopes when `project` is provided.
 /// - Applies Rust-side `strength · recency · access` boost to the fused score,
 ///   unless `cfg.skip_recency_access` is set (bench ablation).
-// `pub(crate)`: structural prep for the future subject-aware, all-category
-// commit→memory matcher (plan §5). The behavioral swap of the commit matcher
-// is a deliberate pre-merge SHIP-GATE — it needs an empirically-tuned
-// confidence threshold on real data and must not be shipped untuned (it would
-// risk over-/under-grounding on hifz's defensible axis). This visibility
-// change just makes the existing all-category hybrid reusable for it.
+// `pub(crate)`: makes the existing all-category hybrid reusable by the
+// commit→memory matcher.
 pub(crate) async fn search_memories_with_config(
     db: &Surreal<Db>,
     query_vec: Option<&Vec<f32>>,
@@ -707,7 +703,7 @@ async fn bump_memory_access(db: &Surreal<Db>, results: &[SearchResult]) {
     }
 }
 
-/// Phase 5.3: long-form chunk retrieval. Vector + BM25 over `memory_chunk`,
+/// Long-form chunk retrieval. Vector + BM25 over `memory_chunk`,
 /// then group hits by parent memory (max 1 result per parent — the highest
 /// chunk score wins) and emit SearchResults pointing at the *parent*
 /// memory id. The chunk's content becomes the result's narrative so
@@ -1007,8 +1003,7 @@ async fn fetch_observation_results(
 /// session. Memory rows have no session — they are keyed by their own id so
 /// each memory is its own diversity class (the cap becomes a no-op for them).
 /// Earlier versions keyed all memories with the literal string `"memory"`,
-/// silently truncating every query's memory pool to `max_per_session` total —
-/// see Phase 7a.
+/// silently truncating every query's memory pool to `max_per_session` total.
 fn diversify_by_session(results: &mut Vec<SearchResult>, max_per_session: usize) {
     let mut counts: HashMap<String, usize> = HashMap::new();
     results.retain(|r| {
@@ -1046,7 +1041,7 @@ mod tests {
 
     #[test]
     fn diversification_does_not_collapse_memories() {
-        // Regression test for Phase 7a. Five distinct memories (no session_id)
+        // Regression test for session-pool truncation. Five distinct memories (no session_id)
         // must all survive a cap of 3, because each memory is its own
         // diversity class.
         let mut results: Vec<SearchResult> =

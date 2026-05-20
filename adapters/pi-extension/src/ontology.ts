@@ -5,8 +5,7 @@
  * mirror at website/src/lib/ontology.ts is the canonical TypeScript
  * version; this file should match it.
  *
- * Phase 9.3's `scripts/sync-ontology.mjs` will eventually generate both
- * files from the Rust source.
+ * `scripts/sync-ontology.mjs` regenerates these from the Rust source.
  */
 
 // === GENERATED CATEGORIES BEGIN — do not edit by hand ===

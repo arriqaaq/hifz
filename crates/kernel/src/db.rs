@@ -54,7 +54,7 @@ pub async fn init_schema(db: &Surreal<Db>, embed_dim: usize) -> Result<()> {
 }
 
 const SCHEMA: &str = r#"
--- === CORE TABLES ===
+-- Core tables
 
 DEFINE TABLE IF NOT EXISTS session SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS project           ON session TYPE string;
@@ -120,10 +120,7 @@ DEFINE FIELD IF NOT EXISTS keywords         ON memory TYPE array<string>;
 DEFINE FIELD IF NOT EXISTS files            ON memory TYPE array<string>;
 DEFINE FIELD IF NOT EXISTS tags             ON memory TYPE array<string> DEFAULT [];
 DEFINE FIELD IF NOT EXISTS context          ON memory TYPE option<string>;
--- Phase 2: A-MEM-style insert pipeline adds these.
--- context_summary is the LLM-generated paragraph placing this memory in
--- the broader work. evolution_history is an append-only audit trail of
--- LLM rewrites applied during bounded neighbor evolution.
+-- Insert pipeline adds these.
 DEFINE FIELD IF NOT EXISTS context_summary  ON memory TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS evolution_history ON memory TYPE array<object> DEFAULT [];
 DEFINE FIELD IF NOT EXISTS strength         ON memory TYPE float;
@@ -153,7 +150,7 @@ DEFINE INDEX IF NOT EXISTS mem_vec          ON TABLE memory
 DEFINE INDEX IF NOT EXISTS mem_project      ON TABLE memory FIELDS project;
 DEFINE INDEX IF NOT EXISTS mem_latest       ON TABLE memory FIELDS is_latest;
 
--- === MEMORY CHUNKS (Phase 4: long-form artifact retrieval) ===
+-- Memory chunks (long-form artifact retrieval)
 -- For long-form categories (Plan, Design, CodeReview, ShipReport,
 -- ContextSlice), `Memory.content_long` is split into ~500-token chunks with
 -- 100-token overlap. Each chunk is its own row with its own embedding so
@@ -173,8 +170,7 @@ DEFINE INDEX IF NOT EXISTS chunk_content_ft ON TABLE memory_chunk
 DEFINE INDEX IF NOT EXISTS chunk_vec      ON TABLE memory_chunk
   FIELDS embedding HNSW DIMENSION 384 DIST COSINE;
 
--- === CORE MEMORY (MemGPT-style always-on block) ===
--- Per-project singleton.
+-- Core memory (always-on block)
 DEFINE TABLE IF NOT EXISTS core_memory SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS project     ON core_memory TYPE string;
 DEFINE FIELD IF NOT EXISTS identity    ON core_memory TYPE option<string>;
@@ -184,7 +180,7 @@ DEFINE FIELD IF NOT EXISTS watchlist   ON core_memory TYPE array<string> DEFAULT
 DEFINE FIELD IF NOT EXISTS updated_at  ON core_memory TYPE string;
 DEFINE INDEX IF NOT EXISTS core_project ON TABLE core_memory FIELDS project UNIQUE;
 
--- === RUNS ===
+-- Runs
 DEFINE TABLE IF NOT EXISTS run SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS session_id      ON run TYPE record<session>;
 DEFINE FIELD IF NOT EXISTS project         ON run TYPE string;
@@ -205,7 +201,7 @@ DEFINE INDEX IF NOT EXISTS run_prompt_ft ON TABLE run
 DEFINE INDEX IF NOT EXISTS run_lesson_ft ON TABLE run
   FIELDS lesson FULLTEXT ANALYZER run_analyzer BM25 CONCURRENTLY;
 
--- === KNOWLEDGE GRAPH EDGES ===
+-- Knowledge graph edges
 -- Generic relation table: any record type can be an endpoint.
 -- Relation types are prescribed by `models::EdgeRelation` (typed groups:
 -- co-occurrence / provenance / conceptual / argumentative / lifecycle /
@@ -221,7 +217,7 @@ DEFINE FIELD IF NOT EXISTS score      ON edge TYPE float DEFAULT 1.0;
 DEFINE FIELD IF NOT EXISTS reason     ON edge TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS metadata   ON edge TYPE option<object>;
 DEFINE FIELD IF NOT EXISTS created_at ON edge TYPE string;
--- Phase 0b: code-edge resolution provenance — resolved|external|ambiguous.
+-- Code-edge resolution provenance — resolved|external|ambiguous.
 -- Optional (legacy edges have none); set by the code-intel core (E4).
 DEFINE FIELD IF NOT EXISTS resolution ON edge TYPE option<string>;
 DEFINE INDEX IF NOT EXISTS edge_relation ON TABLE edge FIELDS relation;
@@ -229,9 +225,9 @@ DEFINE INDEX IF NOT EXISTS edge_via      ON TABLE edge FIELDS via;
 DEFINE INDEX IF NOT EXISTS edge_in       ON TABLE edge FIELDS in;
 DEFINE INDEX IF NOT EXISTS edge_out      ON TABLE edge FIELDS out;
 
--- === CODE INDEX TABLES (M1+) ===
--- Native-Rust port of cocoindex-code's chunk + index pipeline. Files are walked
--- (gitignore-honest), chunked language-aware via tree-sitter, embedded, and
+-- Code index tables
+-- Native-Rust chunk + index pipeline. Files are walked
+-- (respecting gitignore), chunked language-aware via tree-sitter, embedded, and
 -- searched via HNSW + BM25. Memories cross-link to chunks via the `references`
 -- edge and to named symbols via `references_symbol`.
 --
@@ -306,7 +302,7 @@ DEFINE FIELD IF NOT EXISTS doc                ON code_symbol TYPE option<string>
 DEFINE FIELD IF NOT EXISTS embedding          ON code_symbol TYPE option<array<float>>;
 DEFINE FIELD IF NOT EXISTS last_referenced_at ON code_symbol TYPE string DEFAULT <string>time::now();
 DEFINE FIELD IF NOT EXISTS created_at         ON code_symbol TYPE string;
--- Phase 0b additive superset (optional → old .scm extractor still valid under
+-- Additive superset (optional → old .scm extractor still valid under
 -- SCHEMAFULL; populated by the code-intel core in E4):
 DEFINE FIELD IF NOT EXISTS start_byte         ON code_symbol TYPE option<int>;
 DEFINE FIELD IF NOT EXISTS end_byte           ON code_symbol TYPE option<int>;
@@ -324,7 +320,7 @@ DEFINE INDEX IF NOT EXISTS code_symbol_kind   ON TABLE code_symbol FIELDS projec
 DEFINE INDEX IF NOT EXISTS code_symbol_vec    ON TABLE code_symbol
   FIELDS embedding HNSW DIMENSION 384 DIST COSINE;
 
--- Phase 0b: explicit node for call/import targets outside the indexed set
+-- Explicit node for call/import targets outside the indexed set
 -- (stdlib / third-party / dynamic). Keyed by canonical import path so the
 -- same external is one node. Unused until E4 wires the resolver.
 DEFINE TABLE IF NOT EXISTS external_symbol SCHEMAFULL;
@@ -334,7 +330,7 @@ DEFINE FIELD IF NOT EXISTS language   ON external_symbol TYPE string;
 DEFINE FIELD IF NOT EXISTS created_at ON external_symbol TYPE string;
 DEFINE INDEX IF NOT EXISTS external_symbol_key ON TABLE external_symbol FIELDS project, canonical UNIQUE;
 
--- === AGENT USAGE (generic, adapter-populated) ===
+-- Agent usage (generic, adapter-populated)
 -- One row per LLM inference call. Vendor-neutral: adapters map their own
 -- token-category fields into `breakdown` (a JSON object). The Claude Code
 -- adapter, for example, fills breakdown.cache_read and breakdown.cache_creation;

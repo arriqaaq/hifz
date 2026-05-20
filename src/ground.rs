@@ -220,7 +220,7 @@ pub async fn on_commit_observation(
         tracing::info!("ground::on_commit_observation: strengthened {strengthened} memories");
     }
 
-    // Code dimension (M5+, G8): bump strength + last_committed_at for chunks
+    // Code dimension: bump strength + last_committed_at for chunks
     // whose `path` matches the committed file set. This keeps cold-decay GC
     // from sweeping chunks that just got real-world reinforcement.
     {

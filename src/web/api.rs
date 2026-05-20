@@ -18,9 +18,7 @@ use crate::models::{
 use crate::web::AppState;
 use crate::web::error::{ApiError, ApiResult, AppJson};
 
-// -----------------------------------------------------------------------
 // Helper macros to keep the dispatch boilerplate uniform.
-// -----------------------------------------------------------------------
 
 /// `anyhow::Result<T>` -> `ApiResult` — pass the value through as JSON, or
 /// surface the error with a real HTTP status (`ApiError::from` classifies
@@ -32,9 +30,7 @@ fn json_or_err<T: serde::Serialize>(r: anyhow::Result<T>) -> ApiResult {
     }
 }
 
-// -----------------------------------------------------------------------
 // Health
-// -----------------------------------------------------------------------
 
 pub async fn health(State(state): State<AppState>) -> ApiResult {
     json_or_err(state.health().await)
@@ -44,9 +40,7 @@ pub async fn livez() -> &'static str {
     "ok"
 }
 
-// -----------------------------------------------------------------------
 // Sessions
-// -----------------------------------------------------------------------
 
 pub async fn session_start(
     State(state): State<AppState>,
@@ -72,7 +66,7 @@ pub async fn session_get(State(state): State<AppState>, Path(id): Path<String>) 
     json_or_err(state.session_get(&id).await)
 }
 
-/// Phase 3.1: project-scoped warmup digest at session start.
+/// Project-scoped warmup digest at session start.
 /// `?project=foo&top_n=15` query params override session-row's project.
 pub async fn session_warmup(
     State(state): State<AppState>,
@@ -98,9 +92,7 @@ pub async fn sessions_list(
     json_or_err(state.sessions_list(limit).await)
 }
 
-// -----------------------------------------------------------------------
 // Observe
-// -----------------------------------------------------------------------
 
 pub async fn observe(
     State(state): State<AppState>,
@@ -113,26 +105,18 @@ pub async fn observe(
     }
 }
 
-// -----------------------------------------------------------------------
 // Search & context
-// -----------------------------------------------------------------------
 
-pub async fn smart_search(
-    State(state): State<AppState>,
-    AppJson(body): AppJson<SearchReq>,
-) -> ApiResult {
-    json_or_err(state.smart_search(body).await)
+pub async fn search(State(state): State<AppState>, AppJson(body): AppJson<SearchReq>) -> ApiResult {
+    json_or_err(state.search(body).await)
 }
 
-pub async fn search_agentic(
+pub async fn search_session(
     State(state): State<AppState>,
     AppJson(body): AppJson<SearchReq>,
 ) -> ApiResult {
-    // Note: search_agentic preserves the legacy run-linkage side effect:
-    // when sessionId is supplied AND a run is open AND any results are
-    // memories, append them to the run's recall trail and create
-    // `memory --informed--> run` edges. This belongs at the handler layer
-    // because it's an HTTP-shape concern (sessionId comes from the request).
+    // Side effect: when sessionId is supplied and a run is open, link memory
+    // results to the run (recall trail + `memory --informed--> run` edges).
     let limit = body.limit.unwrap_or(10);
     let project = body.project.as_deref();
 
@@ -187,9 +171,7 @@ pub async fn context(
     }
 }
 
-// -----------------------------------------------------------------------
 // Memory
-// -----------------------------------------------------------------------
 
 pub async fn remember(
     State(state): State<AppState>,
@@ -291,7 +273,7 @@ pub async fn replay_get(State(state): State<AppState>, Path(id): Path<String>) -
     json_or_err(state.replay_get(&id).await)
 }
 
-/// Phase 5: typed graph walk from a memory. Query params:
+/// Typed graph walk from a memory. Query params:
 /// `?relations=related,elaborates&max_hops=2`.
 pub async fn memory_neighbors(
     State(state): State<AppState>,
@@ -308,7 +290,7 @@ pub async fn memory_neighbors(
     json_or_err(state.memory_neighbors(&id, relations, max_hops).await)
 }
 
-/// Phase 5: chronological digest of recent activity for a project, grouped
+/// Chronological digest of recent activity for a project, grouped
 /// by category. `?days=N` (default 30).
 pub async fn project_digest(
     State(state): State<AppState>,
@@ -319,7 +301,7 @@ pub async fn project_digest(
     json_or_err(state.project_digest(&project, days).await)
 }
 
-/// Phase 5: project accumulator rollup (latest plan, decisions, conventions,
+/// Project accumulator rollup (latest plan, decisions, conventions,
 /// open bugs, gotchas, failure patterns, recent lessons).
 pub async fn project_accumulators(
     State(state): State<AppState>,
@@ -328,7 +310,7 @@ pub async fn project_accumulators(
     json_or_err(state.project_accumulators(&project).await)
 }
 
-/// Phase 4.5: incoming edges for a memory. `?relation=foo` to filter.
+/// Incoming edges for a memory. `?relation=foo` to filter.
 pub async fn memory_backlinks(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -338,7 +320,7 @@ pub async fn memory_backlinks(
     json_or_err(state.memory_backlinks(&id, relation).await)
 }
 
-/// Phase 4.4: render a memory as frontmatter-rich markdown.
+/// Render a memory as frontmatter-rich markdown.
 /// Returns `text/markdown` with the rendered body — NOT JSON-wrapped, so
 /// callers can pipe this directly to a file or `$EDITOR`.
 pub async fn memory_markdown_get(
@@ -361,7 +343,7 @@ pub async fn memory_markdown_get(
     }
 }
 
-/// Phase 4.4: parse an edited markdown blob and write a NEW memory version
+/// Parse an edited markdown blob and write a NEW memory version
 /// that supersedes the old one. Body is plain text (the markdown), not JSON.
 pub async fn memory_markdown_put(
     State(state): State<AppState>,
@@ -380,9 +362,7 @@ pub async fn evolve(State(state): State<AppState>, Path(id): Path<String>) -> Ap
     json_or_err(state.evolve(&id).await)
 }
 
-// -----------------------------------------------------------------------
 // Runs
-// -----------------------------------------------------------------------
 
 pub async fn runs_search(
     State(state): State<AppState>,
@@ -399,9 +379,7 @@ pub async fn session_tree(State(state): State<AppState>, Path(id): Path<String>)
     json_or_err(state.session_tree(&id).await)
 }
 
-// -----------------------------------------------------------------------
 // Observations
-// -----------------------------------------------------------------------
 
 pub async fn observations_search(
     State(state): State<AppState>,
@@ -410,9 +388,7 @@ pub async fn observations_search(
     json_or_err(state.observations_search(params).await)
 }
 
-// -----------------------------------------------------------------------
 // Core memory
-// -----------------------------------------------------------------------
 
 pub async fn core_get(
     State(state): State<AppState>,
@@ -448,9 +424,7 @@ pub async fn core_edit_by_project(
     json_or_err(state.core_edit(&project, body).await)
 }
 
-// -----------------------------------------------------------------------
 // Trace (graph)
-// -----------------------------------------------------------------------
 
 pub async fn trace_graph(
     State(state): State<AppState>,
@@ -459,9 +433,7 @@ pub async fn trace_graph(
     json_or_err(state.trace(body).await)
 }
 
-// -----------------------------------------------------------------------
 // Project intelligence
-// -----------------------------------------------------------------------
 
 pub async fn digest(
     State(state): State<AppState>,
@@ -516,9 +488,7 @@ pub async fn commit_diff(State(state): State<AppState>, Path(sha): Path<String>)
     json_or_err(state.commit_diff(&sha).await)
 }
 
-// -----------------------------------------------------------------------
 // Plans
-// -----------------------------------------------------------------------
 
 pub async fn plans_list(
     State(state): State<AppState>,
@@ -559,9 +529,7 @@ pub async fn plan_activate(
     json_or_err(state.plan_activate(body).await)
 }
 
-// -----------------------------------------------------------------------
 // Maintenance
-// -----------------------------------------------------------------------
 
 pub async fn forget_gc(State(state): State<AppState>) -> ApiResult {
     json_or_err(state.forget_gc(false).await)
@@ -575,9 +543,7 @@ pub async fn export(State(state): State<AppState>, Query(params): Query<ExportRe
     json_or_err(state.export(params).await)
 }
 
-// -----------------------------------------------------------------------
 // Agent usage (generic LLM token tracking — adapter-populated)
-// -----------------------------------------------------------------------
 
 pub async fn usage_record(
     State(state): State<AppState>,
@@ -632,9 +598,7 @@ pub async fn usage_sessions(
     }
 }
 
-// -----------------------------------------------------------------------
-// Code dimension (M2+).
-// -----------------------------------------------------------------------
+// Code dimension.
 
 pub async fn code_index(
     State(state): State<AppState>,

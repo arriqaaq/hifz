@@ -289,7 +289,7 @@ pub async fn observe(
             }
         }
 
-        // Phase 6: bridge observations into the memory graph via shared
+        // Bridge observations into the memory graph via shared
         // file paths. Cheap deterministic edge — the agent's behavioral
         // trail (which files it touched) becomes visible to memory
         // retrieval. Skipped when the observation has no files.
@@ -308,7 +308,7 @@ pub async fn observe(
     // a few causal edges:
     //   - obs --generated_by--> run  (PROV-O: this commit was produced by
     //     the activity that is the run)
-    //   - obs --commits_for--> memory  (Phase 3.3: when the commit message
+    //   - obs --commits_for--> memory  (when the commit message
     //     BM25-matches an open Bug/Plan/Decision, the commit closes the loop
     //     for that memory)
     if compressed.obs_type == "commit_made" {
@@ -362,7 +362,7 @@ pub async fn observe(
                 // PRIMARY (declared, deterministic): the project's active plan
                 // — if any — is implemented by this commit. Zero BM25;
                 // `plans::current_id` is a single-row invariant query. This is
-                // the keystone the causal layer is built on.
+                // the basis the causal layer is built on.
                 if let Some(plan_rid) = crate::plans::current_id(db, Some(&payload.project)).await {
                     let _ = link::upsert_edge(
                         db,
@@ -446,7 +446,7 @@ fn rid_to_string(rid: &RecordId) -> String {
     format!("{}:{key}", rid.table)
 }
 
-/// Phase 3.3: when a `commit_made` observation arrives, BM25-search open
+/// When a `commit_made` observation arrives, BM25-search open
 /// Bug/Plan/Decision memories for the commit message and write a
 /// `commits_for` edge from the observation to each match. Capped at the
 /// top-3 matches so a generic commit message ("fix bug") doesn't link to
@@ -529,12 +529,12 @@ async fn link_commit_to_open_memories(
     }
 }
 
-/// Phase 6: emit `obs --touches_file--> memory` edges for every file
+/// Emit `obs --touches_file--> memory` edges for every file
 /// shared between the observation and an existing memory. Per-file cap
 /// of 20 memories so a hot file (e.g. `Cargo.toml`) doesn't link to
 /// every memory in the project. Score is `1.0 / matched_count` so each
 /// individual edge gets a small contribution and downstream retrieval
-/// dampening (Phase 6's 0.3 multiplier) keeps observations from flooding
+/// dampening (the 0.3 multiplier) keeps observations from flooding
 /// search results.
 async fn link_observation_files_to_memories(
     db: &Surreal<Db>,
@@ -629,7 +629,7 @@ async fn ensure_session(db: &Surreal<Db>, payload: &HookPayload) -> Result<()> {
     Ok(())
 }
 
-// --- Observations search (lifted from web/api.rs::observations_search) ---
+// Observations search (lifted from web/api.rs::observations_search)
 
 /// Search observations with optional filters (session, project, obs_type, time
 /// range, importance) and optional BM25 query. Returns the legacy wire shape

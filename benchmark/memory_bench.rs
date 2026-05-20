@@ -173,24 +173,24 @@ const FIXTURES: &[Triple] = &[
     },
     Triple {
         title: "Recency decay half-life is 30 days",
-        content: "Mem0 formula: score = strength * exp(-age_days / 30) * (1 + 0.1 * min(access, 20)).",
-        concepts: &["scoring", "recency", "mem0"],
+        content: "Retrieval score combines strength, exponential recency decay over 30 days, and a capped access-frequency boost.",
+        concepts: &["scoring", "recency", "decay"],
         files: &["src/rank.rs"],
         probes: &[
             "what is the recency half-life?",
-            "mem0 scoring formula",
+            "recency decay scoring formula",
             "how is access_count used in ranking?",
         ],
     },
     Triple {
         title: "Core memory is a per-project singleton",
         content: "hifz_core stores identity, goals, invariants, watchlist — always prepended above # Saved memories in injected context.",
-        concepts: &["core", "memgpt", "context"],
+        concepts: &["core", "context", "always-on"],
         files: &["src/core_mem.rs"],
         probes: &[
             "where do I store invariants?",
             "core memory structure",
-            "memgpt-style always-on block",
+            "always-on per-project context block",
         ],
     },
     Triple {
@@ -239,12 +239,12 @@ const FIXTURES: &[Triple] = &[
     },
     Triple {
         title: "Evolution is gated by HIFZ_LLM_EVOLVE",
-        content: "A-MEM style memory evolution — when on, the LLM mutates neighbour tags/context/links on new memory write; off by default.",
-        concepts: &["evolution", "a-mem", "llm"],
+        content: "Memory evolution — when on, the LLM mutates neighbour tags/context/links on new memory write; off by default.",
+        concepts: &["evolution", "llm", "linking"],
         files: &["src/evolve.rs"],
         probes: &[
             "how do I turn on memory evolution?",
-            "what is a-mem style evolution?",
+            "what is memory evolution?",
             "hifz llm flag for evolution",
         ],
     },

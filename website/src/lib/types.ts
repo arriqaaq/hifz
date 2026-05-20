@@ -60,7 +60,7 @@ export interface Memory {
   tags: string[];
   /** Legacy free-form context line (Phase 1 schema). */
   context: string | null;
-  /** Phase 2: A-MEM context_summary — LLM-generated paragraph. */
+  /** Context summary — LLM-generated paragraph. */
   context_summary?: string | null;
   /** Phase 2: append-only audit log of LLM rewrites. */
   evolution_history?: EvolutionEntry[];

@@ -1,6 +1,6 @@
 //! One-shot backfill for schema upgrades.
 //!
-//! Phase 1a: memories did not have `embedding`, `project`, `keywords`, `tags`,
+//! Older memories did not have `embedding`, `project`, `keywords`, `tags`,
 //! `context`, `retrieval_count`, or `last_accessed_at`. Schema defaults fill
 //! scalars; this pass embeds existing rows and derives `project` from their
 //! originating session where possible.

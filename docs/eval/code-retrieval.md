@@ -160,5 +160,3 @@ candidate-pool or fusion-arithmetic problem — it is a deeper representation
 limit or near the irreducible floor for this oracle/corpus. The experiment did
 its job: it falsified a plausible fix *before* any production change. No
 further fix is pursued (closing it = the anti-goalpost-moving discipline).
-
-See also: [graphify-parity.md](graphify-parity.md).

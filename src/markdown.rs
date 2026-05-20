@@ -14,7 +14,7 @@
 //!      if no long form).
 //!   2. User edits the file (in Obsidian, $EDITOR, etc.).
 //!   3. `PUT /memories/{id}/markdown` parses frontmatter + body, calls into
-//!      the Phase 2 `enrich::save_enriched` pipeline as a NEW memory with
+//!      the `enrich::save_enriched` pipeline as a NEW memory with
 //!      `supersedes_memory_id = old_id` set. The old row gets `is_latest =
 //!      false` automatically; a `supersedes` edge points new→old.
 

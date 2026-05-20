@@ -63,7 +63,7 @@ async function main() {
 	// 2. Read: search hifz for context relevant to this prompt
 	if (!prompt || prompt.length < 10) return; // skip trivial prompts
 	try {
-		const res = await fetch(`${REST_URL}/api/v1/search/agentic`, {
+		const res = await fetch(`${REST_URL}/api/v1/search/session`, {
 			method: "POST",
 			headers: HEADERS,
 			body: JSON.stringify({ query: prompt, limit: 5, sessionId }),

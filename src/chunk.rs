@@ -36,9 +36,7 @@ use crate::link;
 // unchanged. The DB writers below stay here (they need `Db`/`Embedder`).
 pub use kernel::text::{Chunk, split};
 
-// ---------------------------------------------------------------------------
 // DB writers
-// ---------------------------------------------------------------------------
 
 /// Persist chunks for a parent memory: writes one `memory_chunk` row per
 /// chunk and one `part_of` edge per chunk → parent. Embeds each chunk
@@ -104,7 +102,7 @@ pub async fn persist_chunks(
         // chunk --part_of--> parent memory. Type-pair table allows
         // Memory->Memory only for `part_of`; chunk's table is `memory_chunk`
         // which maps to RecordKind::Other, which short-circuits to permitted.
-        // (Recorded as a followup for Phase 10: extend RecordKind to
+        // (Recorded as a followup: extend RecordKind to
         // include MemoryChunk so the constraint is precise.)
         let _ = link::upsert_edge(
             db,

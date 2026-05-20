@@ -62,7 +62,7 @@ pub struct RawObservation {
     pub data: serde_json::Value,
 }
 
-// --- Memory (long-term, A-mem aligned) ---
+// Memory (long-term)
 
 #[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
 pub struct Memory {
@@ -74,26 +74,26 @@ pub struct Memory {
     pub title: String,
     /// Short retrieval-friendly form (≤ ~2KB). Always populated and embedded.
     pub content: String,
-    /// Caller-supplied domain terms. NOT extracted from content (Phase 2 LLM
+    /// Caller-supplied domain terms. NOT extracted from content (LLM
     /// enrichment may add to this list when available).
     pub keywords: Vec<String>,
-    /// Caller-supplied file paths the memory references. Phase 2 deterministic
+    /// Caller-supplied file paths the memory references. Deterministic
     /// extraction adds paths regex-detected in `content` / `content_long`.
     pub files: Vec<String>,
     /// LLM-generated coarse buckets (e.g. `auth`, `migration`). Distinct from
     /// `keywords` which are domain terms. Empty when no LLM enrichment ran.
     pub tags: Vec<String>,
     /// Legacy free-form context line. Deprecated in favor of `context_summary`;
-    /// retained for backward-compat with rows authored before Phase 2.
+    /// retained for backward-compat with older rows.
     pub context: Option<String>,
-    /// LLM-generated one-paragraph contextual placement (A-MEM's `Xᵢ`).
+    /// LLM-generated one-paragraph contextual placement.
     /// Null when no LLM enrichment ran.
     pub context_summary: Option<String>,
     /// Append-only audit log of LLM rewrites applied during bounded evolution.
     pub evolution_history: Vec<EvolutionEntry>,
     /// Long-form markdown body for artifact categories (Plan, Design,
     /// CodeReview, ShipReport, ContextSlice). When set, `content` carries a
-    /// short summary derived from this. Phase 4 chunks this for retrieval.
+    /// short summary derived from this. This is chunked for retrieval.
     pub content_long: Option<String>,
     pub strength: f64,
     pub retrieval_count: i64,
@@ -109,8 +109,7 @@ pub struct Memory {
     pub updated_at: String,
 }
 
-/// Single entry in a memory's evolution history. Captures one LLM rewrite
-/// pass — what fields changed, the model's rationale, when.
+/// Single entry in a memory's evolution history.
 #[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
 pub struct EvolutionEntry {
     pub timestamp: String,
@@ -257,11 +256,11 @@ pub struct MemoriesReq {
     pub category: Option<String>,
     #[serde(default)]
     pub limit: Option<usize>,
-    /// Phase 5: filter by `created_at >= since` (RFC3339 timestamp).
+    /// Filter by `created_at >= since` (RFC3339 timestamp).
     /// Powers "decisions in the last 30 days" style queries.
     #[serde(default)]
     pub since: Option<String>,
-    /// Phase 5: open-only filter — drop memories that have an incoming
+    /// Open-only filter — drop memories that have an incoming
     /// `closes` edge. Useful for `?category=bug&open=true`.
     #[serde(default)]
     pub open: Option<bool>,
@@ -413,7 +412,7 @@ pub struct ContextReq {
     pub query: Option<String>,
 }
 
-// --- Code-indexing DTOs (M2+) ---
+// Code-indexing DTOs
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodeIndexReq {
@@ -579,7 +578,7 @@ pub const OBS_TYPES: &[&str] = &[
 //
 // Canonical typed relation vocabulary, grouped by the source of the edge.
 // Grouping makes the deterministic vs. LLM split visible in the type itself.
-// See `docs/ontology.md` (Phase 2) and `link::is_allowed_relation` for
+// See `docs/ontology.md` and `link::is_allowed_relation` for
 // per-relation type-pair constraints.
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -651,7 +650,7 @@ pub enum EdgeRelation {
     /// as a `code_symbol` row. Survives chunk re-splitting and reformatting.
     ReferencesSymbol,
 
-    /// Phase 0b code-graph relations (symbol→symbol / symbol→external),
+    /// Code-graph relations (symbol→symbol / symbol→external),
     /// produced by the code-intelligence core. The edge carries
     /// `resolution ∈ {resolved, external, ambiguous}`.
     /// Caller symbol invokes callee symbol.
@@ -772,7 +771,7 @@ impl EdgeVia {
 //
 // Stored on `Memory.category` as snake_case strings. Use `Category::from_str`
 // at API boundaries; use `Category::is_long_form` to decide whether the row
-// owns a `content_long` body and gets chunked retrieval (Phase 4).
+// owns a `content_long` body and gets chunked retrieval.
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -863,7 +862,7 @@ impl Category {
 
     /// True for categories whose `content_long` body is the canonical artifact.
     /// Long-form rows skip the deterministic co-occurrence link pass during
-    /// insert and earn chunked retrieval (Phase 4).
+    /// insert and earn chunked retrieval.
     pub fn is_long_form(&self) -> bool {
         matches!(
             self,

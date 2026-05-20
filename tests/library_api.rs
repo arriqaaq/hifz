@@ -125,16 +125,16 @@ async fn library_round_trip_event_session_observe_memory() {
 
     // --- Semantic search round-trip (proves embedding pipeline) ---
     let r = h
-        .search_agentic(SearchReq {
+        .search_session(SearchReq {
             query: "library api works".into(),
             limit: Some(5),
             project: Some("/tmp/test".into()),
             ..Default::default()
         })
         .await
-        .expect("search_agentic");
+        .expect("search_session");
     let rcount = r.get("count").and_then(|v| v.as_u64()).unwrap_or(0);
-    assert!(rcount >= 1, "search_agentic should find the insight");
+    assert!(rcount >= 1, "search_session should find the insight");
 
     // --- Timeline ---
     let tl = h

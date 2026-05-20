@@ -29,7 +29,7 @@ pub async fn report(
     )
     .await;
 
-    // Phase 9: report the active mode so adapters and the website can
+    // Report the active mode so adapters and the website can
     // surface it. Two-flag derivation:
     //   - `ollama_enabled` reflects whether the OllamaClient was constructed
     //     (i.e. OLLAMA_URL is set in config). Reachability is not probed

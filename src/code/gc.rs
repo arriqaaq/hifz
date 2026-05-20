@@ -1,15 +1,15 @@
-//! Code-index garbage collection (M5).
+//! Code-index garbage collection.
 //!
 //! Two passes, both invoked by `hifz_code_gc`:
 //!
-//! 1. **Reconcile deletions** (G7) — diff the indexed `code_file` rows for a
+//! 1. **Reconcile deletions** — diff the indexed `code_file` rows for a
 //!    project against what the walker currently sees on disk. Files in the DB
 //!    but missing from disk get their inbound `references` edges dropped (with
 //!    `metadata.dropped_reason = 'file_deleted'`), their chunks/symbols
 //!    deleted, and a 30-day tombstone `code_file.deleted_at` set on the
 //!    `code_file` row. The tombstone is swept later by `forget::run_forget`.
 //!
-//! 2. **Cold decay** (G8, opt-in via `force_decay=true`) — chunks/symbols with
+//! 2. **Cold decay** (opt-in via `force_decay=true`) — chunks/symbols with
 //!    no inbound refs AND `last_committed_at < now - 60d` AND
 //!    `created_at < now - 30d` lose strength on each pass; rows with
 //!    strength < 0.1 are deleted.
@@ -68,11 +68,9 @@ pub async fn reconcile_deletions(
     dry_run: bool,
     report: &mut CodeGcReport,
 ) -> Result<()> {
-    // 1. Walk the filesystem to learn what currently exists.
     let walked = walk(root, &WalkOpts::default())?;
     let alive: HashSet<String> = walked.into_iter().map(|f| f.rel).collect();
 
-    // 2. Pull all live (non-tombstoned) code_file rows for the project.
     let mut resp = db
         .query(
             "SELECT id, path FROM code_file \
@@ -82,7 +80,6 @@ pub async fn reconcile_deletions(
         .await?;
     let rows: Vec<CodeFilePathRow> = resp.take(0).unwrap_or_default();
 
-    // 3. Diff: every row whose path is missing from disk.
     let now = Utc::now().to_rfc3339();
     for row in rows {
         let Some(ref path) = row.path else { continue };

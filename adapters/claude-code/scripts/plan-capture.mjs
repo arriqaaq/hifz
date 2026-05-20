@@ -77,7 +77,7 @@ async function main() {
 			}),
 			signal: AbortSignal.timeout(3000),
 		});
-		// KEYSTONE: actually activate the plan. The `tags:["active"]` above is
+		// Activate the plan. The `tags:["active"]` above is
 		// just a label — `plans::current()` (which gates the deterministic
 		// `plan --implemented_by--> commit` edge) is only authoritative once
 		// /plans/activate runs (it deactivates any prior active plan for the

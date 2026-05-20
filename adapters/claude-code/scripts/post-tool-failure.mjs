@@ -65,7 +65,7 @@ async function main() {
 	const query = `${data.tool_name || ""} ${errorStr.slice(0, 200)}`.trim();
 
 	try {
-		const res = await fetch(`${REST_URL}/api/v1/search/agentic`, {
+		const res = await fetch(`${REST_URL}/api/v1/search/session`, {
 			method: "POST",
 			headers: HEADERS,
 			body: JSON.stringify({ query, limit: 3, sessionId }),

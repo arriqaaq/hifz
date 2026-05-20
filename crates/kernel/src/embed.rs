@@ -24,14 +24,14 @@ impl Embedder {
         self.dim
     }
 
-    /// Embed passages (for indexing). No prefix needed for MiniLM.
+    /// Embed passages (for indexing).
     pub fn embed(&self, texts: &[&str]) -> Result<Vec<Vec<f32>>> {
         let mut model = self.model.lock().unwrap();
         let embeddings = model.embed(texts, None)?;
         Ok(embeddings)
     }
 
-    /// Embed a single query (for searching). No prefix needed for MiniLM.
+    /// Embed a single query (for searching).
     pub fn embed_single(&self, text: &str) -> Result<Vec<f32>> {
         let mut model = self.model.lock().unwrap();
         let mut embeddings = model.embed(vec![text], None)?;

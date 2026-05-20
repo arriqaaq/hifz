@@ -1,6 +1,6 @@
 //! Rust-side memory scoring.
 //!
-//! SurrealDB has neither `math::exp` nor `time::diff`, so the Mem0-style
+//! SurrealDB has neither `math::exp` nor `time::diff`, so the
 //! recency/access reinforcement formula runs here, against columns we SELECT
 //! from the database.
 //!
@@ -10,7 +10,7 @@ use chrono::{DateTime, Utc};
 
 /// Ebbinghaus half-life for recency decay (days).
 pub const HALF_LIFE_DAYS: f64 = 30.0;
-/// Per-retrieval access boost coefficient (Mem0 default).
+/// Per-retrieval access boost coefficient.
 pub const ACCESS_COEF: f64 = 0.1;
 /// Cap on access reinforcement so hot items don't dominate forever.
 pub const ACCESS_CAP: i64 = 20;

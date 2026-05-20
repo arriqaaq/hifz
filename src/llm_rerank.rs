@@ -5,7 +5,7 @@
 //!
 //! Chosen over a cross-encoder (e.g. `bge-reranker-base`) because the
 //! hifz corpus is code/config text. MS-MARCO-trained rerankers score
-//! poorly on that distribution — a bench in Phase 10 showed `bge-base`
+//! poorly on that distribution — a bench showed `bge-base`
 //! dropping Recall@5 from 0.944 to 0.900. A generalist LLM carries the
 //! world knowledge needed to map e.g. *"ORM choice"* → *"sqlx"*.
 //!

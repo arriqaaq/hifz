@@ -162,7 +162,7 @@ fn chunk_session_to_text(turns: &[Turn]) -> String {
 
 // --- Schema for per-question in-memory DB ---
 
-// Phase A: table + fields only (before inserts)
+// Table + fields only (before inserts)
 // One `content` field with full concatenated text (title + narrative)
 const BENCH_SCHEMA_TABLES: &str = r#"
 DEFINE TABLE IF NOT EXISTS observation SCHEMAFULL;
@@ -171,7 +171,7 @@ DEFINE FIELD IF NOT EXISTS content    ON observation TYPE string;
 DEFINE FIELD IF NOT EXISTS embedding  ON observation TYPE option<array<float>>
 "#;
 
-// Phase B: analyzer + single BM25 index on content (AFTER all inserts)
+// Analyzer + single BM25 index on content (AFTER all inserts)
 // Single index over the full text, snowball(english) stemming
 const BENCH_SCHEMA_FT: &str = r#"
 DEFINE ANALYZER IF NOT EXISTS obs_analyzer TOKENIZERS blank, class
@@ -286,7 +286,7 @@ async fn exec_sql_block(db: &Surreal<Db>, block: &str) -> Result<()> {
     Ok(())
 }
 
-/// Phase A: create table + fields (call BEFORE inserts). Caller must set ns/db.
+/// Create table + fields (call BEFORE inserts). Caller must set ns/db.
 async fn init_bench_tables_raw(db: &Surreal<Db>) -> Result<()> {
     exec_sql_block(db, BENCH_SCHEMA_TABLES).await
 }
@@ -296,7 +296,7 @@ async fn init_bench_vec_index(db: &Surreal<Db>) -> Result<()> {
     exec_sql_block(db, BENCH_SCHEMA_VEC).await
 }
 
-/// Phase B: create analyzer + BM25 FULLTEXT indexes (call AFTER all inserts).
+/// Create analyzer + BM25 FULLTEXT indexes (call AFTER all inserts).
 async fn init_bench_ft_indexes_raw(db: &Surreal<Db>) -> Result<()> {
     exec_sql_block(db, BENCH_SCHEMA_FT).await
 }
@@ -372,7 +372,7 @@ async fn run() -> Result<()> {
         let db_name = format!("q{q_idx}");
         db.use_ns("bench").use_db(&db_name).await?;
 
-        // Phase A: table + fields (before inserts)
+        // Table + fields (before inserts)
         init_bench_tables_raw(&db).await?;
         if use_vectors {
             init_bench_vec_index(&db).await?;
@@ -406,7 +406,7 @@ async fn run() -> Result<()> {
             .check()?;
         }
 
-        // Phase B: create BM25 indexes AFTER all data is inserted
+        // Create BM25 indexes AFTER all data is inserted
         init_bench_ft_indexes_raw(&db).await?;
 
         // Search

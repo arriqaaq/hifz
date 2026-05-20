@@ -126,23 +126,12 @@ DEFINE INDEX IF NOT EXISTS atlas_node_vec ON TABLE atlas_node
 -- carry the LLM/heuristic channel in `via`.
 DEFINE TABLE IF NOT EXISTS atlas_edge SCHEMAFULL TYPE RELATION;
 -- `project` is denormalized onto every edge (both endpoints belong to one
--- project by construction at every RELATE site — see code.rs / extract.rs).
--- This + the single-col `atlas_edge_project` index is the ONLY query shape
--- the planner reliably indexes for project-scoped edge reads in this surreal
--- rev — empirically proven: `atlas_chunk WHERE project=$p` (this exact
--- pattern) returns in 0.42 s on the same project where the prior
--- `WHERE in IN (SELECT id FROM atlas_node WHERE project=$p)` shape hung
--- >18 s, even with `FIELDS in` indexes present. The denormalization is the
--- mechanism, not the index name. See the plan file.
--- `project` is `record<project>` and denormalized onto every edge: it is a
--- pure scoping key (never traversed — endpoints live in `in`/`out`), set
--- atomically at each RELATE site from the same Store, so the invariant
--- `edge.project == in.project == out.project` holds by construction. The
--- record type does NOT affect the perf fix: the >18s hang was the
--- `in IN (SELECT … atlas_node …)` *subquery* shape (forbidden by the
--- `no_atlas_edge_in_subquery_anywhere_in_atlas` test); the fast path is
--- direct indexed equality `WHERE project=$p`, which SurrealDB serves from the
--- `atlas_edge_project` index identically for a string or a record key.
+-- project by construction at every RELATE site). With the single-col
+-- `atlas_edge_project` index, project-scoped edge reads use direct indexed
+-- equality `WHERE project=$p` rather than an `in IN (SELECT …)` subquery
+-- (forbidden by the `no_atlas_edge_in_subquery_anywhere_in_atlas` test). It
+-- is a pure scoping key — never traversed; endpoints live in `in`/`out` —
+-- so the invariant `edge.project == in.project == out.project` holds.
 DEFINE FIELD IF NOT EXISTS project    ON atlas_edge TYPE record<project>;
 DEFINE FIELD IF NOT EXISTS relation   ON atlas_edge TYPE string;
 DEFINE FIELD IF NOT EXISTS via        ON atlas_edge TYPE string DEFAULT 'atlas';

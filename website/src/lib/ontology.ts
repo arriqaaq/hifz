@@ -2,9 +2,8 @@
  * hifz typed ontology mirror.
  *
  * Source of truth: src/models.rs (Rust). This file MUST stay in sync.
- * scripts/sync-ontology.mjs (Phase 9.3 — pending) will eventually
- * regenerate this from the Rust source. Until then, edit by hand and
- * keep both sides aligned.
+ * scripts/sync-ontology.mjs regenerates this from the Rust source.
+ * Until then, edit by hand and keep both sides aligned.
  *
  * See docs/ontology.md for the canonical reference.
  */

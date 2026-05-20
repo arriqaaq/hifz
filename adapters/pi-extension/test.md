@@ -103,15 +103,15 @@ Expect: an `error` observation referencing the missing file.
 ## Test 5 — Semantic recall (proves the embedding pipeline reached fastembed)
 
 ```bash
-curl -s -X POST "$HIFZ/api/v1/search/agentic" -H 'content-type: application/json' \
+curl -s -X POST "$HIFZ/api/v1/search/session" -H 'content-type: application/json' \
   -d '{"query":"agents.md project name","limit":5}' \
   | jq '.results[]? | {title, obs_type, score}'
 
-curl -s -X POST "$HIFZ/api/v1/search/agentic" -H 'content-type: application/json' \
+curl -s -X POST "$HIFZ/api/v1/search/session" -H 'content-type: application/json' \
   -d '{"query":"git commit detection test","limit":5}' \
   | jq '.results[]? | {title, obs_type}'
 
-curl -s -X POST "$HIFZ/api/v1/search/agentic" -H 'content-type: application/json' \
+curl -s -X POST "$HIFZ/api/v1/search/session" -H 'content-type: application/json' \
   -d '{"query":"what files have we written","limit":10}' \
   | jq '.results[]? | {title, obs_type, files}'
 ```

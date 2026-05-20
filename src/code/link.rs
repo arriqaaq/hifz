@@ -4,9 +4,9 @@
 //! 1. **Auto-extract** — `auto_link_memory` runs from `enrich::save_enriched`.
 //!    It scans the memory's title + content + content_long with `FILE_LINE_RE`
 //!    and `FILE_PERMALINK_RE` (chunk-level) and `QUALIFIED_SYMBOL_RE`
-//!    (symbol-level — M4 wires this on). Resolved hits become edges. By
-//!    design (G9), bareword identifiers do NOT auto-link.
-//! 2. **Explicit** — `link_memory_to_lines` and (M4) `link_memory_to_symbol`
+//!    (symbol-level). Resolved hits become edges. By
+//!    design, bareword identifiers do NOT auto-link.
+//! 2. **Explicit** — `link_memory_to_lines` and `link_memory_to_symbol`
 //!    are called from `hifz_link_code` / `hifz_link_symbol` MCP tools.
 //!
 //! Re-anchoring across edits lives in `re_anchor_references`. It's invoked by
@@ -48,7 +48,7 @@ pub static FILE_PERMALINK_RE: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 /// Qualified symbol form: `module::name`, `Type::method`, `path/file.rs::name`.
-/// **Only** qualified patterns auto-link to symbols (G9). Bareword identifiers
+/// **Only** qualified patterns auto-link to symbols. Bareword identifiers
 /// require the explicit `hifz_link_symbol` tool.
 pub static QUALIFIED_SYMBOL_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
@@ -125,7 +125,7 @@ pub async fn auto_link_memory(
             )
             .await;
         }
-        // Qualified symbol form (M4).
+        // Qualified symbol form.
         for cap in QUALIFIED_SYMBOL_RE.captures_iter(text) {
             let qual = &cap["qual"];
             apply_symbol_link(
@@ -187,7 +187,7 @@ async fn apply_chunk_link(
             tracing::warn!("upsert references edge failed: {e}");
             continue;
         }
-        // Touch the chunk so cold-decay (M5) sees it as recently used.
+        // Touch the chunk so cold-decay sees it as recently used.
         let _ = db
             .query("UPDATE type::record($id) SET last_referenced_at = time::now()")
             .bind(("id", c.id.clone()))
@@ -237,7 +237,7 @@ async fn apply_symbol_link(
     }
     if symbols.len() > 1 {
         // Ambiguity: multiple symbols share this qualified name. Drop with a
-        // log entry rather than guessing — G9 says ambiguity → unresolved.
+        // log entry rather than guessing — ambiguity → unresolved.
         report.unresolved_symbols.push(format!(
             "{qualified} (ambiguous: {} matches)",
             symbols.len()
@@ -298,8 +298,8 @@ async fn resolve_symbols(
     file: Option<&str>,
 ) -> Result<Vec<SymbolRow>> {
     // We accept matches on `qualified` OR `name` — many auto-extracts arrive
-    // as `Type::method` while the indexer (M1) stores `qualified == name` for
-    // simple cases. M4 will derive proper qualified paths.
+    // as `Type::method` while the indexer stores `qualified == name` for
+    // simple cases. Proper qualified paths are derived later.
     let mut sql = String::from(
         "SELECT id FROM code_symbol WHERE project = $p \
          AND (qualified = $q OR name = $q)",
@@ -405,9 +405,7 @@ pub async fn link_memory_to_symbol(
     Ok(linked)
 }
 
-// ---------------------------------------------------------------------------
-// Re-anchoring across edits (G6)
-// ---------------------------------------------------------------------------
+// Re-anchoring across edits
 
 /// Snapshot of an edge's anchor metadata before its target is deleted.
 #[derive(Debug, Clone, SurrealValue)]
@@ -573,7 +571,7 @@ mod tests {
 
     #[test]
     fn qualified_symbol_re_requires_double_colon() {
-        // Bareword identifier — must NOT match (G9).
+        // Bareword identifier — must NOT match.
         assert!(
             QUALIFIED_SYMBOL_RE
                 .captures("the parse_chunk function")

@@ -224,7 +224,7 @@ pub struct SessionRow {
     pub date: String,
 }
 
-// --- queries ---
+// queries
 
 pub async fn calls_for_session(db: &Surreal<Db>, session_id: &str) -> Result<Vec<UsageCallRow>> {
     let sid = session_id
@@ -310,7 +310,7 @@ pub async fn calls_all(db: &Surreal<Db>) -> Result<Vec<UsageCallRow>> {
     Ok(rows)
 }
 
-// --- in-memory rollups ---
+// in-memory rollups
 
 pub fn sum_calls(calls: &[UsageCallRow]) -> TokenTotals {
     let mut t = TokenTotals::default();

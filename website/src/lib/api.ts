@@ -66,7 +66,7 @@ export function getHealth(): Promise<HealthResponse> {
   return get(`${CORE}/health`);
 }
 
-export function smartSearch(
+export function search(
   query: string,
   limit = 10,
   mode = 'hybrid',
@@ -75,12 +75,12 @@ export function smartSearch(
   return post(`${CORE}/search`, { query, limit, mode, project });
 }
 
-export function searchAgentic(
+export function searchSession(
   query: string,
   limit = 10,
   project?: string,
 ): Promise<{ results: SearchResult[]; count: number }> {
-  return post(`${CORE}/search/agentic`, { query, limit, project });
+  return post(`${CORE}/search/session`, { query, limit, project });
 }
 
 export function remember(body: RememberRequest): Promise<{ status: string; title: string }> {
@@ -108,7 +108,7 @@ export function searchMemories(
   return get(`${CORE}/memories?${params}`);
 }
 
-// --- Phase 4-6 endpoints (typed graph + markdown round-trip + warmup) ---
+// Typed graph + markdown round-trip + warmup endpoints
 
 export function getMemoryNeighbors(
   id: string,
@@ -434,6 +434,48 @@ export function fetchSessionTotals(
     ? `${AGENT}/usage/sessions?project=${encodeURIComponent(project)}`
     : `${AGENT}/usage/sessions`;
   return get(url);
+}
+
+// --- code intelligence (core code search + indexing) ---
+const CODE = '/api/v1/code';
+
+export interface CodeSearchResult {
+  id: string;
+  file_id: string;
+  path: string;
+  language: string;
+  start_line: number;
+  end_line: number;
+  snippet: string;
+  score: number;
+  via: string;
+}
+export interface CodeSearchResponse {
+  results: CodeSearchResult[];
+  count: number;
+}
+export interface CodeIndexReport {
+  indexed: number;
+  skipped_unchanged: number;
+  chunks: number;
+  symbols: number;
+  errors: number;
+}
+
+export function codeSearch(
+  project: string,
+  query: string,
+  opts?: { language?: string; path?: string; limit?: number; group_by_file?: boolean },
+): Promise<CodeSearchResponse> {
+  return post(`${CODE}/search`, { project, query, ...opts });
+}
+
+export function codeIndex(
+  project: string,
+  root: string,
+  opts?: { follow_symlinks?: boolean; max_file_bytes?: number },
+): Promise<CodeIndexReport> {
+  return post(`${CODE}/index`, { project, root, ...opts });
 }
 
 // --- atlas (corpus knowledge graph) ---

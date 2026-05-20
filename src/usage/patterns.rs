@@ -20,7 +20,7 @@ pub fn for_session(calls: &[UsageCallRow]) -> Vec<UsagePattern> {
     push_some(&mut out, context_growth_session(calls));
     push_some(&mut out, heavy_context_first_call(calls));
     push_some(&mut out, tool_heavy_session(calls));
-    push_some(&mut out, smart_clear_inflection(calls));
+    push_some(&mut out, clear_inflection(calls));
     out
 }
 
@@ -40,11 +40,11 @@ pub fn for_project(calls: &[UsageCallRow]) -> Vec<UsagePattern> {
     push_some(&mut out, per_msg_efficiency(&sessions));
     push_some(&mut out, heavy_context_project(&sessions));
     push_some(&mut out, cache_share(calls));
-    push_some(&mut out, smart_clear_inflection_project(&sessions));
+    push_some(&mut out, clear_inflection_project(&sessions));
     out
 }
 
-// === 1. vague-prompts ===
+// vague-prompts
 
 fn vague_prompts(calls: &[UsageCallRow]) -> Option<UsagePattern> {
     // Group consecutive calls by shared prompt and sum tokens per prompt.
@@ -91,7 +91,7 @@ fn vague_prompts(calls: &[UsageCallRow]) -> Option<UsagePattern> {
     })
 }
 
-// === 2. context-growth (project-level: how many sessions exhibit it) ===
+// context-growth (project-level: how many sessions exhibit it)
 
 fn context_growth_project(sessions: &[Vec<UsageCallRow>]) -> Option<UsagePattern> {
     let long: Vec<&Vec<UsageCallRow>> = sessions.iter().filter(|s| s.len() > 50).collect();
@@ -153,7 +153,7 @@ fn context_growth_session(calls: &[UsageCallRow]) -> Option<UsagePattern> {
     })
 }
 
-// === 3. marathon-sessions ===
+// marathon-sessions
 
 fn marathon_sessions(sessions: &[Vec<UsageCallRow>]) -> Option<UsagePattern> {
     let long: Vec<&Vec<UsageCallRow>> = sessions.iter().filter(|s| s.len() > 200).collect();
@@ -191,7 +191,7 @@ fn marathon_sessions(sessions: &[Vec<UsageCallRow>]) -> Option<UsagePattern> {
     })
 }
 
-// === 4. input-heavy ===
+// input-heavy
 
 fn input_heavy(calls: &[UsageCallRow]) -> Option<UsagePattern> {
     let totals = sum_calls(calls);
@@ -215,7 +215,7 @@ fn input_heavy(calls: &[UsageCallRow]) -> Option<UsagePattern> {
     })
 }
 
-// === 5. expensive-model-for-short-sessions ===
+// expensive-model-for-short-sessions
 
 fn expensive_model_for_short(sessions: &[Vec<UsageCallRow>]) -> Option<UsagePattern> {
     // Find the model with the highest avg-tokens-per-call across all sessions.
@@ -271,7 +271,7 @@ fn expensive_model_for_short(sessions: &[Vec<UsageCallRow>]) -> Option<UsagePatt
     })
 }
 
-// === 6. tool-heavy ===
+// tool-heavy
 
 fn tool_heavy_project(sessions: &[Vec<UsageCallRow>]) -> Option<UsagePattern> {
     let heavy: Vec<&Vec<UsageCallRow>> = sessions.iter().filter(|s| is_tool_heavy(s)).collect();
@@ -323,7 +323,7 @@ fn is_tool_heavy(calls: &[UsageCallRow]) -> bool {
     user > 0 && tool > user * 3
 }
 
-// === 7. per-message efficiency ===
+// per-message efficiency
 
 fn per_msg_efficiency(sessions: &[Vec<UsageCallRow>]) -> Option<UsagePattern> {
     let short: Vec<&Vec<UsageCallRow>> = sessions
@@ -372,7 +372,7 @@ fn per_msg_efficiency(sessions: &[Vec<UsageCallRow>]) -> Option<UsagePattern> {
     })
 }
 
-// === 8. heavy-context (first turn input > 50K) ===
+// heavy-context (first turn input > 50K)
 
 fn heavy_context_project(sessions: &[Vec<UsageCallRow>]) -> Option<UsagePattern> {
     let heavy: Vec<&Vec<UsageCallRow>> = sessions
@@ -423,7 +423,7 @@ fn heavy_context_first_call(calls: &[UsageCallRow]) -> Option<UsagePattern> {
     })
 }
 
-// === 9. cache-share (any breakdown key, report share of total input) ===
+// cache-share (any breakdown key, report share of total input)
 
 fn cache_share(calls: &[UsageCallRow]) -> Option<UsagePattern> {
     let t = sum_calls(calls);
@@ -448,9 +448,9 @@ fn cache_share(calls: &[UsageCallRow]) -> Option<UsagePattern> {
     })
 }
 
-// === 10. smart-clear inflection ===
+// clear inflection
 
-fn smart_clear_inflection(calls: &[UsageCallRow]) -> Option<UsagePattern> {
+fn clear_inflection(calls: &[UsageCallRow]) -> Option<UsagePattern> {
     if calls.len() < 10 {
         return None;
     }
@@ -494,7 +494,7 @@ fn smart_clear_inflection(calls: &[UsageCallRow]) -> Option<UsagePattern> {
     None
 }
 
-fn smart_clear_inflection_project(sessions: &[Vec<UsageCallRow>]) -> Option<UsagePattern> {
+fn clear_inflection_project(sessions: &[Vec<UsageCallRow>]) -> Option<UsagePattern> {
     // Median inflection point across sessions where one exists.
     let mut inflections: Vec<usize> = Vec::new();
     let mut multipliers: Vec<f64> = Vec::new();
@@ -542,7 +542,7 @@ fn smart_clear_inflection_project(sessions: &[Vec<UsageCallRow>]) -> Option<Usag
     })
 }
 
-// === helpers ===
+// helpers
 
 fn group_by_session(calls: &[UsageCallRow]) -> Vec<Vec<UsageCallRow>> {
     use std::collections::HashMap;

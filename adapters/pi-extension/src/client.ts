@@ -54,8 +54,8 @@ export class Client {
   }
 
   /** Read-only: search Hifz observations / memories. Used by failure-recovery and /hifz-recall. */
-  async searchAgentic(req: { query: string; limit?: number; project?: string; sessionId?: string }): Promise<{ results: any[] } | null> {
-    const r = await this.request("/api/v1/search/agentic", req);
+  async searchSession(req: { query: string; limit?: number; project?: string; sessionId?: string }): Promise<{ results: any[] } | null> {
+    const r = await this.request("/api/v1/search/session", req);
     if (!r.ok) return null;
     const j = r.json as { results?: any[] } | null;
     return { results: j?.results ?? [] };

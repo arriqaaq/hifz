@@ -9,7 +9,6 @@ use crate::models::ProjectDigest;
 pub async fn generate_digest(db: &Surreal<Db>, project: &str) -> Result<ProjectDigest> {
     let now = chrono::Utc::now().to_rfc3339();
 
-    // Count sessions
     let mut resp = db
         .query("SELECT count() AS c FROM session WHERE project = $project GROUP ALL")
         .bind(("project", project.to_string()))
@@ -21,7 +20,6 @@ pub async fn generate_digest(db: &Surreal<Db>, project: &str) -> Result<ProjectD
         .and_then(|v| v.as_i64())
         .unwrap_or(0);
 
-    // Count observations
     let mut resp = db
         .query(
             "SELECT count() AS c FROM observation \
@@ -36,7 +34,6 @@ pub async fn generate_digest(db: &Surreal<Db>, project: &str) -> Result<ProjectD
         .and_then(|v| v.as_i64())
         .unwrap_or(0);
 
-    // Get keyword frequencies
     let mut resp = db
         .query(
             "SELECT keywords, timestamp FROM observation \
@@ -60,7 +57,6 @@ pub async fn generate_digest(db: &Surreal<Db>, project: &str) -> Result<ProjectD
         }
     }
 
-    // Get file frequencies
     let mut resp = db
         .query(
             "SELECT files, timestamp FROM observation \

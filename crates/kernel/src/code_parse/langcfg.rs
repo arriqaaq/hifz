@@ -1,6 +1,6 @@
 //! Per-language configuration driving the single generic walk in
 //! `codegraph`. Data, not code, per language — new languages are added by
-//! filling one of these in (E3c), not by forking the traversal.
+//! filling one of these in (the rest is added per language later), not by forking the traversal.
 
 use super::codegraph::RefKind;
 use super::lang::Language;
@@ -74,7 +74,7 @@ impl LanguageConfig {
     }
 
     /// Parse an import/`use` node into structured bindings by walking the
-    /// AST (Rust today; E3c per language). Never string-splits the whole
+    /// AST (Rust today; extended per language). Never string-splits the whole
     /// statement.
     pub fn parse_imports(
         &self,
@@ -152,9 +152,9 @@ impl LanguageConfig {
                 }
                 out
             }
-            // Go cross-package import→file resolution is the same bounded
-            // follow-up as JS specifier resolution; calls still resolve via
-            // the name table (nothing dropped). Defs/identity unaffected.
+            // Go cross-package import→file resolution is not performed here;
+            // calls still resolve via the name table (nothing dropped).
+            // Defs/identity unaffected.
             Language::Go => Vec::new(),
             Language::Plain => Vec::new(),
         }
@@ -579,9 +579,9 @@ const PYTHON: LanguageConfig = LanguageConfig {
 
 /// ESM `import` → structured bindings (AST-driven). Module specifiers are
 /// kept as written (`./db`, `react`); cross-module *specifier→file*
-/// resolution is the bounded JS/TS deepening — until then the resolver's
-/// name-table fallback handles internal names and bare specifiers resolve
-/// to External (correct: npm deps). 3-state contract holds; nothing dropped.
+/// resolution is not performed here — the resolver's name-table fallback
+/// handles internal names and bare specifiers resolve to External (npm deps).
+/// 3-state contract holds; nothing dropped.
 fn js_import(node: tree_sitter::Node, src: &str, out: &mut Vec<super::codegraph::ImportBinding>) {
     use super::codegraph::ImportBinding;
     let spec = node

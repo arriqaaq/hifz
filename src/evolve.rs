@@ -1,4 +1,4 @@
-//! A-MEM Memory Evolution — opt-in LLM-driven neighbour refinement.
+//! Memory Evolution — opt-in LLM-driven neighbour refinement.
 //!
 //! Gated by `HIFZ_LLM_EVOLVE=true` at startup. On a new-memory write (or manual
 //! `hifz_evolve` invocation), the LLM inspects the new note and its KNN/graph

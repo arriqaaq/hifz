@@ -35,7 +35,7 @@ hifz separates **core knowledge** from **agent capture**:
 | `memory` | Curated, project-scoped long-term knowledge |
 | `edge` | Typed graph edges between memory nodes |
 | `entity` | Named things (files, symbols, concepts, errors) |
-| `core_memory` | MemGPT-style per-project singleton (identity, goals, invariants, watchlist) |
+| `core_memory` | Per-project singleton (identity, goals, invariants, watchlist) |
 | `semantic_memory` | Facts consolidated from sessions (tier 1 consolidation) |
 | `procedural_memory` | Workflows consolidated from observations (tier 3 consolidation) |
 
@@ -178,7 +178,7 @@ Recency decays, access reinforces, grounding-derived strength anchors.
 
 ### core_mem.rs — Always-On Context
 
-MemGPT-style per-project block: identity, goals, invariants, watchlist. Always prepended to injected context so these never drift out on compaction.
+Per-project block: identity, goals, invariants, watchlist. Always prepended to injected context so these never drift out on compaction.
 
 ### plans.rs — Plans as Pinned Memory
 
@@ -259,7 +259,7 @@ This creates an append-only version chain where only the canonical version of ea
 | `forget` | TTL expiry and contradiction detection |
 | `search` | Hybrid BM25 + HNSW retrieval with RRF fusion |
 | `rank` | Recency/access/strength scoring formula |
-| `core_mem` | MemGPT-style always-on per-project context |
+| `core_mem` | Always-on per-project context |
 | `consolidate` | 4-tier background processing pipeline |
 | `rerank` | Cross-encoder reranking (fastembed/ONNX) |
 | `llm_rerank` | LLM-as-reranker via Ollama |

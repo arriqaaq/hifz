@@ -13,23 +13,18 @@ pub async fn run_consolidation(
 ) -> Result<ConsolidationResult> {
     let mut result = ConsolidationResult::default();
 
-    // Tier 1: Semantic — merge session summaries into facts (requires LLM)
     if let Some(ollama) = ollama {
         let semantic_count = tier_semantic(db, ollama).await.unwrap_or(0);
         result.semantic_facts_created = semantic_count;
     }
 
-    // Tier 2: Reflect — cluster related memories (no LLM needed)
-    // This is a simpler version that groups by shared keywords
     result.clusters_created = tier_reflect(db).await.unwrap_or(0);
 
-    // Tier 3: Procedural — extract workflows (requires LLM)
     if let Some(ollama) = ollama {
         let proc_count = tier_procedural(db, ollama).await.unwrap_or(0);
         result.procedures_extracted = proc_count;
     }
 
-    // Tier 4: Decay — apply exponential decay to old memories
     result.decayed = tier_decay(db, 30).await.unwrap_or(0);
 
     Ok(result)

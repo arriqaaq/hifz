@@ -141,12 +141,10 @@ impl Hifz {
         is_repo
     }
 
-    // -----------------------------------------------------------------
     // Library API methods — one per REST handler.
     // Each is a thin dispatch into a core module function.
-    // -----------------------------------------------------------------
 
-    // --- Sessions ---
+    // Sessions
     pub async fn session_start(
         &self,
         req: crate::models::SessionStartReq,
@@ -156,7 +154,7 @@ impl Hifz {
     pub async fn session_end(&self, session_id: &str) -> Result<serde_json::Value> {
         let result = crate::session::end(&self.db, session_id).await?;
 
-        // Phase 3.2: kick off consolidation in the background. Time-bounded
+        // Kick off consolidation in the background. Time-bounded
         // by the consolidator itself; spawned so the SessionEnd hook returns
         // immediately and the agent's shutdown isn't blocked by LLM calls.
         if let Some(ollama) = self.ollama.clone() {
@@ -177,7 +175,7 @@ impl Hifz {
         Ok(result)
     }
 
-    /// Phase 3.1: build a project-scoped warmup digest at session start.
+    /// Build a project-scoped warmup digest at session start.
     /// Returns the typed `WarmupDigest` (latest_plan, decisions, conventions,
     /// open_bugs, gotchas, failure_patterns, recent_lessons, plus a flat top-N).
     /// Hook callers should inject `top` as a system-context block.
@@ -226,7 +224,7 @@ impl Hifz {
         crate::session::list(&self.db, limit).await
     }
 
-    // --- Observations ---
+    // Observations
     pub async fn observe(&self, payload: crate::models::HookPayload) -> Result<Option<String>> {
         crate::observe::observe(
             &self.db,
@@ -245,7 +243,7 @@ impl Hifz {
         crate::observe::search(&self.db, params).await
     }
 
-    // --- Runs ---
+    // Runs
     pub async fn runs_search(&self, req: crate::models::RunsReq) -> Result<serde_json::Value> {
         let limit = req.limit.unwrap_or(10);
         let rows = crate::run::search(&self.db, req.project.as_deref(), &req.query, limit).await?;
@@ -296,7 +294,7 @@ impl Hifz {
         }))
     }
 
-    // --- Memory ---
+    // Memory
     pub async fn remember(&self, req: crate::models::RememberReq) -> Result<serde_json::Value> {
         // Default category is `Note` (catch-all for ad-hoc memories) — see
         // `models::Category`. Unknown category strings also fall through to Note.
@@ -505,7 +503,7 @@ impl Hifz {
         Ok(serde_json::json!({"session_id": id, "events": events, "count": count}))
     }
 
-    /// Phase 5: typed graph walk from a memory. `relations` filters which
+    /// Typed graph walk from a memory. `relations` filters which
     /// edge labels are traversed; `max_hops` defaults to 1 (immediate
     /// neighbors). Returns the neighbor memory rows annotated with the
     /// edge that pulled them in (relation, score, via, reason).
@@ -600,7 +598,7 @@ impl Hifz {
         Ok(serde_json::json!({"neighbors": neighbors, "count": count}))
     }
 
-    /// Phase 5: chronological digest of recent memories for a project.
+    /// Chronological digest of recent memories for a project.
     /// Groups the last `days` (default 30) of activity by category.
     pub async fn project_digest(
         &self,
@@ -663,7 +661,7 @@ impl Hifz {
         }))
     }
 
-    /// Phase 5: project accumulator rollup. Mirrors the warmup digest in
+    /// Project accumulator rollup. Mirrors the warmup digest in
     /// shape (latest plan, decisions, conventions, open bugs, gotchas,
     /// failure patterns, recent lessons) but is project-only — no
     /// session_id concept and no flat top-N.
@@ -672,7 +670,7 @@ impl Hifz {
         Ok(serde_json::to_value(digest).unwrap_or_default())
     }
 
-    /// Phase 4.5: list incoming edges for a memory ("backlinks" — every
+    /// List incoming edges for a memory ("backlinks" — every
     /// memory or observation that references this one). Optional relation
     /// filter narrows to a single typed edge.
     pub async fn memory_backlinks(
@@ -704,12 +702,12 @@ impl Hifz {
         Ok(serde_json::json!({"backlinks": backlinks, "count": count}))
     }
 
-    /// Phase 4.4: render a memory as a frontmatter-rich markdown document.
+    /// Render a memory as a frontmatter-rich markdown document.
     pub async fn memory_markdown_get(&self, id: &str) -> Result<String> {
         crate::markdown::render(&self.db, id).await
     }
 
-    /// Phase 4.4: parse an edited markdown document and write it as a NEW
+    /// Parse an edited markdown document and write it as a NEW
     /// memory version that supersedes the old one. Old memory's
     /// `is_latest` is flipped via the supersedes lifecycle path in
     /// `enrich::save_enriched`.
@@ -742,7 +740,7 @@ impl Hifz {
             (doc.body.clone(), None)
         };
 
-        // Phase 4 deletes the old chunks before the new version is written
+        // The old chunks are deleted before the new version is written
         // so a re-PUT doesn't accumulate stale chunks.
         if let Some(old_rid) = resolve_memory_record_id(&self.db, id).await {
             let _ = crate::chunk::delete_chunks_for(&self.db, &old_rid).await;
@@ -770,8 +768,8 @@ impl Hifz {
         Ok(serde_json::json!({"status": "ok", "id": new_id, "supersedes": id}))
     }
 
-    // --- Search & context ---
-    pub async fn smart_search(&self, req: crate::models::SearchReq) -> Result<serde_json::Value> {
+    // Search & context
+    pub async fn search(&self, req: crate::models::SearchReq) -> Result<serde_json::Value> {
         let limit = req.limit.unwrap_or(10);
         let mode = req.mode.as_deref().unwrap_or("hybrid");
         let project = req.project.as_deref();
@@ -799,7 +797,7 @@ impl Hifz {
         let count = results.len();
         Ok(serde_json::json!({"results": results, "count": count}))
     }
-    pub async fn search_agentic(&self, req: crate::models::SearchReq) -> Result<serde_json::Value> {
+    pub async fn search_session(&self, req: crate::models::SearchReq) -> Result<serde_json::Value> {
         let limit = req.limit.unwrap_or(10);
         let project = req.project.as_deref();
         let results =
@@ -809,7 +807,7 @@ impl Hifz {
         Ok(serde_json::json!({"results": results, "count": count}))
     }
 
-    // --- Code dimension (M2+) ---
+    // Code dimension
 
     pub async fn code_index(&self, req: crate::models::CodeIndexReq) -> Result<serde_json::Value> {
         let opts = crate::code::index::IndexOpts {
@@ -977,7 +975,7 @@ impl Hifz {
         )
     }
 
-    // --- Core memory ---
+    // Core memory
     pub async fn core_get(&self, project: &str) -> Result<serde_json::Value> {
         let row = crate::core_mem::get(&self.db, project).await?;
         Ok(serde_json::to_value(row).unwrap_or_default())
@@ -992,7 +990,7 @@ impl Hifz {
         Ok(serde_json::to_value(row).unwrap_or_default())
     }
 
-    // --- Project intelligence ---
+    // Project intelligence
     pub async fn digest(&self, project: Option<&str>) -> Result<serde_json::Value> {
         let p = project.unwrap_or("global");
         let d = crate::digest::generate_digest(&self.db, p).await?;
@@ -1023,7 +1021,7 @@ impl Hifz {
         crate::commits::diff(&self.db, self.git_path.as_ref(), sha).await
     }
 
-    // --- Plans ---
+    // Plans
     pub async fn plans_list(
         &self,
         params: crate::models::PlansListReq,
@@ -1046,7 +1044,7 @@ impl Hifz {
         crate::plans::abandon(&self.db, id).await
     }
 
-    // --- Maintenance ---
+    // Maintenance
     pub async fn consolidate(&self) -> Result<serde_json::Value> {
         let r = crate::consolidate::run_consolidation(&self.db, self.ollama.as_deref()).await?;
         Ok(serde_json::to_value(r).unwrap_or_default())
@@ -1069,7 +1067,7 @@ impl Hifz {
         .await
     }
 
-    // --- Agent usage (generic LLM token tracking) ---
+    // Agent usage (generic LLM token tracking)
     pub async fn usage_record(
         &self,
         rec: crate::models::AgentUsageRecord,

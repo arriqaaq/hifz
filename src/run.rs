@@ -163,7 +163,7 @@ pub async fn detect_uncommitted_outcome(db: &Surreal<Db>, run_id: &RecordId) -> 
 }
 
 /// Deterministic lesson: concatenate titles of the run's highest-importance
-/// observations. LLM evolution (Phase 5) can upgrade this later.
+/// observations. LLM evolution can upgrade this later.
 async fn derive_lesson(db: &Surreal<Db>, run_id: &RecordId) -> Result<String> {
     #[derive(Debug, SurrealValue)]
     struct ObsRow {

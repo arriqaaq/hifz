@@ -638,3 +638,50 @@ pub async fn code_gc(
 ) -> ApiResult {
     json_or_err(state.code_gc(body).await)
 }
+
+#[derive(Deserialize)]
+pub struct CodeWatchReq {
+    pub project: String,
+    /// Required to start; ignored for stop.
+    pub root: Option<String>,
+}
+
+/// Start a live watcher for `{project, root}` (manual override of auto-discovery).
+pub async fn code_watch_start(
+    State(state): State<AppState>,
+    AppJson(body): AppJson<CodeWatchReq>,
+) -> ApiResult {
+    let Some(root) = body.root else {
+        return Err(ApiError::from(anyhow::anyhow!(
+            "root is required to start a watcher"
+        )));
+    };
+    let project = body.project.clone();
+    json_or_err(
+        state
+            .start_watch(&body.project, std::path::PathBuf::from(root))
+            .map(|_| serde_json::json!({ "watching": project })),
+    )
+}
+
+/// Stop the watcher for `{project}`.
+pub async fn code_watch_stop(
+    State(state): State<AppState>,
+    AppJson(body): AppJson<CodeWatchReq>,
+) -> ApiResult {
+    let stopped = state.stop_watch(&body.project);
+    json_or_err(Ok(
+        serde_json::json!({ "stopped": stopped, "project": body.project }),
+    ))
+}
+
+/// List active watchers as `[{project, root}]`.
+pub async fn code_watchers(State(state): State<AppState>) -> ApiResult {
+    let list: Vec<serde_json::Value> = state
+        .list_watchers()
+        .into_iter()
+        .map(|(project, root)| serde_json::json!({ "project": project, "root": root }))
+        .collect();
+    let count = list.len();
+    json_or_err(Ok(serde_json::json!({ "watchers": list, "count": count })))
+}

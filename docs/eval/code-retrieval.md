@@ -32,7 +32,7 @@ The headline is **corrected chunk-hit@K**: a returned chunk overlaps
 `[doc_top..end]` — i.e. the agent actually got *this function* (its doc +
 body), not merely the right file. `doc_top` is the topmost line of the doc
 block above the def (the strict `code_symbol.start_line` excludes the `///` doc
-the query is derived from; `codegraph.rs:149-150`). `doc_top` and the
+the query is derived from; `graph.rs:149-150`). `doc_top` and the
 corrected/strict overlap are **unit-tested**.
 
 `genuine_fail = N − chunk_hit`. Every non-hit → exactly one bucket:
@@ -97,7 +97,7 @@ function **97.4%** of the time on hard semantic (identifier-stripped) queries
 across the whole repo. The earlier alarming "~0.66 R@5 / ~28% gap" was **~96% a
 broken yardstick, not broken retrieval**: `code_symbol.start_line` excludes the
 `///` doc comment the query is *derived from* (verified
-`codegraph.rs:149-150`), so a correct retrieval landing on the doc+signature
+`graph.rs:149-150`), so a correct retrieval landing on the doc+signature
 chunk was scored a miss. The corrected oracle spans the function *plus its doc*
 (`[doc_top..end]` — what is actually indexed and queried); the 26.7%
 **oracle-correction audit** number is reported precisely so this leniency is

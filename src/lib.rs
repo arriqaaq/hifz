@@ -73,6 +73,9 @@ pub struct Hifz {
     pub started_at: Instant,
     pub git_path: Option<PathBuf>,
     pub git_repo_cache: Arc<DashMap<String, bool>>,
+    /// Active live code watchers, keyed by project. One per `(project, root)`;
+    /// auto-started for indexed projects. See `start_watch`/`stop_watch`.
+    pub watchers: Arc<DashMap<String, crate::code::watcher::WatcherHandle>>,
 }
 
 impl Hifz {
@@ -113,7 +116,78 @@ impl Hifz {
             started_at: Instant::now(),
             git_path,
             git_repo_cache: Arc::new(DashMap::new()),
+            watchers: Arc::new(DashMap::new()),
         }
+    }
+
+    /// Start a live code watcher for `project` rooted at `root` if one isn't
+    /// already running. Idempotent — a second call for an already-watched
+    /// project is a no-op. Requires a tokio runtime (spawns a background task).
+    pub fn start_watch(&self, project: &str, root: PathBuf) -> Result<()> {
+        if self.watchers.contains_key(project) {
+            return Ok(());
+        }
+        let handle = crate::code::watcher::start_watcher(self.clone(), project.to_string(), root)?;
+        self.watchers.insert(project.to_string(), handle);
+        Ok(())
+    }
+
+    /// Stop and remove the watcher for `project`. Returns true if one was running.
+    pub fn stop_watch(&self, project: &str) -> bool {
+        self.watchers.remove(project).is_some()
+    }
+
+    /// List active watchers as `(project, root)` pairs.
+    pub fn list_watchers(&self) -> Vec<(String, String)> {
+        self.watchers
+            .iter()
+            .map(|e| (e.project.clone(), e.root.display().to_string()))
+            .collect()
+    }
+
+    /// On boot, auto-start a live watcher for every project already in the code
+    /// index. The watch root is derived from `code_file.abs_path` minus its
+    /// repo-relative `path` (no separate registry needed). `HIFZ_CODE_WATCH=0`
+    /// is a kill switch.
+    pub async fn autostart_watchers_from_index(&self) -> Result<()> {
+        if std::env::var("HIFZ_CODE_WATCH").as_deref() == Ok("0") {
+            tracing::info!("code watchers disabled (HIFZ_CODE_WATCH=0)");
+            return Ok(());
+        }
+        #[derive(Debug, SurrealValue)]
+        struct Row {
+            project: Option<String>,
+            abs_path: Option<String>,
+            path: Option<String>,
+        }
+        let mut resp = self
+            .db
+            .query("SELECT project, abs_path, path FROM code_file WHERE deleted_at IS NONE")
+            .await?;
+        let rows: Vec<Row> = resp.take(0).unwrap_or_default();
+
+        let mut roots: std::collections::HashMap<String, PathBuf> =
+            std::collections::HashMap::new();
+        for r in rows {
+            let (Some(project), Some(abs), Some(rel)) = (r.project, r.abs_path, r.path) else {
+                continue;
+            };
+            if roots.contains_key(&project) {
+                continue;
+            }
+            if let Some(root) = derive_root(&abs, &rel)
+                && root.is_dir()
+            {
+                roots.insert(project, root);
+            }
+        }
+        for (project, root) in roots {
+            tracing::info!("auto-watching project={project} root={}", root.display());
+            if let Err(e) = self.start_watch(&project, root) {
+                tracing::warn!("autostart watcher {project}: {e}");
+            }
+        }
+        Ok(())
     }
 
     /// Whether `project` is a git working tree. Cached per-project for the
@@ -826,6 +900,14 @@ impl Hifz {
         let report =
             crate::code::index::index_repo(&self.db, &self.embedder, &req.project, root, &opts)
                 .await?;
+        // Auto-start a live watcher so the index stays in sync without manual
+        // steps. Skip for ephemeral git-clone roots (only watch real local repos).
+        if cloned.is_none()
+            && let Err(e) =
+                self.start_watch(&req.project, std::path::Path::new(&req.root).to_path_buf())
+        {
+            tracing::warn!("auto-start watcher failed for {}: {e}", req.project);
+        }
         Ok(serde_json::to_value(&report)?)
     }
 
@@ -1211,8 +1293,22 @@ impl Hifz {
             started_at: Instant::now(),
             git_path,
             git_repo_cache: Arc::new(DashMap::new()),
+            watchers: Arc::new(DashMap::new()),
         })
     }
+}
+
+/// Derive a repo root from an absolute file path and its repo-relative path:
+/// `root = abs - rel`. Used by `autostart_watchers_from_index` so no separate
+/// project→root registry is needed. Returns `None` if `abs` doesn't end with `rel`.
+fn derive_root(abs: &str, rel: &str) -> Option<PathBuf> {
+    let abs_norm = abs.replace('\\', "/");
+    let stripped = abs_norm.strip_suffix(rel)?;
+    let trimmed = stripped.trim_end_matches('/');
+    if trimmed.is_empty() {
+        return None;
+    }
+    Some(PathBuf::from(trimmed))
 }
 
 // `rid_to_string` moved to `kernel::ids`; re-exported at crate root
@@ -1245,3 +1341,26 @@ async fn resolve_memory_record_id(
 // `truncate_at_char_boundary` moved to `kernel::ids`; re-exported at
 // crate root (below).
 pub use kernel::ids::{rid_to_string, truncate_at_char_boundary};
+
+#[cfg(test)]
+mod derive_root_tests {
+    use super::derive_root;
+    use std::path::PathBuf;
+
+    #[test]
+    fn strips_rel_to_recover_root() {
+        assert_eq!(
+            derive_root("/repo/src/a.rs", "src/a.rs"),
+            Some(PathBuf::from("/repo"))
+        );
+        assert_eq!(
+            derive_root("/repo/a.rs", "a.rs"),
+            Some(PathBuf::from("/repo"))
+        );
+    }
+
+    #[test]
+    fn none_when_rel_is_not_a_suffix() {
+        assert_eq!(derive_root("/repo/src/a.rs", "other/a.rs"), None);
+    }
+}

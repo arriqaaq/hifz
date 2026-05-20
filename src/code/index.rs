@@ -110,15 +110,47 @@ pub async fn index_repo(
     // Project-wide code-intelligence pass: semantic scope-qualified
     // symbols + calls/imports/contains graph with `resolution`. Runs once,
     // after every file's chunks exist, so symbol↔chunk spans bind.
-    match crate::code::codeintel::index_code_graph(db, project, root).await {
+    match crate::code::intel::index_code_graph(db, project, root).await {
         Ok(cg) => report.symbols = cg.symbols,
         Err(e) => {
-            tracing::warn!("codeintel::index_code_graph failed: {e}");
+            tracing::warn!("intel::index_code_graph failed: {e}");
             report.errors += 1;
         }
     }
 
     Ok(report)
+}
+
+/// Index a single file by absolute path (live-watcher hot path). Builds a
+/// `WalkedFile` from filesystem metadata and runs the same idempotent
+/// `index_walked` logic (mtime/hash short-circuit, delete-recreate chunks,
+/// re-anchor edges). Does NOT run the project-wide symbol pass — the caller
+/// (watcher) drives `intel::resolve_and_persist` over its cached graphs.
+pub async fn index_file(
+    db: &Surreal<Db>,
+    embedder: &Embedder,
+    project: &str,
+    root: &Path,
+    abs_path: &Path,
+) -> Result<IndexFileOutcome> {
+    let meta = std::fs::metadata(abs_path).context("stat failed")?;
+    let mtime_ns = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
+        .map(|d| d.as_nanos() as i128)
+        .unwrap_or(0);
+    let rel = abs_path
+        .strip_prefix(root)
+        .map(|p| p.to_string_lossy().replace('\\', "/"))
+        .unwrap_or_else(|_| abs_path.to_string_lossy().replace('\\', "/"));
+    let f = WalkedFile {
+        abs: abs_path.to_path_buf(),
+        rel,
+        size_bytes: meta.len(),
+        mtime_ns,
+    };
+    index_walked(db, embedder, project, &f).await
 }
 
 async fn index_walked(
@@ -181,7 +213,7 @@ async fn index_walked(
     if chunks.is_empty() {
         return Ok(IndexFileOutcome::Skipped);
     }
-    // Symbols + the code graph are built project-wide by `codeintel`
+    // Symbols + the code graph are built project-wide by `intel`
     // (called once at the end of `index_repo`), not per-file here.
 
     // embed
@@ -244,14 +276,14 @@ async fn index_walked(
     };
 
     // snapshot inbound chunk references for re-anchoring.
-    // (Symbol-level re-anchoring is gone — `codeintel` keeps symbol ids
+    // (Symbol-level re-anchoring is gone — `intel` keeps symbol ids
     // stable across reindex and reconciles renames structurally.)
     let archived_chunks = crate::code::link::snapshot_references(db, &file_id)
         .await
         .unwrap_or_default();
 
     // wipe old chunks + their part_of edges (symbols are
-    // owned by `codeintel` via stable-id UPSERT, not wiped per file).
+    // owned by `intel` via stable-id UPSERT, not wiped per file).
     let _ = db
         .query(
             "DELETE edge WHERE relation = 'part_of' AND \
@@ -308,7 +340,7 @@ async fn index_walked(
     }
 
     // symbols + code graph are built project-wide by
-    // `codeintel::index_code_graph` (called once from `index_repo` after
+    // `intel::index_code_graph` (called once from `index_repo` after
     // all chunks exist), keyed on a deterministic `(project,qualified)` id
     // so `references_symbol` edges survive reindex by construction.
 

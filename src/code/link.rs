@@ -460,7 +460,7 @@ pub async fn snapshot_references(db: &Surreal<Db>, file_id: &RecordId) -> Result
 
 // `snapshot_symbol_references` / `re_anchor_symbol_references` removed in
 // E4. Symbol identity is now a deterministic `(project,qualified)` id
-// (`codeintel`), so `references_symbol` edges survive reindex by
+// (`intel`), so `references_symbol` edges survive reindex by
 // construction; symbol renames are reconciled structurally there. Chunk
 // re-anchoring (`snapshot_references`/`re_anchor_references`) is unchanged.
 

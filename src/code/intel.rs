@@ -3,7 +3,7 @@
 //! Replaces the old per-file `.scm` symbol writer. Walks every supported
 //! file, builds each file's `FileGraph` via the hifz-core code-intel core
 //! (semantic scope-qualified identity), resolves references project-wide
-//! (`coderesolve` — 3-state, nothing dropped), then **UPSERTs** `code_symbol`
+//! (`resolve` — 3-state, nothing dropped), then **UPSERTs** `code_symbol`
 //! on a deterministic `(project,qualified)` id (no wipe-recreate, so
 //! `references_symbol` edges survive reindex by construction) and rebuilds
 //! the derived `calls`/`imports`/`contains` graph with `resolution`.
@@ -12,8 +12,8 @@
 //! different `qualified`) → inbound `references_symbol` migrated. This
 //! replaces the deleted `matched_symbol` string re-anchor.
 
-use std::collections::HashMap;
-use std::path::Path;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use sha2::{Digest, Sha256};
@@ -23,9 +23,70 @@ use surrealdb::types::{RecordId, SurrealValue};
 use crate::code::lang::Language;
 use crate::code::walker::{WalkOpts, walk};
 use crate::db::Db;
-use kernel::code_parse::codegraph::walk_file;
-use kernel::code_parse::coderesolve::{Resolution, resolve_project};
+use kernel::code_parse::graph::{FileGraph, walk_file};
 use kernel::code_parse::langmod::module_path;
+use kernel::code_parse::resolve::{Resolution, resolve_project};
+
+/// A parsed file held in the live-watcher's in-memory cache: the tree-sitter
+/// `FileGraph` plus the content hash that produced it (to skip no-op events)
+/// and the metadata `resolve_and_persist` needs to anchor symbols.
+#[derive(Debug, Clone)]
+pub struct CachedFile {
+    pub abs: PathBuf,
+    pub lang: Language,
+    pub content_hash: String,
+    pub graph: FileGraph,
+}
+
+/// Per-project map `rel_path -> CachedFile`. The watcher re-parses only the
+/// changed file and re-runs the (pure, cheap) `resolve_project` over this set,
+/// so the symbol/call graph stays consistent without re-parsing the repo.
+pub type FileGraphCache = HashMap<String, CachedFile>;
+
+/// Parse one file into a `CachedFile` (read + hash + tree-sitter walk). Pure —
+/// no DB. Returns `None` for unreadable, non-UTF8, or unsupported-language files.
+pub fn build_file_graph(abs: &Path, rel: &str, root: &Path) -> Option<CachedFile> {
+    let bytes = std::fs::read(abs).ok()?;
+    let source = std::str::from_utf8(&bytes).ok()?;
+    let lang = Language::from_path(abs).unwrap_or(Language::Plain);
+    if lang == Language::Plain {
+        return None;
+    }
+    let mp = module_path(lang, abs, root);
+    let graph = walk_file(lang, source, &mp).ok()?;
+    let _ = rel;
+    Some(CachedFile {
+        abs: abs.to_path_buf(),
+        lang,
+        content_hash: sha256_hex(&bytes),
+        graph,
+    })
+}
+
+/// Walk `root` (gitignore-honest) and parse every supported file into a
+/// `FileGraphCache`. Pure — no DB. Used to warm the watcher's cache.
+pub fn build_cache(root: &Path) -> FileGraphCache {
+    let mut cache = FileGraphCache::new();
+    let files = match walk(root, &WalkOpts::default()) {
+        Ok(f) => f,
+        Err(e) => {
+            tracing::warn!("intel::build_cache walk failed: {e}");
+            return cache;
+        }
+    };
+    for f in files {
+        if let Some(cf) = build_file_graph(&f.abs, &f.rel, root) {
+            cache.insert(f.rel, cf);
+        }
+    }
+    cache
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    let mut h = Sha256::new();
+    h.update(bytes);
+    hex::encode(h.finalize())
+}
 
 #[derive(Debug, Default, serde::Serialize)]
 pub struct CodeGraphReport {
@@ -99,39 +160,57 @@ pub async fn index_code_graph(
     project: &str,
     root: &Path,
 ) -> Result<CodeGraphReport> {
-    let files = walk(root, &WalkOpts::default()).context("walk failed")?;
+    let cache = build_cache(root);
+    resolve_and_persist(db, project, &cache, None).await
+}
 
-    // Per-file walk → FileGraphs + association maps.
-    let mut graphs = Vec::new();
+/// Resolve the project-wide symbol/call graph from an in-memory `FileGraphCache`
+/// and persist it. `resolve_project` is pure and cheap, so this re-runs over the
+/// whole cached set on every change — the cost the watcher avoids is re-parsing
+/// files, not this resolve. When `changed` is `Some`, only those files' symbols
+/// are UPSERTed (unchanged files' defs are byte-identical, so their writes and
+/// per-symbol `chunk_span` queries are skipped); rename/stale reconciliation and
+/// the derived-edge rebuild always run project-wide for correctness.
+pub async fn resolve_and_persist(
+    db: &Surreal<Db>,
+    project: &str,
+    cache: &FileGraphCache,
+    changed: Option<&HashSet<String>>,
+) -> Result<CodeGraphReport> {
+    // Resolve existing code_file ids in one query; ensure rows for new files.
+    #[derive(Debug, SurrealValue)]
+    struct FileRow {
+        id: RecordId,
+        path: Option<String>,
+    }
+    let mut existing: HashMap<String, RecordId> = HashMap::new();
+    {
+        let mut resp = db
+            .query("SELECT id, path FROM code_file WHERE project = $p AND deleted_at IS NONE")
+            .bind(("p", project.to_string()))
+            .await?;
+        let rows: Vec<FileRow> = resp.take(0).unwrap_or_default();
+        for r in rows {
+            if let Some(p) = r.path {
+                existing.insert(p, r.id);
+            }
+        }
+    }
+
+    // Build association maps from the cache (no file IO, no re-parse).
+    let mut graphs: Vec<FileGraph> = Vec::with_capacity(cache.len());
     let mut qual2file: HashMap<String, (RecordId, String, Language)> = HashMap::new();
     let mut mod2file: HashMap<String, RecordId> = HashMap::new();
-
-    for f in &files {
-        let bytes = match std::fs::read(&f.abs) {
-            Ok(b) => b,
-            Err(_) => continue,
+    for (rel, cf) in cache {
+        let file_id = match existing.get(rel) {
+            Some(id) => id.clone(),
+            None => ensure_file(db, project, rel, &cf.abs.to_string_lossy(), cf.lang).await?,
         };
-        let Ok(source) = std::str::from_utf8(&bytes) else {
-            continue;
-        };
-        let lang = Language::from_path(&f.abs).unwrap_or(Language::Plain);
-        if lang == Language::Plain {
-            continue;
+        mod2file.insert(cf.graph.module_path.clone(), file_id.clone());
+        for d in &cf.graph.defs {
+            qual2file.insert(d.qualified.clone(), (file_id.clone(), rel.clone(), cf.lang));
         }
-        let mp = module_path(lang, &f.abs, root);
-        let fg = match walk_file(lang, source, &mp) {
-            Ok(g) => g,
-            Err(e) => {
-                tracing::debug!("codegraph walk failed for {}: {e}", f.rel);
-                continue;
-            }
-        };
-        let file_id = ensure_file(db, project, &f.rel, &f.abs.to_string_lossy(), lang).await?;
-        mod2file.insert(mp.clone(), file_id.clone());
-        for d in &fg.defs {
-            qual2file.insert(d.qualified.clone(), (file_id.clone(), f.rel.clone(), lang));
-        }
-        graphs.push(fg);
+        graphs.push(cf.graph.clone());
     }
 
     let pg = resolve_project(graphs);
@@ -157,11 +236,18 @@ pub async fn index_code_graph(
             .push(d.qualified.as_str());
     }
 
-    // UPSERT every symbol on its deterministic id
+    // UPSERT every symbol on its deterministic id. In incremental mode only
+    // changed files' symbols are rewritten — unchanged files' defs are
+    // byte-identical, so their rows (and chunk_span queries) are untouched.
     for d in &pg.defs {
         let Some((file_id, rel, lang)) = qual2file.get(&d.qualified) else {
             continue;
         };
+        if let Some(changed) = changed
+            && !changed.contains(rel)
+        {
+            continue;
+        }
         let id = key(project, &d.qualified);
         let parent = d
             .parent
@@ -388,7 +474,7 @@ pub async fn index_code_graph(
     }
 
     tracing::info!(
-        "codeintel: project={project} symbols={} edges={} ext={} renamed={} deleted={}",
+        "intel: project={project} symbols={} edges={} ext={} renamed={} deleted={}",
         report.symbols,
         report.edges,
         report.externals,
@@ -396,4 +482,48 @@ pub async fn index_code_graph(
         report.deleted
     );
     Ok(report)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tmp_repo(name: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
+        let d = std::env::temp_dir().join(format!("hifz_intel_{name}_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        for (rel, body) in files {
+            let p = d.join(rel);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, body).unwrap();
+        }
+        d
+    }
+
+    #[test]
+    fn build_cache_parses_only_supported_sources() {
+        let root = tmp_repo(
+            "buildcache",
+            &[
+                ("Cargo.toml", "[package]\nname = \"demo\"\n"),
+                ("src/lib.rs", "pub fn alpha() {}\npub struct Bar;\n"),
+                ("notes.txt", "not source"),
+            ],
+        );
+        let cache = build_cache(&root);
+
+        // The Rust source is parsed into the cache; non-source files are not.
+        assert!(
+            cache.contains_key("src/lib.rs"),
+            "got keys: {:?}",
+            cache.keys().collect::<Vec<_>>()
+        );
+        assert!(!cache.contains_key("Cargo.toml"));
+        assert!(!cache.contains_key("notes.txt"));
+
+        // Its FileGraph carries the parsed definitions and a content hash.
+        let cf = &cache["src/lib.rs"];
+        assert!(cf.graph.defs.iter().any(|d| d.name == "alpha"));
+        assert!(cf.graph.defs.iter().any(|d| d.name == "Bar"));
+        assert!(!cf.content_hash.is_empty());
+    }
 }

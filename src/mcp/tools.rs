@@ -508,6 +508,32 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                 .await?
         }
 
+        "hifz_code_watch" => {
+            state
+                .client
+                .post(format!("{}/api/v1/code/watch", state.base_url))
+                .json(&args)
+                .send_decode()
+                .await?
+        }
+
+        "hifz_code_unwatch" => {
+            state
+                .client
+                .delete(format!("{}/api/v1/code/watch", state.base_url))
+                .json(&args)
+                .send_decode()
+                .await?
+        }
+
+        "hifz_code_watchers" => {
+            state
+                .client
+                .get(format!("{}/api/v1/code/watchers", state.base_url))
+                .send_decode()
+                .await?
+        }
+
         // --- maktab corpus-graph tools (feature-gated, proxied to REST) ---
         #[cfg(feature = "maktab")]
         "maktab_ingest" => {
@@ -796,6 +822,9 @@ fn tool_defs() -> Vec<serde_json::Value> {
         serde_json::json!({"name": "hifz_link_code", "description": "Link a memory to a precise code location. Creates Memory --references--> CodeChunk edges for every chunk overlapping the line range.", "inputSchema": {"type": "object", "properties": {"memory_id": {"type": "string"}, "file": {"type": "string", "description": "Repo-relative POSIX path"}, "start_line": {"type": "integer", "minimum": 1}, "end_line": {"type": "integer", "minimum": 1, "description": "Defaults to start_line"}, "project": {"type": "string"}, "reason": {"type": "string"}}, "required": ["memory_id", "file", "start_line"]}}),
         serde_json::json!({"name": "hifz_link_symbol", "description": "Link a memory to a named code symbol (function/struct/class/...). Creates Memory --references_symbol--> CodeSymbol edge(s).", "inputSchema": {"type": "object", "properties": {"memory_id": {"type": "string"}, "name": {"type": "string", "description": "Symbol name (or qualified module::name)"}, "kind": {"type": "string", "description": "Optional kind filter: function|struct|enum|trait|method|class|interface|const|module|namespace|type|macro"}, "file": {"type": "string", "description": "Optional path to disambiguate"}, "project": {"type": "string"}, "reason": {"type": "string"}}, "required": ["memory_id", "name"]}}),
         serde_json::json!({"name": "hifz_code_gc", "description": "Reconcile code-index against the filesystem: drop chunks/symbols/edges for deleted files; optionally decay cold chunks. Run after large refactors or when stale entries linger.", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "root": {"type": "string"}, "dry_run": {"type": "boolean", "default": false}, "force_decay": {"type": "boolean", "default": false}}, "required": ["project", "root"]}}),
+        serde_json::json!({"name": "hifz_code_watch", "description": "Start a live watcher that keeps the code index in real-time sync with on-disk edits for this project. Normally auto-started for indexed projects; use this to watch a project/root explicitly.", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "root": {"type": "string", "description": "Absolute path to repo root"}}, "required": ["project", "root"]}}),
+        serde_json::json!({"name": "hifz_code_unwatch", "description": "Stop the live code watcher for a project.", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}}, "required": ["project"]}}),
+        serde_json::json!({"name": "hifz_code_watchers", "description": "List active live code watchers as [{project, root}].", "inputSchema": {"type": "object", "properties": {}}}),
     ]
 }
 

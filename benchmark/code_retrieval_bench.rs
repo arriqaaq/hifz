@@ -64,7 +64,7 @@ struct SymRow {
 
 /// Recover the doc comment from source — contiguous `///`/`//!`/`#`/`*` lines
 /// immediately above the definition (`code_symbol.doc` is reserved but never
-/// populated by codeintel).
+/// populated by intel).
 fn doc_above(root: &str, path: &str, start_line: i64) -> Option<String> {
     if start_line < 2 {
         return None;
@@ -109,7 +109,7 @@ struct Probe {
     end: i64,
     /// 1-indexed first line of the doc block above `start` (else `start`).
     /// `code_symbol.start_line` is the *definition node* line and EXCLUDES the
-    /// `///` doc the query is derived from (verified: codegraph.rs:149). The
+    /// `///` doc the query is derived from (verified: graph.rs:149). The
     /// honest oracle span for "did the agent get this function" is
     /// `[doc_top .. end]` — the function *plus its doc* (what the query is
     /// about and what is indexed). The strict `[start..end]` span is kept only

@@ -1,8 +1,8 @@
 //! Per-language configuration driving the single generic walk in
-//! `codegraph`. Data, not code, per language — new languages are added by
+//! `graph`. Data, not code, per language — new languages are added by
 //! filling one of these in (the rest is added per language later), not by forking the traversal.
 
-use super::codegraph::RefKind;
+use super::graph::RefKind;
 use super::lang::Language;
 
 pub struct LanguageConfig {
@@ -80,7 +80,7 @@ impl LanguageConfig {
         &self,
         node: tree_sitter::Node,
         src: &str,
-    ) -> Vec<super::codegraph::ImportBinding> {
+    ) -> Vec<super::graph::ImportBinding> {
         match self.lang {
             Language::Rust => {
                 let mut out = Vec::new();
@@ -113,13 +113,13 @@ impl LanguageConfig {
                         match ch.kind() {
                             "scoped_identifier" | "identifier" => {
                                 let p = ts_txt(ch, src).replace('.', "::");
-                                out.push(super::codegraph::ImportBinding {
+                                out.push(super::graph::ImportBinding {
                                     local: last_seg(&p).to_string(),
                                     path: p,
                                     glob: false,
                                 });
                             }
-                            "asterisk" => out.push(super::codegraph::ImportBinding {
+                            "asterisk" => out.push(super::graph::ImportBinding {
                                 local: "*".into(),
                                 path: "*".into(),
                                 glob: true,
@@ -143,7 +143,7 @@ impl LanguageConfig {
                             .file_stem()
                             .map(|s| s.to_string_lossy().to_string())
                             .unwrap_or_else(|| raw.clone());
-                        out.push(super::codegraph::ImportBinding {
+                        out.push(super::graph::ImportBinding {
                             local,
                             path: raw,
                             glob: false,
@@ -282,9 +282,9 @@ fn rust_use_clause(
     node: tree_sitter::Node,
     prefix: &str,
     src: &str,
-    out: &mut Vec<super::codegraph::ImportBinding>,
+    out: &mut Vec<super::graph::ImportBinding>,
 ) {
-    use super::codegraph::ImportBinding;
+    use super::graph::ImportBinding;
     match node.kind() {
         "scoped_identifier"
         | "identifier"
@@ -362,12 +362,8 @@ fn rust_use_clause(
 /// Python `import` / `from … import …` → structured bindings (AST-driven).
 /// Internal paths use the canonical `::` separator (identity is internal;
 /// Python's surface `.` is normalized).
-fn python_import(
-    node: tree_sitter::Node,
-    src: &str,
-    out: &mut Vec<super::codegraph::ImportBinding>,
-) {
-    use super::codegraph::ImportBinding;
+fn python_import(node: tree_sitter::Node, src: &str, out: &mut Vec<super::graph::ImportBinding>) {
+    use super::graph::ImportBinding;
     let dot_to_sep = |s: &str| s.replace('.', "::");
     match node.kind() {
         "import_statement" => {
@@ -582,8 +578,8 @@ const PYTHON: LanguageConfig = LanguageConfig {
 /// resolution is not performed here — the resolver's name-table fallback
 /// handles internal names and bare specifiers resolve to External (npm deps).
 /// 3-state contract holds; nothing dropped.
-fn js_import(node: tree_sitter::Node, src: &str, out: &mut Vec<super::codegraph::ImportBinding>) {
-    use super::codegraph::ImportBinding;
+fn js_import(node: tree_sitter::Node, src: &str, out: &mut Vec<super::graph::ImportBinding>) {
+    use super::graph::ImportBinding;
     let spec = node
         .child_by_field_name("source")
         .map(|s| ts_txt(s, src).trim_matches(['"', '\'', '`']).to_string())

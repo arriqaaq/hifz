@@ -129,6 +129,48 @@ fn has_nul_in_first_512(p: &Path) -> bool {
     buf[..n].contains(&0)
 }
 
+/// Cheap, reusable "would `walk` index this path?" check, built once per watched
+/// root. The live watcher consults it before reacting to a filesystem event so
+/// it ignores churn from build/VCS dirs (`target/`, `node_modules/`, `.git/`)
+/// and gitignored paths instead of re-indexing on every artifact write — e.g. a
+/// single `cargo build` writes thousands of files into `target/`.
+///
+/// Honors the root `.gitignore` (not nested ones — sufficient for thrash
+/// avoidance) plus the supported-extension and dir guards `walk` applies.
+pub struct PathFilter {
+    gitignore: ignore::gitignore::Gitignore,
+}
+
+impl PathFilter {
+    pub fn new(root: &Path) -> Self {
+        let mut b = ignore::gitignore::GitignoreBuilder::new(root);
+        let _ = b.add(root.join(".gitignore"));
+        let gitignore = b
+            .build()
+            .unwrap_or_else(|_| ignore::gitignore::Gitignore::empty());
+        Self { gitignore }
+    }
+
+    /// True if `path` (absolute) is a source file the indexer should track.
+    pub fn is_indexable(&self, path: &Path) -> bool {
+        let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
+            return false;
+        };
+        if !is_supported_extension(ext) {
+            return false;
+        }
+        for comp in path.components() {
+            if let std::path::Component::Normal(c) = comp
+                && let Some(s) = c.to_str()
+                && matches!(s, ".git" | "target" | "node_modules" | ".hifz")
+            {
+                return false;
+            }
+        }
+        !self.gitignore.matched(path, false).is_ignore()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -206,5 +248,29 @@ mod tests {
         let rels: Vec<_> = files.iter().map(|f| f.rel.clone()).collect();
         assert!(rels.contains(&"ok.rs".to_string()));
         assert!(!rels.contains(&"binlike.rs".to_string()));
+    }
+
+    #[test]
+    fn path_filter_indexable_decisions() {
+        let root = tmp_dir("pathfilter");
+        fs::write(root.join(".gitignore"), "ignored.rs\n").unwrap();
+        let f = PathFilter::new(&root);
+
+        // Source file under the repo → indexable.
+        assert!(f.is_indexable(&root.join("src/main.rs")));
+        assert!(f.is_indexable(&root.join("pkg/mod.py")));
+        // A deleted source path (no longer on disk) is still "indexable" by path,
+        // so the watcher can route it to delete-reconcile.
+        assert!(f.is_indexable(&root.join("src/gone.rs")));
+
+        // Non-source extension → skipped.
+        assert!(!f.is_indexable(&root.join("notes.txt")));
+        assert!(!f.is_indexable(&root.join("Cargo.toml")));
+        // Build / VCS / dependency dirs → skipped (the cargo-build thrash guard).
+        assert!(!f.is_indexable(&root.join("target/debug/build/x.rs")));
+        assert!(!f.is_indexable(&root.join(".git/hooks/post.rs")));
+        assert!(!f.is_indexable(&root.join("node_modules/p/index.js")));
+        // Gitignored path → skipped.
+        assert!(!f.is_indexable(&root.join("ignored.rs")));
     }
 }

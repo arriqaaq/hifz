@@ -2,7 +2,7 @@
 //!
 //! Question: after `index_repo`, does `search_code` return the function the
 //! query is about? No existing test ingests a crate and validates retrieval
-//! relevance (`tests/codeintel_integration.rs` only checks structural /
+//! relevance (`tests/intel_integration.rs` only checks structural /
 //! idempotency properties).
 //!
 //! Ground truth = docstring→code (CodeSearchNet style), no manual labels:
@@ -50,7 +50,7 @@ struct SymRow {
 }
 
 /// The code-intel pipeline does NOT populate `code_symbol.doc` (the schema
-/// field exists but `codeintel.rs` never sets it). Recover the doc comment
+/// field exists but `intel.rs` never sets it). Recover the doc comment
 /// from source instead — contiguous `///`/`//!`/`#`/`*` lines immediately
 /// above the definition, skipping interleaved attribute (`#[...]`) and blank
 /// lines. Deterministic; keeps the docstring→code methodology intact and

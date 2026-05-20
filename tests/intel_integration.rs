@@ -61,7 +61,7 @@ async fn count(h: &Hifz, sql: &str) -> i64 {
 }
 
 #[tokio::test]
-async fn e4_codeintel_end_to_end() {
+async fn e4_intel_end_to_end() {
     let h = Hifz::open_memory().await.expect("open in-memory hifz");
     let repo = tmp_repo("e2e");
     std::fs::write(

@@ -215,7 +215,7 @@ fn cheap_hash(s: &str) -> String {
 
 /// Re-chunk every walked file with `CodeSplitter::new(TARGET, overlap, min)`,
 /// embed, and CREATE `code_file`/`code_chunk` rows under `project` exactly as
-/// `index.rs` does (edges/codeintel/link/snapshot omitted — retrieval doesn't
+/// `index.rs` does (edges/intel/link/snapshot omitted — retrieval doesn't
 /// read them). Returns (chunk_count, total_content_bytes). Also fills
 /// `cover`: per probe-index, the best coverage over `[doc_top..end]`
 /// (2=full, 1=partial, 0=none) and over strict `[start..end]`.

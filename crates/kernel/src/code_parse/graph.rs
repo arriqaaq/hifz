@@ -1,6 +1,6 @@
 //! The single code-intelligence walk: one imperative tree-sitter traversal
 //! (no `.scm`) producing **semantically scope-qualified** definitions plus
-//! the raw reference/import sites the resolver (`coderesolve`) later binds.
+//! the raw reference/import sites the resolver (`resolve`) later binds.
 //!
 //! Identity is the language-semantic fully-qualified path
 //! (`crate::module::Type::method`), derived from the project module path

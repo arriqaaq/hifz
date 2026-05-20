@@ -92,47 +92,81 @@ pub async fn reconcile_deletions(
             continue;
         }
 
-        // Drop inbound references / references_symbol edges with audit metadata.
-        let chunks_dropped = drop_inbound_code_edges(db, &row.id, &now)
-            .await
-            .unwrap_or(0);
-        report.edges_dropped += chunks_dropped;
-
-        // Count chunks/symbols before deletion for the report.
-        if let Ok(n) = count_children(db, &row.id, "code_chunk").await {
-            report.chunks_dropped += n;
-        }
-        if let Ok(n) = count_children(db, &row.id, "code_symbol").await {
-            report.symbols_dropped += n;
-        }
-
-        // Drop part_of edges + chunks + symbols.
-        let _ = db
-            .query(
-                "DELETE edge WHERE relation = 'part_of' AND \
-                 (in IN (SELECT VALUE id FROM code_chunk WHERE file = $fid) \
-                  OR in IN (SELECT VALUE id FROM code_symbol WHERE file = $fid))",
-            )
-            .bind(("fid", row.id.clone()))
-            .await;
-        let _ = db
-            .query("DELETE code_chunk WHERE file = $fid")
-            .bind(("fid", row.id.clone()))
-            .await;
-        let _ = db
-            .query("DELETE code_symbol WHERE file = $fid")
-            .bind(("fid", row.id.clone()))
-            .await;
-
-        // Tombstone the code_file row (kept 30 days for audit; sweep handled
-        // by forget::run_forget).
-        let _ = db
-            .query("UPDATE type::record($id) SET deleted_at = $now")
-            .bind(("id", row.id.clone()))
-            .bind(("now", now.clone()))
-            .await;
+        let (edges, chunks, symbols) = purge_file_index(db, &row.id, &now).await;
+        report.edges_dropped += edges;
+        report.chunks_dropped += chunks;
+        report.symbols_dropped += symbols;
     }
     Ok(())
+}
+
+/// Reconcile a single file known to be gone from disk (live-watcher delete /
+/// rename path). Looks up the `code_file` row by `(project, rel)` and, if it
+/// exists and isn't already tombstoned, purges its chunks/symbols/edges and
+/// tombstones the row — same semantics as `reconcile_deletions`, scoped to one
+/// path. No-op if the file was never indexed.
+pub async fn reconcile_deleted_file(db: &Surreal<Db>, project: &str, rel: &str) -> Result<()> {
+    let mut resp = db
+        .query(
+            "SELECT id, path FROM code_file \
+             WHERE project = $p AND path = $r AND deleted_at IS NONE LIMIT 1",
+        )
+        .bind(("p", project.to_string()))
+        .bind(("r", rel.to_string()))
+        .await?;
+    let rows: Vec<CodeFilePathRow> = resp.take(0).unwrap_or_default();
+    let Some(row) = rows.into_iter().next() else {
+        return Ok(());
+    };
+    let now = Utc::now().to_rfc3339();
+    purge_file_index(db, &row.id, &now).await;
+    Ok(())
+}
+
+/// Drop a `code_file`'s inbound code edges (with audit metadata), its
+/// `part_of` edges, chunks and symbols, then tombstone the row (kept 30 days;
+/// swept by `forget::run_forget`). Returns `(edges, chunks, symbols)` counts.
+async fn purge_file_index(
+    db: &Surreal<Db>,
+    file_id: &RecordId,
+    now: &str,
+) -> (usize, usize, usize) {
+    // Drop inbound references / references_symbol edges with audit metadata.
+    let edges = drop_inbound_code_edges(db, file_id, now).await.unwrap_or(0);
+
+    // Count chunks/symbols before deletion for the report.
+    let chunks = count_children(db, file_id, "code_chunk").await.unwrap_or(0);
+    let symbols = count_children(db, file_id, "code_symbol")
+        .await
+        .unwrap_or(0);
+
+    // Drop part_of edges + chunks + symbols.
+    let _ = db
+        .query(
+            "DELETE edge WHERE relation = 'part_of' AND \
+             (in IN (SELECT VALUE id FROM code_chunk WHERE file = $fid) \
+              OR in IN (SELECT VALUE id FROM code_symbol WHERE file = $fid))",
+        )
+        .bind(("fid", file_id.clone()))
+        .await;
+    let _ = db
+        .query("DELETE code_chunk WHERE file = $fid")
+        .bind(("fid", file_id.clone()))
+        .await;
+    let _ = db
+        .query("DELETE code_symbol WHERE file = $fid")
+        .bind(("fid", file_id.clone()))
+        .await;
+
+    // Tombstone the code_file row (kept 30 days for audit; sweep handled
+    // by forget::run_forget).
+    let _ = db
+        .query("UPDATE type::record($id) SET deleted_at = $now")
+        .bind(("id", file_id.clone()))
+        .bind(("now", now.to_string()))
+        .await;
+
+    (edges, chunks, symbols)
 }
 
 async fn drop_inbound_code_edges(db: &Surreal<Db>, file_id: &RecordId, now: &str) -> Result<usize> {

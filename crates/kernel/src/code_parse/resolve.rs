@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 
-use super::codegraph::{FileGraph, SymbolDef};
+use super::graph::{FileGraph, SymbolDef};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Resolution {
@@ -47,7 +47,7 @@ pub struct ProjectGraph {
 }
 
 /// Bind all references across the project. `files` = the per-file walk
-/// output (already scope-qualified by `codegraph`).
+/// output (already scope-qualified by `graph`).
 pub fn resolve_project(files: Vec<FileGraph>) -> ProjectGraph {
     let mut out = ProjectGraph::default();
     let mut by_qualified: HashMap<String, ()> = HashMap::new();
@@ -231,7 +231,7 @@ fn pick_by_scope(from: &str, cands: &[String]) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::codegraph::walk_file;
+    use super::super::graph::walk_file;
     use super::super::lang::Language;
     use super::*;
 

@@ -226,13 +226,13 @@ fn coalesce_structural(
     }
     let mut out: Vec<RawChunk> = Vec::with_capacity(chunks.len());
     for ch in chunks {
-        if !has_word(&ch.content) {
-            if let Some(prev) = out.last_mut() {
-                prev.start_byte = ch.start_byte.min(prev.start_byte);
-                prev.end_byte = ch.end_byte.max(prev.end_byte);
-                reslice(prev, source, line_starts);
-                continue;
-            }
+        if !has_word(&ch.content)
+            && let Some(prev) = out.last_mut()
+        {
+            prev.start_byte = ch.start_byte.min(prev.start_byte);
+            prev.end_byte = ch.end_byte.max(prev.end_byte);
+            reslice(prev, source, line_starts);
+            continue;
         }
         out.push(ch);
     }

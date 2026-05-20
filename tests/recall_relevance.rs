@@ -61,7 +61,7 @@ async fn strength_of(db: &Surreal<Db>, title: &str) -> f64 {
 }
 
 /// Write a fixture crate into a unique temp dir (mirrors the proven pattern in
-/// `tests/codeintel_integration.rs::tmp_repo`).
+/// `tests/intel_integration.rs::tmp_repo`).
 fn tmp_repo(name: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
     let d = std::env::temp_dir().join(format!(
         "hifz_trackd_{name}_{}_{}",

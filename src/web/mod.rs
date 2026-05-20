@@ -91,7 +91,12 @@ pub async fn serve(state: Hifz, port: u16) -> Result<()> {
             "/code/link/symbol",
             axum::routing::post(api::code_link_symbol),
         )
-        .route("/code/gc", axum::routing::post(api::code_gc));
+        .route("/code/gc", axum::routing::post(api::code_gc))
+        .route(
+            "/code/watch",
+            axum::routing::post(api::code_watch_start).delete(api::code_watch_stop),
+        )
+        .route("/code/watchers", axum::routing::get(api::code_watchers));
 
     // Agent Pipeline API (sessions, observations, runs, git, plans)
     let agent_api = Router::new()

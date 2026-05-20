@@ -227,31 +227,17 @@ async fn async_main(cli: Cli) -> Result<()> {
                 );
             }
 
-            {
-                if std::env::var("HIFZ_CODE_WATCH").as_deref() == Ok("1") {
-                    if let Ok(roots) = std::env::var("HIFZ_CODE_WATCH_ROOTS") {
-                        for (project, root) in hifz::code::watcher::parse_watch_roots(&roots) {
-                            match hifz::code::watcher::start_watcher(
-                                hifz.clone(),
-                                project.clone(),
-                                root.clone(),
-                            ) {
-                                Ok(_handle) => {
-                                    tracing::info!(
-                                        "code watcher started: project={project} root={}",
-                                        root.display()
-                                    );
-                                    // _handle dropped at end of scope — task lives on the runtime.
-                                    std::mem::forget(_handle);
-                                }
-                                Err(e) => tracing::warn!("watcher start failed: {e}"),
-                            }
-                        }
-                    } else {
-                        tracing::warn!(
-                            "HIFZ_CODE_WATCH=1 but HIFZ_CODE_WATCH_ROOTS unset; \
-                             expected `project=path,project2=path2` form"
-                        );
+            // Live code watchers: auto-start one per indexed project so the code
+            // index stays in real-time sync with on-disk edits. `HIFZ_CODE_WATCH=0`
+            // disables this; `HIFZ_CODE_WATCH_ROOTS=project=path,...` adds explicit
+            // roots on top (e.g. for a project not yet indexed).
+            if let Err(e) = hifz.autostart_watchers_from_index().await {
+                tracing::warn!("watcher auto-discovery failed: {e}");
+            }
+            if let Ok(roots) = std::env::var("HIFZ_CODE_WATCH_ROOTS") {
+                for (project, root) in hifz::code::watcher::parse_watch_roots(&roots) {
+                    if let Err(e) = hifz.start_watch(&project, root.clone()) {
+                        tracing::warn!("watcher start failed for {project}: {e}");
                     }
                 }
             }

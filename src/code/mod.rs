@@ -22,9 +22,9 @@
 //! ## Also provides
 //! - `index`, `search`, `link`, `gc`, `watcher`
 
-pub mod codeintel;
 pub mod gc;
 pub mod index;
+pub mod intel;
 pub mod link;
 pub mod search;
 pub mod splitter;

@@ -9,10 +9,10 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::Result;
-use kernel::code_parse::codegraph::walk_file;
-use kernel::code_parse::coderesolve::{Resolution, resolve_project};
+use kernel::code_parse::graph::walk_file;
 use kernel::code_parse::lang::Language;
 use kernel::code_parse::langmod::module_path;
+use kernel::code_parse::resolve::{Resolution, resolve_project};
 use kernel::code_parse::walker::{WalkOpts, walk};
 use kernel::embed::Embedder;
 use sha2::{Digest, Sha256};

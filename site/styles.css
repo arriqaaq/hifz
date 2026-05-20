@@ -391,6 +391,97 @@ h1, h2, h3, h4 {
   font-weight: 700;
 }
 
+/* ── Product showcase & architecture figures ── */
+.shot,
+.arch-figure {
+  margin: 0;
+  background: var(--alt);
+  border: 1.5px solid var(--fg);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-lg);
+  padding: 16px;
+  overflow: hidden;
+}
+.shot img,
+.arch-figure img {
+  width: 100%;
+  height: auto;
+  border-radius: calc(var(--radius-card) - 8px);
+}
+.shot figcaption,
+.arch-figure figcaption {
+  margin-top: 14px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+.shot-feature { margin-bottom: 28px; }
+
+.shot-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 28px;
+}
+@media (max-width: 760px) { .shot-grid { grid-template-columns: 1fr; } }
+
+.arch-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 36px;
+}
+.arch-block {
+  display: grid;
+  gap: 20px;
+}
+.arch-note {
+  font-size: 15px;
+  line-height: 1.6;
+  opacity: 0.82;
+  max-width: 70ch;
+  margin: 0;
+}
+.arch-block .code-block {
+  margin: 0;
+  white-space: pre;
+}
+
+.arch-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+.arch-table th,
+.arch-table td {
+  text-align: left;
+  padding: 10px 14px;
+  border: 1px solid var(--border-soft);
+}
+.arch-table th {
+  background: var(--alt);
+  color: var(--fg-muted);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+.arch-table td { color: var(--fg); }
+
+.arch-more {
+  margin-top: 40px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--fg-muted);
+}
+.arch-more a {
+  color: var(--fg);
+  font-weight: 600;
+  border-bottom: 1.5px solid var(--neon);
+}
+.arch-more a:hover { background: var(--neon); }
+
 /* ── How it works ── */
 .flow {
   display: grid;

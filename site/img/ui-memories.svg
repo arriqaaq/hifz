@@ -1,0 +1,218 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 720" font-family="'Inter', system-ui, -apple-system, sans-serif">
+  <defs>
+    <style>
+      .bg     { fill: #f2f1eb; }
+      .surf   { fill: #f8f8f5; }
+      .alt    { fill: #ecebe4; }
+      .ink    { fill: #1a1a1a; }
+      .muted  { fill: #6a6a63; }
+      .faint  { fill: #9a9a91; }
+      .sec    { fill: #3a3a36; }
+      .line   { stroke: #dedcd2; stroke-width: 1; }
+      .strong { stroke: #1a1a1a; }
+      .mono   { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+      .ic     { fill: none; stroke: #6a6a63; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+      .ic-on  { fill: none; stroke: #1a1a1a; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+      .lbl    { font-size: 13px; fill: #3a3a36; }
+      .h11    { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; }
+      .bpill  { font-size: 9px; font-weight: 600; letter-spacing: 0.12em; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1120" height="720"/>
+
+  <!-- ===== RAIL ===== -->
+  <rect class="surf" x="0" y="0" width="48" height="720"/>
+  <line class="line" x1="48" y1="0" x2="48" y2="720"/>
+  <rect class="ink" x="8" y="8" width="32" height="32" rx="6"/>
+  <text x="24" y="31" text-anchor="middle" fill="#ffffff" font-size="16" font-weight="700">h</text>
+  <!-- active = Memories -->
+  <rect x="8" y="232" width="32" height="32" rx="6" fill="#d9f400"/>
+  <rect class="ink" x="0" y="238" width="2" height="20" rx="1"/>
+  <path class="ic" d="M17 69 L24 63 L31 69 M19 67 L19 75 L29 75 L29 67"/>
+  <path class="ic" d="M17 99 h14 v8 h-8 l-4 4 v-4 h-2 z"/>
+  <path class="ic" d="M24 134 l7 4 -7 4 -7 -4 z M17 142 l7 4 7 -4"/>
+  <path class="ic" d="M18 171 h6 v6 h-6 z M24 174 h5 M29 168 h5 v6 h-5 z M29 180 h5 v6 h-5 z M24 177 v6 h5"/>
+  <path class="ic" d="M17 212 h4 l3 -7 4 14 3 -7 h3"/>
+  <circle class="ic-on" cx="24" cy="248" r="6"/>
+  <path class="ic-on" d="M24 242 v12 M21 245 q3 3 0 6 M27 245 q-3 3 0 6"/>
+  <circle class="ic" cx="18" cy="282" r="2.5"/>
+  <circle class="ic" cx="31" cy="278" r="2.5"/>
+  <circle class="ic" cx="28" cy="290" r="2.5"/>
+  <path class="ic" d="M20 281 L29 279 M20 284 L27 289"/>
+  <path class="ic" d="M24 313 l7 4 v8 l-7 4 -7 -4 v-8 z M24 313 v8 M24 321 l7 -4 M24 321 l-7 -4"/>
+  <circle class="ic" cx="24" cy="356" r="4"/>
+  <path class="ic" d="M24 348 v4 M24 360 v4"/>
+  <path class="ic" d="M18 392 a6 6 0 1 0 2 -4 M18 386 v4 h4"/>
+  <path class="ic" d="M24 389 v4 l3 2"/>
+  <ellipse class="ic" cx="24" cy="425" rx="6" ry="2.6"/>
+  <path class="ic" d="M18 425 v4 a6 2.6 0 0 0 12 0 v-4"/>
+  <circle class="ic" cx="24" cy="688" r="6"/>
+  <path class="ic" d="M22 686 a2 2 0 1 1 2.5 2 q-0.5 0.4 -0.5 1.4 M24 692 v0.4"/>
+
+  <!-- ===== PANEL ===== -->
+  <rect class="surf" x="48" y="0" width="280" height="720"/>
+  <line class="line" x1="328" y1="0" x2="328" y2="720"/>
+  <rect class="alt" x="58" y="12" width="260" height="30" rx="6"/>
+  <rect x="58" y="12" width="260" height="30" rx="6" fill="none" class="line"/>
+  <circle class="ic" cx="74" cy="27" r="4"/>
+  <path class="ic" d="M77 30 l3 3"/>
+  <text class="faint" x="88" y="31" font-size="12">Quick filter…</text>
+
+  <text class="faint h11" x="66" y="68">Workspace</text>
+  <g transform="translate(0,74)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#c2db00"/><text class="lbl" x="86" y="24">Ask</text></g>
+  <g transform="translate(0,102)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#6a6a63"/><text class="lbl" x="86" y="24">Home</text></g>
+
+  <text class="faint h11" x="66" y="150">Entities</text>
+  <g font-size="13">
+    <g transform="translate(0,156)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#2563EB"/><text class="lbl" x="86" y="24">Sessions</text><text class="faint mono" x="312" y="24" text-anchor="end" font-size="11">312</text></g>
+    <g transform="translate(0,184)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#15803D"/><text class="lbl" x="86" y="24">Runs</text><text class="faint mono" x="312" y="24" text-anchor="end" font-size="11">1,204</text></g>
+    <g transform="translate(0,212)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#B45309"/><text class="lbl" x="86" y="24">Observations</text><text class="faint mono" x="312" y="24" text-anchor="end" font-size="11">8,431</text></g>
+    <!-- active Memories -->
+    <g transform="translate(0,240)">
+      <rect class="alt" x="58" y="11" width="260" height="26" rx="6"/>
+      <rect x="66" y="13" width="8" height="8" rx="2" fill="#6B3FA0"/>
+      <text x="86" y="24" font-size="13" fill="#1a1a1a" font-weight="500">Memories</text>
+      <text class="faint mono" x="312" y="24" text-anchor="end" font-size="11">347</text>
+    </g>
+    <g transform="translate(0,268)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#C2410C"/><text class="lbl" x="86" y="24">Commits</text><text class="faint mono" x="312" y="24" text-anchor="end" font-size="11">529</text></g>
+  </g>
+
+  <text class="faint h11" x="66" y="316">Maktab</text>
+  <g transform="translate(0,322)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#475569"/><text class="lbl" x="86" y="24">Maktab</text></g>
+  <g transform="translate(0,350)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#475569"/><text class="lbl" x="86" y="24">Knowledge graph</text></g>
+
+  <text class="faint h11" x="66" y="398">Tools</text>
+  <g transform="translate(0,404)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#6a6a63"/><text class="lbl" x="86" y="24">Tokens</text></g>
+  <g transform="translate(0,432)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#6a6a63"/><text class="lbl" x="86" y="24">Replay</text></g>
+  <g transform="translate(0,460)"><text class="muted mono" x="70" y="24" font-size="12">⌘</text><text class="lbl" x="86" y="24">Command palette</text></g>
+
+  <!-- ===== HEADER ===== -->
+  <rect class="bg" x="328" y="0" width="792" height="48"/>
+  <line class="line" x1="328" y1="48" x2="1120" y2="48"/>
+  <rect x="344" y="14" width="20" height="20" rx="4" fill="none" class="line"/>
+  <path class="ic" d="M350 20 h8 M350 24 h8 M350 28 h8"/>
+  <text class="ink" x="376" y="30" font-size="13" font-weight="600">Memories</text>
+  <rect class="surf" x="724" y="10" width="240" height="28" rx="6"/>
+  <rect x="724" y="10" width="240" height="28" rx="6" fill="none" class="line"/>
+  <circle class="ic" cx="740" cy="24" r="4"/><path class="ic" d="M743 27 l3 3"/>
+  <text class="faint" x="754" y="28" font-size="12">Search…</text>
+  <rect class="bg" x="928" y="16" width="28" height="16" rx="4"/><rect x="928" y="16" width="28" height="16" rx="4" fill="none" class="line"/>
+  <text class="faint mono" x="942" y="28" text-anchor="middle" font-size="10">⌘K</text>
+  <circle cx="1024" cy="24" r="4" fill="#15803D"/><text class="muted mono" x="1034" y="28" font-size="12">v0.4.2</text>
+
+  <!-- ===== MAIN ===== -->
+  <!-- search row -->
+  <rect class="surf" x="344" y="68" width="740" height="44"/>
+  <rect x="344" y="68" width="740" height="44" fill="none" class="strong" stroke-width="1"/>
+  <text class="faint" x="360" y="95" font-size="14">Search memories…</text>
+  <rect x="996" y="78" width="76" height="24" rx="6" fill="#d9f400"/>
+  <rect x="996" y="78" width="76" height="24" rx="6" fill="none" class="strong" stroke-width="1.5"/>
+  <text class="ink" x="1034" y="94" text-anchor="middle" font-size="11" font-weight="600">Search</text>
+
+  <!-- filter row -->
+  <g font-size="11">
+    <rect class="surf" x="344" y="124" width="120" height="26" rx="0"/><rect x="344" y="124" width="120" height="26" fill="none" class="strong" stroke-width="1"/>
+    <text class="sec" x="354" y="141">All categories</text><path class="ic" d="M450 135 l4 4 4 -4"/>
+    <rect class="surf" x="474" y="124" width="96" height="26"/><rect x="474" y="124" width="96" height="26" fill="none" class="strong" stroke-width="1"/>
+    <text class="faint" x="484" y="141">Project</text>
+    <rect class="surf" x="580" y="124" width="92" height="26"/><rect x="580" y="124" width="92" height="26" fill="none" class="strong" stroke-width="1"/>
+    <text class="sec" x="590" y="141">Any time</text><path class="ic" d="M658 135 l4 4 4 -4"/>
+    <rect x="684" y="129" width="13" height="13" rx="3" fill="none" class="strong" stroke-width="1"/>
+    <text class="sec" x="702" y="141">Open only</text>
+    <rect class="surf" x="784" y="124" width="130" height="26"/><rect x="784" y="124" width="130" height="26" fill="none" class="strong" stroke-width="1"/>
+    <text class="sec" x="794" y="141">Strength × access</text><path class="ic" d="M900 135 l4 4 4 -4"/>
+    <rect x="926" y="129" width="13" height="13" rx="3" fill="none" class="strong" stroke-width="1"/>
+    <text class="sec" x="944" y="141">Group by category</text>
+  </g>
+
+  <text class="faint mono" x="344" y="174" font-size="11">347 memories</text>
+
+  <!-- ===== MEMORY CARDS ===== -->
+  <!-- Card 1: expanded long-form LESSON -->
+  <rect class="ink" x="346" y="186" width="740" height="208" rx="10"/>
+  <rect class="surf" x="344" y="184" width="740" height="208" rx="10"/>
+  <rect x="344" y="184" width="740" height="208" rx="10" fill="none" class="strong" stroke-width="1.5"/>
+  <rect x="344" y="184" width="5" height="208" rx="2" fill="#d9f400"/>
+  <!-- header -->
+  <rect x="360" y="202" width="74" height="18" rx="9" fill="rgba(245,158,11,0.12)"/>
+  <rect x="360" y="202" width="74" height="18" rx="9" fill="none" stroke="#b45309" stroke-width="1"/>
+  <text class="bpill" x="397" y="215" fill="#b45309" text-anchor="middle">LESSON</text>
+  <text x="444" y="215" font-size="11">📄</text>
+  <text class="ink" x="466" y="216" font-size="13" font-weight="700">JWT refresh tokens live in Redis, not the JWT itself</text>
+  <text class="faint mono" x="980" y="216" font-size="10">● 0.92</text>
+  <text class="faint mono" x="1036" y="216" font-size="10">👁 14</text>
+  <text class="faint" x="1068" y="217" font-size="15">−</text>
+  <!-- content pre -->
+  <rect class="alt" x="360" y="232" width="708" height="84"/>
+  <rect x="360" y="232" width="708" height="84" fill="none" class="line"/>
+  <g font-size="12" fill="#3a3a36">
+    <text x="372" y="252">Access tokens stay stateless and short-lived. The refresh token is keyed in Redis</text>
+    <text x="372" y="270">(session:&lt;uid&gt;) so logout / rotation is a single DEL. Don't embed refresh state in</text>
+    <text x="372" y="288">the JWT claims — it can't be revoked before expiry. See the session refresh flow in</text>
+    <text class="mono" x="372" y="306" fill="#0E7490" font-size="11">src/auth/session.rs:42-71</text>
+  </g>
+  <!-- tags -->
+  <g transform="translate(0,328)">
+    <rect x="360" y="0" width="62" height="18" rx="9" fill="rgba(107,63,160,0.10)"/><text class="bpill" x="391" y="13" fill="#6B3FA0" text-anchor="middle">#refresh</text>
+    <rect x="430" y="0" width="44" height="18" rx="9" fill="rgba(107,63,160,0.10)"/><text class="bpill" x="452" y="13" fill="#6B3FA0" text-anchor="middle">#jwt</text>
+    <rect x="482" y="0" width="48" height="18" rx="9" fill="rgba(180,83,9,0.10)"/><text class="bpill" x="506" y="13" fill="#B45309" text-anchor="middle">redis</text>
+    <rect x="538" y="0" width="70" height="18" rx="9" fill="rgba(14,116,144,0.10)"/><text class="mono" x="573" y="13" fill="#0E7490" font-size="9" text-anchor="middle">session.rs</text>
+  </g>
+  <!-- meta footer -->
+  <line class="line" x1="360" y1="358" x2="1068" y2="358"/>
+  <g class="faint mono" font-size="10">
+    <text x="360" y="378">Created: Apr 18, 2026</text>
+    <text x="500" y="378">Project: hifz</text>
+    <text x="610" y="378">Version: 2</text>
+    <text x="1068" y="378" text-anchor="end" fill="#9a9a91" letter-spacing="0.05em">× DELETE</text>
+  </g>
+
+  <!-- Card 2: collapsed BUG -->
+  <rect class="surf" x="344" y="402" width="740" height="50" rx="10"/>
+  <rect x="344" y="402" width="740" height="50" rx="10" fill="none" class="strong" stroke-width="1.5"/>
+  <rect x="360" y="412" width="48" height="18" rx="9" fill="rgba(231,76,60,0.12)"/>
+  <rect x="360" y="412" width="48" height="18" rx="9" fill="none" stroke="#e74c3c" stroke-width="1"/>
+  <text class="bpill" x="384" y="425" fill="#e74c3c" text-anchor="middle">BUG</text>
+  <text class="ink" x="420" y="426" font-size="13" font-weight="700">HNSW index rebuild blocks writes on large corpora</text>
+  <text class="faint mono" x="980" y="426" font-size="10">● 0.71</text>
+  <text class="faint mono" x="1036" y="426" font-size="10">👁 6</text>
+  <text class="faint" x="1068" y="427" font-size="15">+</text>
+  <text class="muted" x="420" y="444" font-size="12" font-style="italic">Indexing a 40k-chunk repo stalled /search for ~9s — batch the embed step.</text>
+
+  <!-- Card 3: collapsed DECISION -->
+  <rect class="surf" x="344" y="460" width="740" height="50" rx="10"/>
+  <rect x="344" y="460" width="740" height="50" rx="10" fill="none" class="strong" stroke-width="1.5"/>
+  <rect x="360" y="470" width="78" height="18" rx="9" fill="rgba(155,89,182,0.12)"/>
+  <rect x="360" y="470" width="78" height="18" rx="9" fill="none" stroke="#9b59b6" stroke-width="1"/>
+  <text class="bpill" x="399" y="483" fill="#9b59b6" text-anchor="middle">DECISION</text>
+  <text class="ink" x="450" y="484" font-size="13" font-weight="700">Pin SurrealDB to a fixed git rev across all workspace crates</text>
+  <text class="faint mono" x="980" y="484" font-size="10">● 0.88</text>
+  <text class="faint mono" x="1036" y="484" font-size="10">👁 11</text>
+  <text class="faint" x="1068" y="485" font-size="15">+</text>
+  <text class="muted" x="450" y="502" font-size="12" font-style="italic">Type compatibility breaks between kernel and maktab unless the rev matches.</text>
+
+  <!-- Card 4: collapsed FIX -->
+  <rect class="surf" x="344" y="518" width="740" height="50" rx="10"/>
+  <rect x="344" y="518" width="740" height="50" rx="10" fill="none" class="strong" stroke-width="1.5"/>
+  <rect x="360" y="528" width="44" height="18" rx="9" fill="rgba(34,197,94,0.12)"/>
+  <rect x="360" y="528" width="44" height="18" rx="9" fill="none" stroke="#22c55e" stroke-width="1"/>
+  <text class="bpill" x="382" y="541" fill="#15803D" text-anchor="middle">FIX</text>
+  <text class="ink" x="416" y="542" font-size="13" font-weight="700">Git post-commit hook now grounds memories on human commits too</text>
+  <text class="faint mono" x="980" y="542" font-size="10">● 0.95</text>
+  <text class="faint mono" x="1036" y="542" font-size="10">👁 9</text>
+  <text class="faint" x="1068" y="543" font-size="15">+</text>
+  <text class="muted" x="416" y="560" font-size="12" font-style="italic">commit_made only fired for agent-run commits; make install-git-hook fixes it.</text>
+
+  <!-- Card 5: collapsed GOTCHA -->
+  <rect class="surf" x="344" y="576" width="740" height="50" rx="10"/>
+  <rect x="344" y="576" width="740" height="50" rx="10" fill="none" class="strong" stroke-width="1.5"/>
+  <rect x="360" y="586" width="64" height="18" rx="9" fill="rgba(245,158,11,0.12)"/>
+  <rect x="360" y="586" width="64" height="18" rx="9" fill="none" stroke="#f59e0b" stroke-width="1"/>
+  <text class="bpill" x="392" y="599" fill="#b45309" text-anchor="middle">GOTCHA</text>
+  <text class="ink" x="436" y="600" font-size="13" font-weight="700">code_symbol.doc is reserved in schema but never populated</text>
+  <text class="faint mono" x="980" y="600" font-size="10">● 0.64</text>
+  <text class="faint mono" x="1036" y="600" font-size="10">👁 3</text>
+  <text class="faint" x="1068" y="601" font-size="15">+</text>
+  <text class="muted" x="436" y="618" font-size="12" font-style="italic">Per-symbol doc comments are not indexed — don't rely on them for recall.</text>
+</svg>

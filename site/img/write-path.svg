@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 320" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif">
+  <defs>
+    <style>
+      .entry-mem { fill: #f5f3ff; stroke: #8b5cf6; stroke-width: 1.6; }
+      .entry-obs { fill: #fff7ed; stroke: #f97316; stroke-width: 1.6; }
+      .entry-name { font-size: 12px; font-weight: 700; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .entry-mem-name { fill: #5b21b6; }
+      .entry-obs-name { fill: #9a3412; }
+      .stage { fill: #ffffff; stroke: #52525b; stroke-width: 1.4; }
+      .stage-name { font-size: 13px; font-weight: 600; fill: #18181b; }
+      .stage-sub { font-size: 10px; fill: #71717a; }
+      .stage-opt { fill: #ffffff; stroke: #71717a; stroke-width: 1.4; stroke-dasharray: 4 3; }
+      .ext { fill: #f0fdf4; stroke: #16a34a; stroke-width: 1.4; }
+      .ext-name { font-size: 12px; font-weight: 600; fill: #166534; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .arrow { stroke: #52525b; stroke-width: 1.4; fill: none; }
+      .arrow-mem { stroke: #8b5cf6; stroke-width: 1.4; fill: none; }
+      .arrow-obs { stroke: #f97316; stroke-width: 1.4; fill: none; }
+      .arrow-opt { stroke: #71717a; stroke-width: 1.4; fill: none; stroke-dasharray: 4 3; }
+      .caption { font-size: 11px; fill: #71717a; }
+      .branch-label { font-size: 10px; font-weight: 600; fill: #52525b; }
+    </style>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#52525b"/>
+    </marker>
+    <marker id="ar-mem" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8b5cf6"/>
+    </marker>
+    <marker id="ar-obs" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#f97316"/>
+    </marker>
+    <marker id="ar-opt" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#71717a"/>
+    </marker>
+  </defs>
+
+  <!-- Entry points -->
+  <g>
+    <rect class="entry-mem" x="20" y="50" width="150" height="50" rx="8"/>
+    <text class="entry-name entry-mem-name" x="95" y="74" text-anchor="middle">POST /memories</text>
+    <text class="stage-sub" x="95" y="90" text-anchor="middle">curated save</text>
+  </g>
+  <g>
+    <rect class="entry-obs" x="20" y="170" width="150" height="50" rx="8"/>
+    <text class="entry-name entry-obs-name" x="95" y="194" text-anchor="middle">POST /observe</text>
+    <text class="stage-sub" x="95" y="210" text-anchor="middle">hook capture</text>
+  </g>
+
+  <!-- Dedup (observe-only) -->
+  <g>
+    <rect class="stage" x="200" y="170" width="120" height="50" rx="8"/>
+    <text class="stage-name" x="260" y="194" text-anchor="middle">dedup</text>
+    <text class="stage-sub" x="260" y="208" text-anchor="middle">5-min SHA window</text>
+  </g>
+
+  <!-- Compress (observe-only) -->
+  <g>
+    <rect class="stage" x="200" y="230" width="120" height="50" rx="8"/>
+    <text class="stage-name" x="260" y="254" text-anchor="middle">compress</text>
+    <text class="stage-sub" x="260" y="268" text-anchor="middle">synthetic / LLM</text>
+  </g>
+
+  <!-- Embed (shared) -->
+  <g>
+    <rect class="stage" x="350" y="110" width="120" height="60" rx="8"/>
+    <text class="stage-name" x="410" y="138" text-anchor="middle">embed</text>
+    <text class="stage-sub" x="410" y="152" text-anchor="middle">fastembed 384d</text>
+  </g>
+
+  <!-- Store (shared) -->
+  <g>
+    <rect class="stage" x="500" y="110" width="100" height="60" rx="8"/>
+    <text class="stage-name" x="550" y="138" text-anchor="middle">store</text>
+    <text class="stage-sub" x="550" y="152" text-anchor="middle">SurrealDB</text>
+  </g>
+
+  <!-- Three branches (memories only) -->
+  <g>
+    <rect class="stage" x="640" y="40" width="200" height="50" rx="8"/>
+    <text class="stage-name" x="740" y="62" text-anchor="middle">link</text>
+    <text class="stage-sub" x="740" y="78" text-anchor="middle">KNN · concept · file Jaccard</text>
+  </g>
+  <g>
+    <rect class="stage" x="640" y="115" width="200" height="50" rx="8"/>
+    <text class="stage-name" x="740" y="137" text-anchor="middle">entities</text>
+    <text class="stage-sub" x="740" y="153" text-anchor="middle">file · concept · symbol · id</text>
+  </g>
+  <g>
+    <rect class="stage-opt" x="640" y="190" width="200" height="50" rx="8"/>
+    <text class="stage-name" x="740" y="212" text-anchor="middle" fill="#52525b">evolve</text>
+    <text class="stage-sub" x="740" y="228" text-anchor="middle">LLM · opt-in</text>
+  </g>
+
+  <!-- Edge graph cylinder -->
+  <g transform="translate(640, 260)">
+    <ellipse cx="100" cy="6" rx="100" ry="6" fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.4"/>
+    <rect x="0" y="6" width="200" height="32" fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.4" stroke-dasharray="0"/>
+    <ellipse cx="100" cy="38" rx="100" ry="6" fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.4"/>
+    <line x1="0" y1="6" x2="0" y2="38" stroke="#8b5cf6" stroke-width="1.4"/>
+    <line x1="200" y1="6" x2="200" y2="38" stroke="#8b5cf6" stroke-width="1.4"/>
+    <text font-size="13" font-weight="700" fill="#5b21b6" x="100" y="28" text-anchor="middle">edge graph</text>
+  </g>
+
+  <!-- Arrows: entries to embed -->
+  <path class="arrow-mem" d="M 170 75 C 240 75, 280 110, 350 130" marker-end="url(#ar-mem)"/>
+  <text class="branch-label" x="225" y="92" fill="#5b21b6">memory path</text>
+
+  <path class="arrow-obs" d="M 170 195 L 200 195" marker-end="url(#ar-obs)"/>
+  <path class="arrow-obs" d="M 320 195 L 350 165" marker-end="url(#ar-obs)"/>
+  <path class="arrow-obs" d="M 260 220 L 260 230" marker-end="url(#ar-obs)"/>
+  <path class="arrow-obs" d="M 320 255 C 350 255, 370 200, 380 170" marker-end="url(#ar-obs)"/>
+
+  <text class="branch-label" x="225" y="240" fill="#9a3412">observation path</text>
+
+  <!-- embed → store -->
+  <path class="arrow" d="M 470 140 L 500 140" marker-end="url(#ar)"/>
+
+  <!-- store → 3 branches (memories take all three; observations stop here) -->
+  <path class="arrow-mem" d="M 600 130 C 620 130, 620 70, 640 65" marker-end="url(#ar-mem)"/>
+  <path class="arrow-mem" d="M 600 140 L 640 140" marker-end="url(#ar-mem)"/>
+  <path class="arrow-opt" d="M 600 150 C 620 150, 620 210, 640 215" marker-end="url(#ar-opt)"/>
+
+  <!-- branches → edge graph -->
+  <path class="arrow-mem" d="M 740 90 C 740 200, 740 240, 740 260" marker-end="url(#ar-mem)" opacity="0.6"/>
+
+  <!-- evolve supersede dotted back to store -->
+  <path class="arrow-opt" d="M 640 215 C 540 215, 540 175, 550 170" marker-end="url(#ar-opt)"/>
+  <text class="branch-label" x="470" y="208" fill="#71717a">supersede</text>
+
+  <!-- caption -->
+  <text class="caption" x="20" y="305">Memories take both write paths (link + entities + optional evolve). Observations are deduped, compressed, embedded, and stored — no linking, no evolution.</text>
+</svg>

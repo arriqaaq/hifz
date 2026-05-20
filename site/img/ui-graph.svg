@@ -1,0 +1,180 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 720" font-family="'Inter', system-ui, -apple-system, sans-serif">
+  <defs>
+    <style>
+      .bg     { fill: #f2f1eb; }
+      .surf   { fill: #f8f8f5; }
+      .alt    { fill: #ecebe4; }
+      .ink    { fill: #1a1a1a; }
+      .muted  { fill: #6a6a63; }
+      .faint  { fill: #9a9a91; }
+      .line   { stroke: #dedcd2; stroke-width: 1; }
+      .strong { stroke: #1a1a1a; }
+      .mono   { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+      .ic     { fill: none; stroke: #6a6a63; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+      .ic-on  { fill: none; stroke: #1a1a1a; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+      .lbl    { font-size: 13px; fill: #3a3a36; }
+      .h11    { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; }
+      .nstroke{ stroke: #1a1a1a; stroke-width: 1.5; stroke-opacity: 0.85; }
+      .elab   { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 8px; fill: #6a6a63; }
+    </style>
+    <marker id="ar-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#3b82f6"/></marker>
+    <marker id="ar-purple" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#a855f7"/></marker>
+    <marker id="ar-yellow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#eab308"/></marker>
+    <marker id="ar-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#15803D"/></marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1120" height="720"/>
+
+  <!-- ===== RAIL ===== -->
+  <rect class="surf" x="0" y="0" width="48" height="720"/>
+  <line class="line" x1="48" y1="0" x2="48" y2="720"/>
+  <rect class="ink" x="8" y="8" width="32" height="32" rx="6"/>
+  <text x="24" y="31" text-anchor="middle" fill="#ffffff" font-size="16" font-weight="700">h</text>
+  <rect x="8" y="268" width="32" height="32" rx="6" fill="#d9f400"/>
+  <rect class="ink" x="0" y="274" width="2" height="20" rx="1"/>
+  <path class="ic" d="M17 69 L24 63 L31 69 M19 67 L19 75 L29 75 L29 67"/>
+  <path class="ic" d="M17 99 h14 v8 h-8 l-4 4 v-4 h-2 z"/>
+  <path class="ic" d="M24 134 l7 4 -7 4 -7 -4 z M17 142 l7 4 7 -4"/>
+  <path class="ic" d="M18 171 h6 v6 h-6 z M24 174 h5 M29 168 h5 v6 h-5 z M29 180 h5 v6 h-5 z M24 177 v6 h5"/>
+  <path class="ic" d="M17 212 h4 l3 -7 4 14 3 -7 h3"/>
+  <circle class="ic" cx="24" cy="248" r="6"/>
+  <path class="ic" d="M24 242 v12 M21 245 q3 3 0 6 M27 245 q-3 3 0 6"/>
+  <circle class="ic-on" cx="18" cy="282" r="2.5"/><circle class="ic-on" cx="31" cy="278" r="2.5"/><circle class="ic-on" cx="28" cy="290" r="2.5"/>
+  <path class="ic-on" d="M20 281 L29 279 M20 284 L27 289"/>
+  <path class="ic" d="M24 313 l7 4 v8 l-7 4 -7 -4 v-8 z M24 313 v8 M24 321 l7 -4 M24 321 l-7 -4"/>
+  <circle class="ic" cx="24" cy="356" r="4"/><path class="ic" d="M24 348 v4 M24 360 v4"/>
+  <path class="ic" d="M18 392 a6 6 0 1 0 2 -4 M18 386 v4 h4"/><path class="ic" d="M24 389 v4 l3 2"/>
+  <ellipse class="ic" cx="24" cy="425" rx="6" ry="2.6"/><path class="ic" d="M18 425 v4 a6 2.6 0 0 0 12 0 v-4"/>
+  <circle class="ic" cx="24" cy="688" r="6"/><path class="ic" d="M22 686 a2 2 0 1 1 2.5 2 q-0.5 0.4 -0.5 1.4 M24 692 v0.4"/>
+
+  <!-- ===== PANEL ===== -->
+  <rect class="surf" x="48" y="0" width="280" height="720"/>
+  <line class="line" x1="328" y1="0" x2="328" y2="720"/>
+  <rect class="alt" x="58" y="12" width="260" height="30" rx="6"/>
+  <rect x="58" y="12" width="260" height="30" rx="6" fill="none" class="line"/>
+  <circle class="ic" cx="74" cy="27" r="4"/><path class="ic" d="M77 30 l3 3"/>
+  <text class="faint" x="88" y="31" font-size="12">Quick filter…</text>
+  <text class="faint h11" x="66" y="68">Workspace</text>
+  <g transform="translate(0,74)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#c2db00"/><text class="lbl" x="86" y="24">Ask</text></g>
+  <g transform="translate(0,102)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#6a6a63"/><text class="lbl" x="86" y="24">Home</text></g>
+  <text class="faint h11" x="66" y="150">Entities</text>
+  <g font-size="13">
+    <g transform="translate(0,156)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#2563EB"/><text class="lbl" x="86" y="24">Sessions</text><text class="faint mono" x="312" y="24" text-anchor="end" font-size="11">312</text></g>
+    <g transform="translate(0,184)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#15803D"/><text class="lbl" x="86" y="24">Runs</text><text class="faint mono" x="312" y="24" text-anchor="end" font-size="11">1,204</text></g>
+    <g transform="translate(0,212)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#B45309"/><text class="lbl" x="86" y="24">Observations</text><text class="faint mono" x="312" y="24" text-anchor="end" font-size="11">8,431</text></g>
+    <g transform="translate(0,240)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#6B3FA0"/><text class="lbl" x="86" y="24">Memories</text><text class="faint mono" x="312" y="24" text-anchor="end" font-size="11">347</text></g>
+    <g transform="translate(0,268)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#C2410C"/><text class="lbl" x="86" y="24">Commits</text><text class="faint mono" x="312" y="24" text-anchor="end" font-size="11">529</text></g>
+  </g>
+  <text class="faint h11" x="66" y="316">Maktab</text>
+  <g transform="translate(0,322)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#475569"/><text class="lbl" x="86" y="24">Maktab</text></g>
+  <g transform="translate(0,350)">
+    <rect class="alt" x="58" y="11" width="260" height="26" rx="6"/>
+    <rect x="66" y="13" width="8" height="8" rx="2" fill="#475569"/>
+    <text x="86" y="24" font-size="13" fill="#1a1a1a" font-weight="500">Knowledge graph</text>
+  </g>
+  <text class="faint h11" x="66" y="398">Tools</text>
+  <g transform="translate(0,404)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#6a6a63"/><text class="lbl" x="86" y="24">Tokens</text></g>
+  <g transform="translate(0,432)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#6a6a63"/><text class="lbl" x="86" y="24">Replay</text></g>
+
+  <!-- ===== HEADER ===== -->
+  <rect class="bg" x="328" y="0" width="792" height="48"/>
+  <line class="line" x1="328" y1="48" x2="1120" y2="48"/>
+  <rect x="344" y="14" width="20" height="20" rx="4" fill="none" class="line"/>
+  <path class="ic" d="M350 20 h8 M350 24 h8 M350 28 h8"/>
+  <text class="ink" x="376" y="30" font-size="13" font-weight="600">Knowledge graph</text>
+  <rect class="surf" x="724" y="10" width="240" height="28" rx="6"/><rect x="724" y="10" width="240" height="28" rx="6" fill="none" class="line"/>
+  <circle class="ic" cx="740" cy="24" r="4"/><path class="ic" d="M743 27 l3 3"/>
+  <text class="faint" x="754" y="28" font-size="12">Search…</text>
+  <rect class="bg" x="928" y="16" width="28" height="16" rx="4"/><rect x="928" y="16" width="28" height="16" rx="4" fill="none" class="line"/>
+  <text class="faint mono" x="942" y="28" text-anchor="middle" font-size="10">⌘K</text>
+  <circle cx="1024" cy="24" r="4" fill="#15803D"/><text class="muted mono" x="1034" y="28" font-size="12">v0.4.2</text>
+
+  <!-- ===== GRAPH CANVAS ===== -->
+  <!-- edges (drawn first) -->
+  <g fill="none">
+    <!-- conceptual related (green) mem2->sel -->
+    <path d="M512 332 L654 348" stroke="#22c55e" stroke-width="2" stroke-opacity="0.7"/>
+    <text class="elab" x="575" y="333">related</text>
+    <!-- recalls dashed purple sel->session1 -->
+    <path d="M676 326 L548 204" stroke="#6B3FA0" stroke-width="1.5" stroke-dasharray="5 4" stroke-opacity="0.7"/>
+    <text class="elab" x="600" y="262">RECALLS</text>
+    <!-- in_session blue session1->obs3 -->
+    <path d="M548 168 L628 158" stroke="#2563EB" stroke-width="1.5" stroke-opacity="0.6"/>
+    <!-- commits_for yellow arrow sel->commit -->
+    <path d="M744 350 L948 358" stroke="#eab308" stroke-width="2" stroke-opacity="0.75" marker-end="url(#ar-yellow)"/>
+    <text class="elab" x="830" y="346">commits_for</text>
+    <!-- supersedes purple arrow sel->mem3 -->
+    <path d="M700 392 L700 528" stroke="#a855f7" stroke-width="2" stroke-opacity="0.75" marker-end="url(#ar-purple)"/>
+    <text class="elab" x="706" y="462">supersedes</text>
+    <!-- references blue arrow sel->code -->
+    <path d="M668 372 L548 588" stroke="#3b82f6" stroke-width="1.5" stroke-opacity="0.6" marker-end="url(#ar-blue)"/>
+    <text class="elab" x="566" y="492">references</text>
+    <!-- produced_by green arrow run->obs2 -->
+    <path d="M858 278 L852 452" stroke="#15803D" stroke-width="1.5" stroke-opacity="0.6" marker-end="url(#ar-green)"/>
+    <!-- co_occurs gray dashed obs1->obs2 -->
+    <path d="M598 470 L812 480" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4 3" stroke-opacity="0.6"/>
+    <!-- contradicts red mem2->mem3 -->
+    <path d="M478 360 L668 552" stroke="#ef4444" stroke-width="2.5" stroke-opacity="0.85"/>
+    <text class="elab" x="540" y="470" fill="#ef4444">contradicts</text>
+    <!-- mentions gray dashed concept->mem3 -->
+    <path d="M866 596 L742 566" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4 3" stroke-opacity="0.6"/>
+    <!-- derived_from blue arrow obs1->mem2 -->
+    <path d="M548 452 L484 360" stroke="#3b82f6" stroke-width="1.5" stroke-opacity="0.6" marker-end="url(#ar-blue)"/>
+    <!-- in_session session2->run -->
+    <path d="M932 186 L876 234" stroke="#2563EB" stroke-width="1.5" stroke-opacity="0.6"/>
+  </g>
+
+  <!-- nodes -->
+  <!-- session1 (blue round-rect) -->
+  <rect x="494" y="156" width="52" height="32" rx="8" fill="#2563EB" class="nstroke"/>
+  <!-- session2 -->
+  <rect x="934" y="146" width="52" height="32" rx="8" fill="#2563EB" class="nstroke"/>
+  <!-- run (green diamond) -->
+  <path d="M860 232 L880 256 L860 280 L840 256 z" fill="#15803D" class="nstroke" stroke-width="2"/>
+  <!-- observations (orange ellipse) -->
+  <ellipse cx="640" cy="150" rx="22" ry="16" fill="#B45309" class="nstroke"/>
+  <ellipse cx="560" cy="470" rx="24" ry="18" fill="#B45309" class="nstroke"/>
+  <ellipse cx="850" cy="480" rx="24" ry="18" fill="#B45309" class="nstroke"/>
+  <!-- memory hexagons (purple) -->
+  <path d="M448 330 l16 -18 36 0 16 18 -16 18 -36 0 z" fill="#6B3FA0" class="nstroke" stroke-width="2"/>
+  <path d="M652 560 l16 -18 64 0 16 18 -16 18 -64 0 z" fill="#6B3FA0" class="nstroke" stroke-width="2"/>
+  <!-- code_symbol (green diamond) -->
+  <path d="M520 588 L542 610 L520 632 L498 610 z" fill="#15803D" class="nstroke"/>
+  <!-- concept (purple ellipse) -->
+  <ellipse cx="900" cy="600" rx="26" ry="18" fill="#9b59b6" class="nstroke"/>
+  <!-- commit (tag) -->
+  <path d="M958 344 l10 -14 36 0 0 60 -36 0 -10 -14 z" fill="#C2410C" class="nstroke" stroke-width="2"/>
+  <circle cx="976" cy="345" r="3" fill="#f2f1eb"/>
+  <!-- SELECTED memory (neon hexagon, label shown) -->
+  <path d="M654 350 l18 -22 56 0 18 22 -18 22 -56 0 z" fill="#d9f400" stroke="#1a1a1a" stroke-width="3"/>
+  <text class="ink" x="700" y="355" text-anchor="middle" font-size="11" font-weight="700">memory</text>
+  <text class="ink" x="700" y="400" text-anchor="middle" font-size="11" font-weight="700">JWT refresh in Redis</text>
+
+  <!-- ===== FILTER OVERLAY (top-left of canvas) ===== -->
+  <rect class="ink" x="362" y="66" width="178" height="150" rx="10"/>
+  <rect class="surf" x="360" y="64" width="178" height="150" rx="10"/>
+  <rect x="360" y="64" width="178" height="150" rx="10" fill="none" class="strong" stroke-width="1.5"/>
+  <text class="muted h11" x="376" y="88">Filters</text>
+  <line class="line" x1="376" y1="98" x2="522" y2="98"/>
+  <g font-size="12" fill="#3a3a36">
+    <rect x="376" y="108" width="12" height="12" rx="3" fill="#d9f400" stroke="#1a1a1a" stroke-width="1"/><text x="396" y="118">Memories</text>
+    <rect x="376" y="128" width="12" height="12" rx="3" fill="#d9f400" stroke="#1a1a1a" stroke-width="1"/><text x="396" y="138">Observations</text>
+    <rect x="376" y="148" width="12" height="12" rx="3" fill="#d9f400" stroke="#1a1a1a" stroke-width="1"/><text x="396" y="158">Sessions · Runs</text>
+    <rect x="376" y="168" width="12" height="12" rx="3" fill="none" stroke="#1a1a1a" stroke-width="1"/><text x="396" y="178">Commits</text>
+  </g>
+  <line class="line" x1="376" y1="190" x2="522" y2="190"/>
+  <text class="muted" x="376" y="206" font-size="11">Local mode</text>
+  <rect x="492" y="196" width="30" height="14" rx="7" fill="#d9f400" stroke="#1a1a1a" stroke-width="1"/>
+  <circle cx="514" cy="203" r="5" fill="#1a1a1a"/>
+
+  <!-- ===== LEGEND (bottom-right) ===== -->
+  <rect class="ink" x="876" y="638" width="212" height="74" rx="10"/>
+  <rect class="surf" x="874" y="636" width="212" height="74" rx="10"/>
+  <rect x="874" y="636" width="212" height="74" rx="10" fill="none" class="strong" stroke-width="1.5"/>
+  <g font-size="9" class="mono" fill="#6a6a63">
+    <path d="M888 654 l6 -7 12 0 6 7 -6 7 -12 0 z" fill="#6B3FA0" stroke="#1a1a1a" stroke-width="1"/><text x="916" y="657">memory</text>
+    <path d="M888 678 L896 686 L888 694 L880 686 z" fill="#15803D" stroke="#1a1a1a" stroke-width="1"/><text x="916" y="689">run / code</text>
+    <ellipse cx="996" cy="652" rx="9" ry="6" fill="#B45309" stroke="#1a1a1a" stroke-width="1"/><text x="1010" y="655">obs</text>
+    <rect x="988" y="680" width="16" height="11" rx="3" fill="#2563EB" stroke="#1a1a1a" stroke-width="1"/><text x="1010" y="689">session</text>
+  </g>
+</svg>

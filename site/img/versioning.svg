@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 260" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif">
+  <defs>
+    <style>
+      .card-old { fill: #fafafa; stroke: #d4d4d8; stroke-width: 1.4; }
+      .card-active { fill: #f5f3ff; stroke: #8b5cf6; stroke-width: 1.8; }
+      .ver { font-size: 16px; font-weight: 700; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .ver-old { fill: #71717a; }
+      .ver-active { fill: #5b21b6; }
+      .body { font-size: 12px; fill: #3f3f46; }
+      .body-old { fill: #a1a1aa; }
+      .badge-old { fill: #e4e4e7; }
+      .badge-old-text { font-size: 10px; font-weight: 700; fill: #52525b; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .badge-active { fill: #ddd6fe; }
+      .badge-active-text { font-size: 10px; font-weight: 700; fill: #5b21b6; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .arrow { stroke: #8b5cf6; stroke-width: 1.8; fill: none; }
+      .arrow-label { font-size: 12px; font-weight: 600; fill: #5b21b6; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .caption { font-size: 12px; fill: #71717a; }
+    </style>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8b5cf6"/>
+    </marker>
+  </defs>
+
+  <!-- v1 (superseded) -->
+  <g>
+    <rect class="card-old" x="40" y="60" width="180" height="100" rx="10"/>
+    <text class="ver ver-old" x="56" y="86">v1</text>
+    <rect class="badge-old" x="100" y="72" width="104" height="18" rx="9"/>
+    <text class="badge-old-text" x="152" y="85" text-anchor="middle">is_latest = false</text>
+    <text class="body body-old" x="56" y="108">Auth uses sessions</text>
+    <text class="body body-old" x="56" y="126">2026-02-12</text>
+    <text class="body body-old" x="56" y="144">supersedes: []</text>
+  </g>
+
+  <!-- v2 (superseded) -->
+  <g>
+    <rect class="card-old" x="260" y="60" width="180" height="100" rx="10"/>
+    <text class="ver ver-old" x="276" y="86">v2</text>
+    <rect class="badge-old" x="320" y="72" width="104" height="18" rx="9"/>
+    <text class="badge-old-text" x="372" y="85" text-anchor="middle">is_latest = false</text>
+    <text class="body body-old" x="276" y="108">Auth uses JWT cookies</text>
+    <text class="body body-old" x="276" y="126">2026-03-04</text>
+    <text class="body body-old" x="276" y="144">supersedes: [v3]</text>
+  </g>
+
+  <!-- v3 (active) -->
+  <g>
+    <rect class="card-active" x="480" y="60" width="180" height="100" rx="10"/>
+    <text class="ver ver-active" x="496" y="86">v3</text>
+    <rect class="badge-active" x="540" y="72" width="104" height="18" rx="9"/>
+    <text class="badge-active-text" x="592" y="85" text-anchor="middle">is_latest = true</text>
+    <text class="body" x="496" y="108">Auth: signed JWT</text>
+    <text class="body" x="496" y="126">in HttpOnly cookies</text>
+    <text class="body" x="496" y="144">2026-04-21</text>
+  </g>
+
+  <!-- Arrows -->
+  <path class="arrow" d="M 220 110 L 260 110" marker-end="url(#arr)"/>
+  <text class="arrow-label" x="240" y="100" text-anchor="middle">supersedes</text>
+
+  <path class="arrow" d="M 440 110 L 480 110" marker-end="url(#arr)"/>
+  <text class="arrow-label" x="460" y="100" text-anchor="middle">supersedes</text>
+
+  <!-- Caption -->
+  <text class="caption" x="40" y="200">Append-only chain. Older rows stay for provenance and graph traversal — only the row with</text>
+  <text class="caption" x="40" y="218"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, monospace" fill="#5b21b6">is_latest = true</tspan> is returned by retrieval queries.</text>
+</svg>

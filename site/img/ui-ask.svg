@@ -1,0 +1,168 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 720" font-family="'Inter', system-ui, -apple-system, sans-serif">
+  <defs>
+    <style>
+      .bg     { fill: #f2f1eb; }
+      .surf   { fill: #f8f8f5; }
+      .alt    { fill: #ecebe4; }
+      .ink    { fill: #1a1a1a; }
+      .muted  { fill: #6a6a63; }
+      .faint  { fill: #9a9a91; }
+      .sec    { fill: #3a3a36; }
+      .line   { stroke: #dedcd2; stroke-width: 1; }
+      .strong { stroke: #1a1a1a; }
+      .mono   { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+      .ic     { fill: none; stroke: #6a6a63; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+      .ic-on  { fill: none; stroke: #1a1a1a; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+      .lbl    { font-size: 13px; fill: #3a3a36; }
+      .h11    { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; }
+      .ans    { font-size: 15px; fill: #1a1a1a; }
+      .dtype  { font-size: 10px; fill: #6a6a63; letter-spacing: 0.04em; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1120" height="720"/>
+
+  <!-- ===== RAIL ===== -->
+  <rect class="surf" x="0" y="0" width="48" height="720"/>
+  <line class="line" x1="48" y1="0" x2="48" y2="720"/>
+  <rect class="ink" x="8" y="8" width="32" height="32" rx="6"/>
+  <text x="24" y="31" text-anchor="middle" fill="#ffffff" font-size="16" font-weight="700">h</text>
+  <rect x="8" y="88" width="32" height="32" rx="6" fill="#d9f400"/>
+  <rect class="ink" x="0" y="94" width="2" height="20" rx="1"/>
+  <path class="ic" d="M17 69 L24 63 L31 69 M19 67 L19 75 L29 75 L29 67"/>
+  <path class="ic-on" d="M17 99 h14 v8 h-8 l-4 4 v-4 h-2 z"/>
+  <path class="ic" d="M24 134 l7 4 -7 4 -7 -4 z M17 142 l7 4 7 -4"/>
+  <path class="ic" d="M18 171 h6 v6 h-6 z M24 174 h5 M29 168 h5 v6 h-5 z M29 180 h5 v6 h-5 z M24 177 v6 h5"/>
+  <path class="ic" d="M17 212 h4 l3 -7 4 14 3 -7 h3"/>
+  <circle class="ic" cx="24" cy="248" r="6"/><path class="ic" d="M24 242 v12 M21 245 q3 3 0 6 M27 245 q-3 3 0 6"/>
+  <circle class="ic" cx="18" cy="282" r="2.5"/><circle class="ic" cx="31" cy="278" r="2.5"/><circle class="ic" cx="28" cy="290" r="2.5"/><path class="ic" d="M20 281 L29 279 M20 284 L27 289"/>
+  <path class="ic" d="M24 313 l7 4 v8 l-7 4 -7 -4 v-8 z M24 313 v8 M24 321 l7 -4 M24 321 l-7 -4"/>
+  <circle class="ic" cx="24" cy="356" r="4"/><path class="ic" d="M24 348 v4 M24 360 v4"/>
+  <path class="ic" d="M18 392 a6 6 0 1 0 2 -4 M18 386 v4 h4"/><path class="ic" d="M24 389 v4 l3 2"/>
+  <ellipse class="ic" cx="24" cy="425" rx="6" ry="2.6"/><path class="ic" d="M18 425 v4 a6 2.6 0 0 0 12 0 v-4"/>
+  <circle class="ic" cx="24" cy="688" r="6"/><path class="ic" d="M22 686 a2 2 0 1 1 2.5 2 q-0.5 0.4 -0.5 1.4 M24 692 v0.4"/>
+
+  <!-- ===== PANEL ===== -->
+  <rect class="surf" x="48" y="0" width="280" height="720"/>
+  <line class="line" x1="328" y1="0" x2="328" y2="720"/>
+  <rect class="alt" x="58" y="12" width="260" height="30" rx="6"/><rect x="58" y="12" width="260" height="30" rx="6" fill="none" class="line"/>
+  <circle class="ic" cx="74" cy="27" r="4"/><path class="ic" d="M77 30 l3 3"/>
+  <text class="faint" x="88" y="31" font-size="12">Quick filter…</text>
+  <text class="faint h11" x="66" y="68">Workspace</text>
+  <g transform="translate(0,74)">
+    <rect class="alt" x="58" y="11" width="260" height="26" rx="6"/>
+    <rect x="66" y="13" width="8" height="8" rx="2" fill="#c2db00"/>
+    <text x="86" y="24" font-size="13" fill="#1a1a1a" font-weight="500">Ask</text>
+  </g>
+  <g transform="translate(0,102)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#6a6a63"/><text class="lbl" x="86" y="24">Home</text></g>
+  <text class="faint h11" x="66" y="150">Entities</text>
+  <g font-size="13">
+    <g transform="translate(0,156)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#2563EB"/><text class="lbl" x="86" y="24">Sessions</text><text class="faint mono" x="312" y="24" text-anchor="end" font-size="11">312</text></g>
+    <g transform="translate(0,184)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#15803D"/><text class="lbl" x="86" y="24">Runs</text><text class="faint mono" x="312" y="24" text-anchor="end" font-size="11">1,204</text></g>
+    <g transform="translate(0,212)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#B45309"/><text class="lbl" x="86" y="24">Observations</text><text class="faint mono" x="312" y="24" text-anchor="end" font-size="11">8,431</text></g>
+    <g transform="translate(0,240)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#6B3FA0"/><text class="lbl" x="86" y="24">Memories</text><text class="faint mono" x="312" y="24" text-anchor="end" font-size="11">347</text></g>
+    <g transform="translate(0,268)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#C2410C"/><text class="lbl" x="86" y="24">Commits</text><text class="faint mono" x="312" y="24" text-anchor="end" font-size="11">529</text></g>
+  </g>
+  <text class="faint h11" x="66" y="316">Maktab</text>
+  <g transform="translate(0,322)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#475569"/><text class="lbl" x="86" y="24">Maktab</text></g>
+  <g transform="translate(0,350)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#475569"/><text class="lbl" x="86" y="24">Knowledge graph</text></g>
+  <text class="faint h11" x="66" y="398">Tools</text>
+  <g transform="translate(0,404)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#6a6a63"/><text class="lbl" x="86" y="24">Tokens</text></g>
+  <g transform="translate(0,432)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#6a6a63"/><text class="lbl" x="86" y="24">Replay</text></g>
+
+  <!-- ===== HEADER ===== -->
+  <rect class="bg" x="328" y="0" width="792" height="48"/>
+  <line class="line" x1="328" y1="48" x2="1120" y2="48"/>
+  <rect x="344" y="14" width="20" height="20" rx="4" fill="none" class="line"/>
+  <path class="ic" d="M350 20 h8 M350 24 h8 M350 28 h8"/>
+  <text class="ink" x="376" y="30" font-size="13" font-weight="600">Ask</text>
+  <rect class="surf" x="724" y="10" width="240" height="28" rx="6"/><rect x="724" y="10" width="240" height="28" rx="6" fill="none" class="line"/>
+  <circle class="ic" cx="740" cy="24" r="4"/><path class="ic" d="M743 27 l3 3"/>
+  <text class="faint" x="754" y="28" font-size="12">Search…</text>
+  <rect class="bg" x="928" y="16" width="28" height="16" rx="4"/><rect x="928" y="16" width="28" height="16" rx="4" fill="none" class="line"/>
+  <text class="faint mono" x="942" y="28" text-anchor="middle" font-size="10">⌘K</text>
+  <circle cx="1024" cy="24" r="4" fill="#15803D"/><text class="muted mono" x="1034" y="28" font-size="12">v0.4.2</text>
+
+  <!-- ===== MAIN ===== -->
+  <!-- project picker (top right) -->
+  <rect class="bg" x="940" y="62" width="148" height="26" rx="6"/><rect x="940" y="62" width="148" height="26" rx="6" fill="none" class="strong" stroke-width="1"/>
+  <text class="sec" x="952" y="79" font-size="12">Project: hifz</text><path class="ic" d="M1070 73 l4 4 4 -4"/>
+
+  <!-- ask bar (hard shadow) -->
+  <rect class="ink" x="356" y="104" width="732" height="52" rx="10"/>
+  <rect class="surf" x="352" y="100" width="732" height="52" rx="10"/>
+  <rect x="352" y="100" width="732" height="52" rx="10" fill="none" class="strong" stroke-width="1"/>
+  <text class="ink" x="372" y="131" font-size="16">How does hifz recall memories?</text>
+  <circle cx="1058" cy="126" r="19" fill="#d9f400" stroke="#1a1a1a" stroke-width="1"/>
+  <path class="ic-on" d="M1050 126 h14 M1058 120 l6 6 -6 6" stroke-width="2"/>
+
+  <!-- modes -->
+  <g font-size="11" font-weight="600">
+    <rect x="352" y="166" width="50" height="24" rx="6" fill="#d9f400" stroke="#1a1a1a" stroke-width="1.5"/>
+    <text class="ink" x="377" y="182" text-anchor="middle">Ask</text>
+    <text class="muted" x="416" y="182">Search</text>
+  </g>
+
+  <!-- two-column layout -->
+  <!-- LEFT: answer -->
+  <g class="ans">
+    <text x="352" y="226">hifz recalls with a <tspan font-weight="600">hybrid search</tspan>:</text>
+    <text x="352" y="252">BM25 over an identifier-aware index,</text>
+    <text x="352" y="278">plus an HNSW vector KNN, fused with</text>
+    <text x="352" y="304">reciprocal rank fusion.</text>
+    <text x="352" y="330">It then expands one hop over the typed</text>
+    <text x="352" y="356">knowledge graph so linked memories</text>
+    <text x="352" y="382">ride along, then ranks each hit by</text>
+    <text x="352" y="408">strength × decay × access.</text>
+  </g>
+  <!-- inline cite chips at line ends -->
+  <g font-size="11" font-weight="600">
+    <rect x="524" y="292" width="16" height="15" rx="4" fill="none" stroke="#1a1a1a" stroke-width="1"/><text class="ink" x="532" y="304" text-anchor="middle">1</text>
+    <rect x="612" y="344" width="16" height="15" rx="4" fill="none" stroke="#1a1a1a" stroke-width="1"/><text class="ink" x="620" y="356" text-anchor="middle">2</text>
+    <rect x="548" y="396" width="16" height="15" rx="4" fill="none" stroke="#1a1a1a" stroke-width="1"/><text class="ink" x="556" y="408" text-anchor="middle">3</text>
+  </g>
+
+  <!-- related pills -->
+  <text class="muted" x="352" y="430" font-size="11" letter-spacing="0.04em">RELATED</text>
+  <rect class="alt" x="352" y="440" width="208" height="26" rx="13"/><rect x="352" y="440" width="208" height="26" rx="13" fill="none" class="strong" stroke-width="1"/>
+  <text class="sec" x="366" y="457" font-size="12">Tell me more about src/search.rs</text>
+  <rect class="alt" x="352" y="474" width="150" height="26" rx="13"/><rect x="352" y="474" width="150" height="26" rx="13" fill="none" class="strong" stroke-width="1"/>
+  <text class="sec" x="366" y="491" font-size="12">What is RRF fusion?</text>
+
+  <!-- RIGHT aside: Sources -->
+  <text class="muted h11" x="728" y="208">Sources</text>
+  <rect class="surf" x="1010" y="194" width="78" height="22" rx="6"/><rect x="1010" y="194" width="78" height="22" rx="6" fill="none" class="strong" stroke-width="1.5"/>
+  <text class="ink" x="1049" y="209" text-anchor="middle" font-size="11" font-weight="600">New chat</text>
+
+  <!-- source card 1 -->
+  <rect class="ink" x="730" y="226" width="360" height="96" rx="10"/>
+  <rect class="surf" x="728" y="224" width="360" height="96" rx="10"/><rect x="728" y="224" width="360" height="96" rx="10" fill="none" class="strong" stroke-width="1"/>
+  <rect x="744" y="238" width="16" height="15" rx="4" fill="none" stroke="#1a1a1a" stroke-width="1"/><text class="ink" x="752" y="250" text-anchor="middle" font-size="11" font-weight="600">1</text>
+  <path class="ic" d="M770 240 l5 -5 5 5 -5 5 z"/>
+  <text class="dtype" x="786" y="250">CODE</text>
+  <text class="mono" x="828" y="250" fill="#1a1a1a" font-size="12">src/search.rs:1-120</text>
+  <text class="sec" x="744" y="272" font-size="12.5">RRF merges BM25 and vector hits by</text>
+  <text class="sec" x="744" y="289" font-size="12.5">rank; no score normalization needed.</text>
+  <rect class="alt" x="744" y="298" width="78" height="16" rx="8"/><text class="mono" x="783" y="310" text-anchor="middle" font-size="9.5" fill="#6a6a63">lines 12-48</text>
+  <rect class="alt" x="828" y="298" width="78" height="16" rx="8"/><text class="mono" x="867" y="310" text-anchor="middle" font-size="9.5" fill="#6a6a63">lines 60-91</text>
+
+  <!-- source card 2 -->
+  <rect class="ink" x="730" y="334" width="360" height="84" rx="10"/>
+  <rect class="surf" x="728" y="332" width="360" height="84" rx="10"/><rect x="728" y="332" width="360" height="84" rx="10" fill="none" class="strong" stroke-width="1"/>
+  <rect x="744" y="346" width="16" height="15" rx="4" fill="none" stroke="#1a1a1a" stroke-width="1"/><text class="ink" x="752" y="358" text-anchor="middle" font-size="11" font-weight="600">2</text>
+  <path class="ic" d="M770 346 h8 l3 3 v9 h-11 z"/>
+  <text class="dtype" x="788" y="358">DOC</text>
+  <text class="mono" x="822" y="358" fill="#1a1a1a" font-size="11.5">docs/architecture/memory.md</text>
+  <text class="sec" x="744" y="382" font-size="12.5">Graph expansion: a neighbor's score =</text>
+  <text class="sec" x="744" y="399" font-size="12.5">seed × 0.5 × edge_score (1-hop).</text>
+
+  <!-- source card 3 -->
+  <rect class="ink" x="730" y="430" width="360" height="70" rx="10"/>
+  <rect class="surf" x="728" y="428" width="360" height="70" rx="10"/><rect x="728" y="428" width="360" height="70" rx="10" fill="none" class="strong" stroke-width="1"/>
+  <rect x="744" y="442" width="16" height="15" rx="4" fill="none" stroke="#1a1a1a" stroke-width="1"/><text class="ink" x="752" y="454" text-anchor="middle" font-size="11" font-weight="600">3</text>
+  <path class="ic" d="M770 442 a6 6 0 1 0 0.1 0"/>
+  <text class="dtype" x="786" y="454">CONCEPT</text>
+  <text class="sec" x="850" y="454" font-size="12">reciprocal rank fusion</text>
+  <text class="sec" x="744" y="478" font-size="12.5">Rank-based score fusion — robust,</text>
+  <text class="sec" x="744" y="492" font-size="12.5" fill="#6a6a63">no per-query tuning.</text>
+</svg>

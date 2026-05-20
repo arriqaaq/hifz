@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 520" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif">
+  <defs>
+    <style>
+      .mem { fill: #ffffff; stroke: #8b5cf6; stroke-width: 1.6; }
+      .ent { fill: #fff7ed; stroke: #f97316; stroke-width: 1.4; }
+      .mem-title { font-size: 13px; font-weight: 600; fill: #18181b; }
+      .mem-sub { font-size: 11px; fill: #71717a; }
+      .ent-name { font-size: 12px; font-weight: 600; fill: #9a3412; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .edge { fill: none; stroke-width: 1.6; }
+      .edge-knowledge { stroke: #2563eb; }
+      .edge-provenance { stroke: #16a34a; }
+      .edge-link { stroke: #f59e0b; stroke-dasharray: 4 3; }
+      .edge-label { font-size: 11px; font-weight: 600; }
+      .edge-label-knowledge { fill: #1e40af; }
+      .edge-label-provenance { fill: #166534; }
+      .edge-label-link { fill: #b45309; }
+      .legend-box { fill: #fafafa; stroke: #e4e4e7; }
+      .legend-title { font-size: 12px; font-weight: 700; fill: #3f3f46; text-transform: uppercase; letter-spacing: 0.04em; }
+      .legend-text { font-size: 12px; fill: #3f3f46; }
+    </style>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2563eb"/>
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#16a34a"/>
+    </marker>
+    <marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#f59e0b"/>
+    </marker>
+  </defs>
+
+  <!-- Memory nodes -->
+  <g>
+    <rect class="mem" x="60" y="60" width="220" height="64" rx="10"/>
+    <text class="mem-title" x="170" y="86" text-anchor="middle">Auth uses JWT</text>
+    <text class="mem-sub" x="170" y="106" text-anchor="middle">memory · category=architecture</text>
+  </g>
+  <g>
+    <rect class="mem" x="600" y="60" width="220" height="64" rx="10"/>
+    <text class="mem-title" x="710" y="86" text-anchor="middle">Refresh tokens in Redis</text>
+    <text class="mem-sub" x="710" y="106" text-anchor="middle">memory · category=architecture</text>
+  </g>
+  <g>
+    <rect class="mem" x="600" y="240" width="220" height="64" rx="10"/>
+    <text class="mem-title" x="710" y="266" text-anchor="middle">Sessions are stateless</text>
+    <text class="mem-sub" x="710" y="286" text-anchor="middle">memory · superseded</text>
+  </g>
+  <g>
+    <rect class="mem" x="60" y="240" width="220" height="64" rx="10"/>
+    <text class="mem-title" x="170" y="266" text-anchor="middle">OpenSSL config</text>
+    <text class="mem-sub" x="170" y="286" text-anchor="middle">memory · category=fact</text>
+  </g>
+  <g>
+    <rect class="mem" x="330" y="150" width="220" height="64" rx="10"/>
+    <text class="mem-title" x="440" y="176" text-anchor="middle">Session refresh flow</text>
+    <text class="mem-sub" x="440" y="196" text-anchor="middle">memory · category=workflow</text>
+  </g>
+
+  <!-- Entity nodes -->
+  <g>
+    <ellipse class="ent" cx="170" cy="400" rx="80" ry="28"/>
+    <text class="ent-name" x="170" y="406" text-anchor="middle">file: auth.rs</text>
+  </g>
+  <g>
+    <ellipse class="ent" cx="710" cy="400" rx="80" ry="28"/>
+    <text class="ent-name" x="710" y="406" text-anchor="middle">file: session.rs</text>
+  </g>
+  <g>
+    <ellipse class="ent" cx="440" cy="400" rx="90" ry="28"/>
+    <text class="ent-name" x="440" y="406" text-anchor="middle">concept: jwt</text>
+  </g>
+
+  <!-- Edges (knowledge) -->
+  <path class="edge edge-knowledge" d="M 280 92 L 600 92" marker-end="url(#arrow-blue)"/>
+  <text class="edge-label edge-label-knowledge" x="440" y="84" text-anchor="middle">similar_to</text>
+
+  <path class="edge edge-knowledge" d="M 710 124 L 710 240" marker-end="url(#arrow-blue)"/>
+  <text class="edge-label edge-label-knowledge" x="720" y="186">contradicts</text>
+
+  <path class="edge edge-knowledge" d="M 170 124 L 170 240" marker-end="url(#arrow-blue)"/>
+  <text class="edge-label edge-label-knowledge" x="180" y="186">depends_on</text>
+
+  <!-- Edges (provenance) -->
+  <path class="edge edge-provenance" d="M 280 100 Q 330 130 340 158" marker-end="url(#arrow-green)"/>
+  <text class="edge-label edge-label-provenance" x="295" y="138">elaborates</text>
+
+  <path class="edge edge-provenance" d="M 540 175 Q 580 130 600 105" marker-end="url(#arrow-green)"/>
+  <text class="edge-label edge-label-provenance" x="568" y="138">implemented_by</text>
+
+  <!-- Link-source edges (entities) -->
+  <path class="edge edge-link" d="M 170 124 L 170 374"/>
+  <path class="edge edge-link" d="M 710 124 L 710 374"/>
+  <path class="edge edge-link" d="M 440 214 L 440 374"/>
+  <path class="edge edge-link" d="M 250 396 Q 350 380 380 396"/>
+  <path class="edge edge-link" d="M 530 396 Q 600 380 630 396"/>
+
+  <!-- Legend -->
+  <rect class="legend-box" x="60" y="455" width="760" height="50" rx="8"/>
+  <line x1="80" y1="480" x2="120" y2="480" class="edge edge-knowledge"/>
+  <text class="legend-text" x="128" y="484" fill="#1e40af" font-weight="600">knowledge</text>
+  <text class="legend-text" x="80" y="498">similar_to · contradicts · depends_on · supports · elaborates …</text>
+
+  <line x1="370" y1="480" x2="410" y2="480" class="edge edge-provenance"/>
+  <text class="legend-text" x="418" y="484" fill="#166534" font-weight="600">provenance</text>
+  <text class="legend-text" x="370" y="498">generated_by · informed · implemented_by · part_of …</text>
+
+  <line x1="640" y1="480" x2="680" y2="480" class="edge edge-link"/>
+  <text class="legend-text" x="688" y="484" fill="#b45309" font-weight="600">link source</text>
+  <text class="legend-text" x="640" y="498">embedding · concept · file · entity · semantic</text>
+</svg>

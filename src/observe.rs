@@ -508,9 +508,11 @@ async fn link_commit_to_open_memories(
         }
         // Normalize BM25 to ~0-1 by clamping; raw BM25 has unbounded scale.
         let normalized = (score / 4.0).clamp(0.0, 1.0);
+        // No title cap: edge reasons are diagnostic strings, not scan-line
+        // UI elements. The source `title` is the memory.title we picked up
+        // above; preserving it whole means the reason is auditable end-to-end.
         let reason = format!(
-            "commit message BM25-matched open {category} \"{}\" (raw score {score:.2})",
-            title.chars().take(60).collect::<String>()
+            "commit message BM25-matched open {category} \"{title}\" (raw score {score:.2})"
         );
         let _ = link::upsert_edge(
             db,

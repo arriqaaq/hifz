@@ -74,7 +74,11 @@ async fn tier_semantic(db: &Surreal<Db>, ollama: &OllamaClient) -> Result<usize>
             continue;
         }
 
-        let title = fact.chars().take(80).collect::<String>();
+        // No cap. The fact is also stored in `content` below; truncating
+        // it again into `title` is just defensive — render-side
+        // shortening (CSS ellipsis) keeps lists readable without losing
+        // bytes at write time.
+        let title = fact.clone();
         db.query(
             "CREATE memory SET \
              project = 'global', \

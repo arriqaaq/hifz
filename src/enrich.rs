@@ -163,12 +163,11 @@ fn strip_md_markers(line: &str) -> &str {
 ///
 /// Rules: first non-blank line, stripped of leading markdown markers; cut at
 /// the first sentence terminator (`.!?` followed by whitespace/EOL) when that
-/// shortens it; truncated to ≤80 chars on a UTF-8 char boundary with an
-/// ellipsis. If `content` is entirely blank the title is `"<category>
-/// <YYYY-MM-DD>"` so the stored title is *never* empty.
+/// shortens it. No length cap — the structural extraction (first line,
+/// first sentence) is already the shortening mechanism; any further visual
+/// trim belongs in the renderer. If `content` is entirely blank the title is
+/// `"<category> <YYYY-MM-DD>"` so the stored title is *never* empty.
 pub fn derive_title(content: &str, category: &str) -> String {
-    const MAX: usize = 80;
-
     let Some(line) = content.lines().map(str::trim).find(|l| !l.is_empty()) else {
         let date = chrono::Utc::now().format("%Y-%m-%d");
         return format!("{category} {date}");
@@ -191,13 +190,7 @@ pub fn derive_title(content: &str, category: &str) -> String {
         Some((i, c)) => &base[..i + c.len_utf8()],
         None => base,
     };
-    let sentence = sentence.trim();
-
-    if sentence.chars().count() <= MAX {
-        return sentence.to_string();
-    }
-    let truncated: String = sentence.chars().take(MAX).collect();
-    format!("{}…", truncated.trim_end())
+    sentence.trim().to_string()
 }
 
 // ---------------------------------------------------------------------------
@@ -1020,17 +1013,21 @@ mod tests {
         );
     }
 
+    /// `derive_title` no longer applies a hard length cap — structural
+    /// extraction (first line, first sentence) is the only shortening.
+    /// A pathological 200-char first line is preserved whole; visual
+    /// shortening is the renderer's job.
     #[test]
-    fn derive_title_truncates_on_char_boundary_with_ellipsis() {
+    fn derive_title_preserves_long_first_line_unchanged() {
         let long = "x".repeat(200);
         let t = derive_title(&long, "note");
-        assert_eq!(t.chars().count(), 81); // 80 + ellipsis
-        assert!(t.ends_with('…'));
-        // multibyte content must not panic and must stay on a char boundary
+        assert_eq!(t.chars().count(), 200);
+        assert!(!t.ends_with('…'));
+        // multibyte content must round-trip whole — no boundary slicing.
         let multi = "é".repeat(200);
         let mt = derive_title(&multi, "note");
-        assert!(mt.ends_with('…'));
-        assert_eq!(mt.chars().filter(|&c| c == 'é').count(), 80);
+        assert!(!mt.ends_with('…'));
+        assert_eq!(mt.chars().filter(|&c| c == 'é').count(), 200);
     }
 
     #[test]

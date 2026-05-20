@@ -35,13 +35,14 @@ pub fn compress_synthetic(payload: &HookPayload) -> CompressResult {
         .clone()
         .unwrap_or_else(|| infer_obs_type(tool_name, &payload.hook_type));
     let title = if payload.hook_type == "prompt_submit" {
+        // No length cap. Scan-line shortening is a render concern (CSS
+        // `text-overflow: ellipsis`); the writer must not destroy bytes
+        // just so the timeline UI stays narrow.
         let prompt = data.get("prompt").and_then(|v| v.as_str()).unwrap_or("");
-        if prompt.len() > 60 {
-            format!("Prompt: {}…", crate::truncate_at_char_boundary(prompt, 60))
-        } else if !prompt.is_empty() {
-            format!("Prompt: {prompt}")
-        } else {
+        if prompt.is_empty() {
             "Prompt".to_string()
+        } else {
+            format!("Prompt: {prompt}")
         }
     } else if payload.hook_type == "post_compact" {
         // post_compact has no tool_name/file_path; the actual signal is in
@@ -200,19 +201,13 @@ fn build_title(tool_name: &str, data: &serde_json::Value) -> String {
             .and_then(|v| v.as_str())
             .unwrap_or("");
         if !command.is_empty() {
-            // Extract just the first meaningful line/command, skip comments
-            let first_cmd = command
-                .lines()
-                .map(|l| l.trim())
-                .find(|l| !l.is_empty() && !l.starts_with('#'))
-                .unwrap_or(command);
-            // Truncate at first pipe or 80 chars (UTF-8 safe).
-            let short = match first_cmd.find('|') {
-                Some(pos) if pos < 80 => &first_cmd[..pos],
-                _ if first_cmd.len() > 80 => crate::truncate_at_char_boundary(first_cmd, 80),
-                _ => first_cmd,
-            };
-            return format!("{tool_name}: {}", short.trim());
+            // No truncation. Previous logic stripped to "first meaningful
+            // line" then capped at 80 chars / first pipe — both lossy:
+            // a piped command lost everything after the pipe; a multi-line
+            // command was reduced to its `cd …` prologue. The full command
+            // is structurally one unit and should live in the title; any
+            // visual shortening is a render concern.
+            return format!("{tool_name}: {}", command.trim());
         }
     }
 
@@ -237,22 +232,14 @@ fn extract_facts(data: &serde_json::Value) -> Vec<String> {
         && let Some(obj) = input.as_object()
     {
         for (key, val) in obj {
+            // No cap: `facts` is unbounded `array<string>` in the schema,
+            // `payload.data` is not persisted (observe.rs:190-208), so this
+            // is the only stored copy of e.g. Write.content / Edit.new_string.
+            // Truncating here meant losing the file content forever; any
+            // scan-line shortening belongs in the renderer, not the writer.
             let val_str = match val {
-                serde_json::Value::String(s) => {
-                    if s.len() > 200 {
-                        format!("{}...", crate::truncate_at_char_boundary(s, 200))
-                    } else {
-                        s.clone()
-                    }
-                }
-                _ => {
-                    let s = val.to_string();
-                    if s.len() > 200 {
-                        format!("{}...", crate::truncate_at_char_boundary(&s, 200))
-                    } else {
-                        s
-                    }
-                }
+                serde_json::Value::String(s) => s.clone(),
+                _ => val.to_string(),
             };
             facts.push(format!("{key}: {val_str}"));
         }
@@ -271,12 +258,12 @@ fn extract_facts(data: &serde_json::Value) -> Vec<String> {
             .and_then(|v| v.as_str())
         && !output.is_empty()
     {
-        let truncated = if output.len() > 300 {
-            format!("{}...", crate::truncate_at_char_boundary(output, 300))
-        } else {
-            output.to_string()
-        };
-        facts.push(format!("output: {truncated}"));
+        // Bash stdout: only stored copy (`data.tool_output` is not persisted —
+        // observe.rs:190-208). No cap: truncating cargo/test/lint output
+        // throws away exactly the lines a future recall would want. The
+        // schema is unbounded; render-side truncation is the right place
+        // to keep the timeline readable.
+        facts.push(format!("output: {output}"));
     }
 
     facts
@@ -363,7 +350,12 @@ fn build_narrative(tool_name: &str, hook_type: &str, data: &serde_json::Value) -
                 if output.is_empty() {
                     return "(no output)".to_string();
                 }
-                let last_lines: String = output
+                // Tail of output (last 3 lines) — the high-signal slice
+                // for errors and result summaries. No length cap: lines are
+                // self-bounded to 3, and a pathological single-line JSON
+                // dump should still be persisted whole (the renderer can
+                // collapse it). Anything we drop here is irretrievable.
+                output
                     .lines()
                     .rev()
                     .take(3)
@@ -371,12 +363,7 @@ fn build_narrative(tool_name: &str, hook_type: &str, data: &serde_json::Value) -
                     .into_iter()
                     .rev()
                     .collect::<Vec<_>>()
-                    .join(" | ");
-                if last_lines.len() > 200 {
-                    format!("{}…", crate::truncate_at_char_boundary(&last_lines, 200))
-                } else {
-                    last_lines
-                }
+                    .join(" | ")
             } else if file_path.is_empty() {
                 format!("Used {tool_name} tool.")
             } else {
@@ -387,11 +374,19 @@ fn build_narrative(tool_name: &str, hook_type: &str, data: &serde_json::Value) -
         "session_start" => "Session started.".to_string(),
         "session_end" => "Session ended.".to_string(),
         "prompt_submit" => {
+            // The prompt is the irreducible user signal — the whole point
+            // of saving the observation. Title (`compress_synthetic` at
+            // line 37-46) already produces the "Prompt: …" scan-line capped
+            // at 60 chars; the narrative is where the *full* prompt belongs.
+            // `narrative` is `TYPE string` (unbounded); the embedder
+            // (fastembed MiniLM, 256-token window) truncates internally for
+            // the vector, so there is no downstream cost to storing whole.
+            //
+            // (Same class of bug as the post_compact arm above, which
+            // previously dropped the entire compaction summary.)
             let prompt = data.get("prompt").and_then(|v| v.as_str()).unwrap_or("");
             if prompt.is_empty() {
                 "User submitted a prompt.".to_string()
-            } else if prompt.len() > 120 {
-                format!("{}…", crate::truncate_at_char_boundary(prompt, 120))
             } else {
                 prompt.to_string()
             }
@@ -520,5 +515,115 @@ mod tests {
             "tail of summary was dropped"
         );
         assert_eq!(r.narrative, big);
+    }
+
+    /// Regression fence: a multi-kilobyte prompt must land in both `title`
+    /// and `narrative` byte-for-byte. No length caps anywhere on the write
+    /// path — the prompt is the user's irreducible record and any scan-line
+    /// shortening is a render concern (CSS `text-overflow: ellipsis`).
+    #[test]
+    fn prompt_submit_stores_full_prompt_unchanged() {
+        let big = "x".repeat(8192) + "<<END>>";
+        let p = payload("prompt_submit", json!({ "prompt": big.clone() }));
+        let r = compress_synthetic(&p);
+        // Narrative: full prompt verbatim.
+        assert_eq!(r.narrative.len(), big.len(), "narrative was truncated");
+        assert!(r.narrative.ends_with("<<END>>"));
+        assert_eq!(r.narrative, big);
+        // Title: "Prompt: " + full prompt verbatim. Confirms the renderer
+        // sees the whole string; visual trim is downstream.
+        assert_eq!(r.title, format!("Prompt: {big}"));
+        assert!(r.title.ends_with("<<END>>"));
+    }
+
+    /// Bash output fact: stdout of any size must round-trip verbatim — no
+    /// 300/4096 cap, no truncation marker. The fact is the only stored copy
+    /// of `data.tool_output`; clipping it dropped cargo/test traces.
+    #[test]
+    fn bash_output_fact_stores_full_stdout_verbatim() {
+        let out = "line\n".repeat(2000) + "<<TAIL>>"; // ~10 KB
+        let p = payload(
+            "post_tool_use",
+            json!({
+                "tool_name": "Bash",
+                "tool_input": { "command": "echo hi" },
+                "tool_output": out.clone(),
+            }),
+        );
+        let r = compress_synthetic(&p);
+        let output_fact = r
+            .facts
+            .iter()
+            .find(|f| f.starts_with("output: "))
+            .expect("missing output fact");
+        assert_eq!(output_fact, &format!("output: {out}"));
+        assert!(
+            output_fact.ends_with("<<TAIL>>"),
+            "tail of stdout was dropped"
+        );
+        assert!(
+            !output_fact.contains("..."),
+            "fact carries the old truncation marker: {output_fact}"
+        );
+    }
+
+    /// Bash command in title: full command preserved (no 80-char cap, no
+    /// pipe-truncation). Previously a piped command lost everything after
+    /// the first `|`; a multi-line command was reduced to its `cd …` prologue.
+    #[test]
+    fn bash_command_title_preserves_full_pipeline() {
+        let cmd = "cd /repo && cargo test --release \
+                   --features atlas | tee /tmp/out | grep -E 'test result|FAILED'";
+        let p = payload(
+            "post_tool_use",
+            json!({
+                "tool_name": "Bash",
+                "tool_input": { "command": cmd },
+                "tool_output": "",
+            }),
+        );
+        let r = compress_synthetic(&p);
+        assert!(
+            r.title.contains("tee /tmp/out"),
+            "title lost content after pipe: {}",
+            r.title
+        );
+        assert!(
+            r.title.contains("FAILED"),
+            "title lost content after second pipe: {}",
+            r.title
+        );
+        assert!(
+            !r.title.contains("…"),
+            "title still carries the old ellipsis: {}",
+            r.title
+        );
+    }
+
+    /// Tool_input value preserved unchanged: a Write of a multi-kilobyte
+    /// `content` field used to be clipped at 200 chars, dropping nearly the
+    /// entire file from the stored fact.
+    #[test]
+    fn tool_input_value_fact_stores_full_value_verbatim() {
+        let body = "x".repeat(5000) + "<<EOF>>";
+        let p = payload(
+            "post_tool_use",
+            json!({
+                "tool_name": "Write",
+                "tool_input": { "file_path": "/tmp/big.md", "content": body.clone() },
+            }),
+        );
+        let r = compress_synthetic(&p);
+        let content_fact = r
+            .facts
+            .iter()
+            .find(|f| f.starts_with("content: "))
+            .expect("missing content fact");
+        assert!(content_fact.ends_with("<<EOF>>"), "tail dropped");
+        assert!(
+            !content_fact.contains("..."),
+            "fact still truncated: {content_fact}"
+        );
+        assert_eq!(content_fact.len(), "content: ".len() + body.len());
     }
 }

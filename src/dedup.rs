@@ -40,13 +40,13 @@ impl DedupMap {
     }
 
     /// Compute a SHA-256 fingerprint for deduplication.
+    ///
+    /// No length cap on `tool_input`. SHA-256 is linear and cheap (~1 µs per
+    /// KB on modern hardware), and a cap risked *false-positive dedup*:
+    /// two distinct prompts/inputs that happened to share their first 500
+    /// chars would hash identically and the second would be silently dropped.
     pub fn compute_hash(session_id: &str, tool_name: &str, tool_input: &str) -> String {
-        let input = if tool_input.len() > 500 {
-            crate::truncate_at_char_boundary(tool_input, 500)
-        } else {
-            tool_input
-        };
-        let raw = format!("{session_id}:{tool_name}:{input}");
+        let raw = format!("{session_id}:{tool_name}:{tool_input}");
         let hash = Sha256::digest(raw.as_bytes());
         hex::encode(hash)
     }

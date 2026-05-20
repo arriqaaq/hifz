@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 use axum::{
     Json, Router,
-    extract::{Multipart, Query, State},
+    extract::{Multipart, Path, Query, State},
     routing::{get, post},
 };
 use dashmap::DashMap;
@@ -47,6 +47,23 @@ pub struct AtlasState {
 struct Scoped {
     #[serde(default)]
     project: Option<String>,
+    /// Concept-map mode: restrict the graph to document nodes + the
+    /// document↔document `related`/`embedding` edges (Phase B3).
+    #[serde(default)]
+    docs_only: bool,
+}
+
+#[derive(Deserialize)]
+struct CreateProjectReq {
+    name: String,
+    #[serde(default)]
+    description: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct PatchProjectReq {
+    #[serde(default)]
+    description: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -70,15 +87,37 @@ struct Q {
     project: Option<String>,
 }
 
+/// The selected project slug, or "" when none is given. There is NO default
+/// project — Atlas is create-first; write handlers reject an empty/unknown
+/// slug via [`require`], reads return an empty result for it.
 fn proj(p: Option<String>) -> String {
-    p.filter(|s| !s.trim().is_empty())
-        .unwrap_or_else(|| "default".into())
+    p.map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_default()
 }
 fn store(s: &AtlasState, p: Option<String>) -> Store {
     Store::new(s.db.clone(), proj(p))
 }
 fn err(e: anyhow::Error) -> Json<Value> {
     Json(json!({ "error": e.to_string() }))
+}
+
+/// Create-first gate for write handlers: the project slug must be non-empty
+/// and already exist in the `project` table. Returns the error JSON to return
+/// to the caller, or `Ok(())` to proceed.
+async fn require(s: &AtlasState, slug: &str) -> Result<(), Json<Value>> {
+    if slug.is_empty() {
+        return Err(Json(
+            json!({ "error": "no project selected — create a project first" }),
+        ));
+    }
+    match crate::project::exists(&s.db, slug).await {
+        Ok(true) => Ok(()),
+        Ok(false) => Err(Json(json!({
+            "error": format!("project '{slug}' does not exist — create it first")
+        }))),
+        Err(e) => Err(err(e)),
+    }
 }
 
 pub fn router(state: AtlasState) -> Router {
@@ -94,7 +133,11 @@ pub fn router(state: AtlasState) -> Router {
         .route("/graph", get(graph))
         .route("/query", get(query))
         .route("/answer", get(answer))
-        .route("/projects", get(projects))
+        .route("/projects", get(projects_list).post(projects_create))
+        .route(
+            "/projects/{slug}",
+            get(project_get).patch(project_patch).delete(project_delete),
+        )
         .with_state(state)
 }
 
@@ -266,6 +309,9 @@ async fn run_build(
 
 async fn build(State(s): State<AtlasState>, Json(r): Json<PathReq>) -> Json<Value> {
     let project = proj(r.project.clone());
+    if let Err(e) = require(&s, &project).await {
+        return e;
+    }
     spawn_job(&s, project, move |st, emb, jobs, p| async move {
         let res = run_build(&st, &emb, &jobs, &p, r).await;
         job_done(&jobs, &p, res);
@@ -274,6 +320,9 @@ async fn build(State(s): State<AtlasState>, Json(r): Json<PathReq>) -> Json<Valu
 
 async fn code(State(s): State<AtlasState>, Json(r): Json<PathReq>) -> Json<Value> {
     let project = proj(r.project.clone());
+    if let Err(e) = require(&s, &project).await {
+        return e;
+    }
     spawn_job(&s, project, move |st, emb, jobs, p| async move {
         let res = async {
             let root = if let Some(g) = r.git.as_deref().filter(|s| !s.is_empty()) {
@@ -294,6 +343,9 @@ async fn code(State(s): State<AtlasState>, Json(r): Json<PathReq>) -> Json<Value
 
 async fn ingest(State(s): State<AtlasState>, Json(r): Json<PathReq>) -> Json<Value> {
     let project = proj(r.project.clone());
+    if let Err(e) = require(&s, &project).await {
+        return e;
+    }
     spawn_job(&s, project, move |st, emb, jobs, p| async move {
         let path = r.path.clone().unwrap_or_default();
         job_step(&jobs, &p, "ingest docs");
@@ -306,6 +358,9 @@ async fn ingest(State(s): State<AtlasState>, Json(r): Json<PathReq>) -> Json<Val
 
 async fn extract(State(s): State<AtlasState>, Query(sc): Query<Scoped>) -> Json<Value> {
     let project = proj(sc.project);
+    if let Err(e) = require(&s, &project).await {
+        return e;
+    }
     spawn_job(&s, project, move |st, emb, jobs, p| async move {
         job_step(&jobs, &p, "extract concepts");
         let backend = crate::llm::LlmBackend::from_env();
@@ -318,6 +373,9 @@ async fn extract(State(s): State<AtlasState>, Query(sc): Query<Scoped>) -> Json<
 
 async fn cluster(State(s): State<AtlasState>, Query(sc): Query<Scoped>) -> Json<Value> {
     let project = proj(sc.project);
+    if let Err(e) = require(&s, &project).await {
+        return e;
+    }
     spawn_job(&s, project, move |st, _emb, jobs, p| async move {
         job_step(&jobs, &p, "cluster");
         let res = crate::cluster::cluster(&st).await.map(|r| json!(r));
@@ -331,6 +389,9 @@ async fn upload(
     mut mp: Multipart,
 ) -> Json<Value> {
     let project = proj(sc.project);
+    if let Err(e) = require(&s, &project).await {
+        return e;
+    }
     let dir = home_base().join("atlas-uploads").join(sanitize(&project));
     if let Err(e) = std::fs::create_dir_all(&dir) {
         return err(e.into());
@@ -396,6 +457,12 @@ async fn upload(
 // --- read handlers ------------------------------------------------------
 
 async fn insights(State(s): State<AtlasState>, Query(sc): Query<Scoped>) -> Json<Value> {
+    if proj(sc.project.clone()).is_empty() {
+        return Json(json!({
+            "nodes": 0, "edges": 0, "clusters": 0,
+            "hub_nodes": [], "surprising_links": [], "isolated_nodes": []
+        }));
+    }
     match crate::analyze::analyze(&store(&s, sc.project)).await {
         Ok(i) => Json(json!(i)),
         Err(e) => err(e),
@@ -403,6 +470,9 @@ async fn insights(State(s): State<AtlasState>, Query(sc): Query<Scoped>) -> Json
 }
 
 async fn query(State(s): State<AtlasState>, Query(q): Query<Q>) -> Json<Value> {
+    if proj(q.project.clone()).is_empty() {
+        return Json(json!({ "hits": [] }));
+    }
     match crate::query::query(
         &store(&s, q.project.clone()),
         &s.embedder,
@@ -420,6 +490,12 @@ async fn query(State(s): State<AtlasState>, Query(q): Query<Q>) -> Json<Value> {
 /// `LlmBackend::from_env()` is read per-request; absent → degraded
 /// (ranked sources + note), never a 500.
 async fn answer(State(s): State<AtlasState>, Query(q): Query<Q>) -> Json<Value> {
+    if proj(q.project.clone()).is_empty() {
+        return Json(json!({
+            "answer": "", "citations": [],
+            "note": "Select or create a project to ask its corpus."
+        }));
+    }
     let backend = crate::llm::LlmBackend::from_env();
     match crate::answer::answer(
         &store(&s, q.project.clone()),
@@ -435,41 +511,87 @@ async fn answer(State(s): State<AtlasState>, Query(q): Query<Q>) -> Json<Value> 
     }
 }
 
-/// List the distinct atlas projects (projects that have at least one
-/// atlas_node row). The Atlas UI dropdown unions this with hifz sessions
-/// so any project with an atlas corpus is selectable — including projects
-/// that have NO hifz session (the dst-landed-in-default bug fix).
-async fn projects(State(s): State<AtlasState>) -> Json<Value> {
-    let all: Vec<String> =
-        s.db.query("SELECT VALUE project FROM atlas_node")
-            .await
-            .and_then(|mut r| r.take::<Vec<String>>(0))
-            .unwrap_or_default();
-    let projs: Vec<String> = all
-        .into_iter()
-        .collect::<std::collections::BTreeSet<_>>()
-        .into_iter()
-        .collect();
-    Json(json!({ "projects": projs }))
+/// List all projects (table-backed, create-first) with per-project corpus
+/// counts. This is the authoritative project list — the old "distinct project
+/// from atlas_node" union is gone.
+async fn projects_list(State(s): State<AtlasState>) -> Json<Value> {
+    match crate::project::list_with_counts(&s.db).await {
+        Ok(v) => Json(v),
+        Err(e) => err(e),
+    }
 }
 
-/// Node+edge dump for the UI (Cytoscape-friendly).
+/// Create a project by name (slug derived; name/slug UNIQUE).
+async fn projects_create(
+    State(s): State<AtlasState>,
+    Json(r): Json<CreateProjectReq>,
+) -> Json<Value> {
+    match crate::project::create(&s.db, &r.name, r.description).await {
+        Ok(v) => Json(v),
+        Err(e) => err(e),
+    }
+}
+
+async fn project_get(State(s): State<AtlasState>, Path(slug): Path<String>) -> Json<Value> {
+    match crate::project::get(&s.db, &slug).await {
+        Ok(Some(v)) => Json(v),
+        Ok(None) => Json(json!({ "error": format!("project '{slug}' not found") })),
+        Err(e) => err(e),
+    }
+}
+
+async fn project_patch(
+    State(s): State<AtlasState>,
+    Path(slug): Path<String>,
+    Json(r): Json<PatchProjectReq>,
+) -> Json<Value> {
+    match crate::project::patch(&s.db, &slug, r.description).await {
+        Ok(v) => Json(v),
+        Err(e) => err(e),
+    }
+}
+
+async fn project_delete(State(s): State<AtlasState>, Path(slug): Path<String>) -> Json<Value> {
+    match crate::project::delete(&s.db, &slug).await {
+        Ok(()) => Json(json!({ "deleted": slug })),
+        Err(e) => err(e),
+    }
+}
+
+/// Node+edge dump for the UI (Cytoscape-friendly). With `docs_only=true`
+/// (Phase B3 concept map): only `kind='document'` nodes and the
+/// document↔document `related`/`embedding` edges.
 async fn graph(State(s): State<AtlasState>, Query(sc): Query<Scoped>) -> Json<Value> {
-    let p = proj(sc.project);
+    let p = proj(sc.project.clone());
+    if p.is_empty() {
+        return Json(json!({ "nodes": [], "edges": [] }));
+    }
+    let pid = crate::project::rid(&p);
+    let (node_sql, edge_sql) = if sc.docs_only {
+        (
+            "SELECT id, kind, label, cluster FROM atlas_node \
+             WHERE project=$p AND kind='document' LIMIT 4000",
+            "SELECT in, out, relation, resolution, score FROM atlas_edge \
+             WHERE project=$p AND relation='related' AND via='embedding' LIMIT 8000",
+        )
+    } else {
+        (
+            "SELECT id, kind, label, cluster FROM atlas_node WHERE project=$p LIMIT 4000",
+            "SELECT in, out, relation, resolution, score FROM atlas_edge \
+             WHERE project=$p LIMIT 8000",
+        )
+    };
     let nodes =
-        s.db.query("SELECT id, kind, label, cluster FROM atlas_node WHERE project=$p LIMIT 4000")
-            .bind(("p", p.clone()))
+        s.db.query(node_sql)
+            .bind(("p", pid.clone()))
             .await
             .and_then(|mut r| r.take::<Vec<Value>>(0))
             .unwrap_or_default();
     let edges =
-        s.db.query(
-            "SELECT in, out, relation, resolution, score FROM atlas_edge \
-             WHERE project=$p LIMIT 8000",
-        )
-        .bind(("p", p))
-        .await
-        .and_then(|mut r| r.take::<Vec<Value>>(0))
-        .unwrap_or_default();
+        s.db.query(edge_sql)
+            .bind(("p", pid))
+            .await
+            .and_then(|mut r| r.take::<Vec<Value>>(0))
+            .unwrap_or_default();
     Json(json!({ "nodes": nodes, "edges": edges }))
 }

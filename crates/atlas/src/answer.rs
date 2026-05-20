@@ -26,6 +26,15 @@ pub struct Citation {
     pub source_ref: Option<String>,
     pub location: Option<String>,
     pub snippet: Option<String>,
+    /// Document-level dedup (B1): one citation per document. `chunk_count` is
+    /// how many chunks of this doc matched; `locations` are their pointers
+    /// (e.g. ["chunk 0","chunk 4"]) so the UI can show "3 chunks" without
+    /// duplicating the source.
+    pub chunk_count: usize,
+    pub locations: Vec<String>,
+    /// The contributing chunks, best-first (location + snippet + score), so the
+    /// UI can show each passage's text — "where in the document to look".
+    pub chunks: Vec<crate::query::ChunkRef>,
 }
 
 #[derive(Debug, Serialize)]
@@ -57,6 +66,9 @@ fn to_citations(hits: &[Hit]) -> Vec<Citation> {
             source_ref: h.source_ref.clone(),
             location: h.location.clone(),
             snippet: h.snippet.clone(),
+            chunk_count: h.chunk_count,
+            locations: h.chunks.iter().filter_map(|c| c.location.clone()).collect(),
+            chunks: h.chunks.clone(),
         })
         .collect()
 }
@@ -130,6 +142,7 @@ mod tests {
     async fn seed(store: &Store, emb: &Embedder) {
         let id = "atlas_node:s1".to_string();
         let body = "The service mesh uses mutual TLS between all pods.";
+        let pid = store.pid();
         store
             .db
             .query(
@@ -139,7 +152,7 @@ mod tests {
                  source_ref='docs/mesh.md', cluster=-1, created_at='2026-01-01'",
             )
             .bind(("id", id.clone()))
-            .bind(("p", store.project.clone()))
+            .bind(("p", pid.clone()))
             .bind(("s", body.to_string()))
             .bind(("e", emb.embed_single(body).ok()))
             .await
@@ -153,7 +166,7 @@ mod tests {
                  chunk_index=0, content=$c, embedding=$e, created_at='2026-01-01'",
             )
             .bind(("id", id))
-            .bind(("p", store.project.clone()))
+            .bind(("p", pid.clone()))
             .bind(("c", body.to_string()))
             .bind(("e", emb.embed_single(body).ok()))
             .await

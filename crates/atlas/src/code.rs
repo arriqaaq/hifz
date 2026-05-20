@@ -46,19 +46,20 @@ pub async fn project_code_graph(
     embedder: &Embedder,
     root: &Path,
 ) -> Result<CodeProjectReport> {
-    let p = store.project.clone();
+    let p = store.project.clone(); // slug — for deterministic nkey/rid hashing
+    let pid = store.pid(); // record<project> id — for query binds
     let now = chrono::Utc::now().to_rfc3339();
 
     // Wipe prior derived code graph for this project (doc/concept untouched).
     let _ = store
         .db
         .query("DELETE atlas_edge WHERE project=$p AND via='code'")
-        .bind(("p", p.clone()))
+        .bind(("p", pid.clone()))
         .await;
     let _ = store
         .db
         .query("DELETE atlas_node WHERE project=$p AND kind IN ['code_symbol','external','file']")
-        .bind(("p", p.clone()))
+        .bind(("p", pid.clone()))
         .await;
 
     // Walk + per-file FileGraph; track qualified→language + module set.
@@ -100,7 +101,7 @@ pub async fn project_code_graph(
                  qualified=$l, cluster=-1, created_at=$now",
             )
             .bind(("id", id))
-            .bind(("p", p.clone()))
+            .bind(("p", pid.clone()))
             .bind(("l", m.clone()))
             .bind(("now", now.clone()))
             .await;
@@ -122,7 +123,7 @@ pub async fn project_code_graph(
                  embedding=$e, cluster=-1, created_at=$now",
             )
             .bind(("id", id))
-            .bind(("p", p.clone()))
+            .bind(("p", pid.clone()))
             .bind(("n", d.name.clone()))
             .bind(("q", d.qualified.clone()))
             .bind(("lang", lang.to_string()))
@@ -160,7 +161,7 @@ pub async fn project_code_graph(
                          label=$l, qualified=$l, cluster=-1, created_at=$now",
                     )
                     .bind(("id", id))
-                    .bind(("p", p.clone()))
+                    .bind(("p", pid.clone()))
                     .bind(("l", e.to.clone()))
                     .bind(("now", now.clone()))
                     .await;
@@ -189,7 +190,7 @@ pub async fn project_code_graph(
                 )
                 .bind(("f", from.clone()))
                 .bind(("t", to))
-                .bind(("p", p.clone()))
+                .bind(("p", pid.clone()))
                 .bind(("rel", e.relation.to_string()))
                 .bind(("s", score))
                 .bind(("res", e.resolution.as_str().to_string()))

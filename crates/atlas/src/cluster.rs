@@ -414,12 +414,12 @@ fn leiden(mut g: Graph, rng: &mut Rng) -> Vec<usize> {
 // --- public entry --------------------------------------------------------
 
 pub async fn cluster(store: &Store) -> Result<ClusterReport> {
-    let p = store.project.clone();
+    let pid = store.pid();
 
     let mut nr = store
         .db
         .query("SELECT id FROM atlas_node WHERE project=$p ORDER BY id")
-        .bind(("p", p.clone()))
+        .bind(("p", pid.clone()))
         .await?;
     let nodes: Vec<RecordId> = nr
         .take::<Vec<NodeRow>>(0)
@@ -441,7 +441,7 @@ pub async fn cluster(store: &Store) -> Result<ClusterReport> {
     let mut er = store
         .db
         .query("SELECT in, out, score FROM atlas_edge WHERE project=$p")
-        .bind(("p", p.clone()))
+        .bind(("p", pid.clone()))
         .await?;
     let edges: Vec<EdgeRow> = er.take(0).unwrap_or_default();
 
@@ -817,7 +817,7 @@ mod tests {
             for nm in ["a1", "a2", "a3", "b1", "b2", "b3"] {
                 store
                     .db
-                    .query("UPSERT type::record($id) SET project='demo', kind='concept', label=$l, cluster=-1, created_at='2026-01-01'")
+                    .query("UPSERT type::record($id) SET project=project:demo, kind='concept', label=$l, cluster=-1, created_at='2026-01-01'")
                     .bind(("id", format!("atlas_node:{nm}")))
                     .bind(("l", nm.to_string()))
                     .await
@@ -836,7 +836,7 @@ mod tests {
             ] {
                 store
                     .db
-                    .query("RELATE $a->atlas_edge->$b SET project='demo', relation='related', via='t', score=$w, created_at='2026-01-01'")
+                    .query("RELATE $a->atlas_edge->$b SET project=project:demo, relation='related', via='t', score=$w, created_at='2026-01-01'")
                     .bind(("a", RecordId::new("atlas_node", x.to_string())))
                     .bind(("b", RecordId::new("atlas_node", y.to_string())))
                     .bind(("w", w))
@@ -850,7 +850,7 @@ mod tests {
             }
             let mut q = store
                 .db
-                .query("SELECT id, cluster FROM atlas_node WHERE project='demo' ORDER BY id")
+                .query("SELECT id, cluster FROM atlas_node WHERE project=project:demo ORDER BY id")
                 .await
                 .unwrap();
             q.take::<Vec<C>>(0)
@@ -872,7 +872,7 @@ mod tests {
         for nname in ["a1", "a2", "a3", "b1", "b2", "b3"] {
             store
                 .db
-                .query("UPSERT type::record($id) SET project='demo', kind='concept', label=$l, cluster=-1, created_at='2026-01-01'")
+                .query("UPSERT type::record($id) SET project=project:demo, kind='concept', label=$l, cluster=-1, created_at='2026-01-01'")
                 .bind(("id", format!("atlas_node:{nname}")))
                 .bind(("l", nname.to_string()))
                 .await
@@ -898,7 +898,7 @@ mod tests {
         }
         let mut q = store
             .db
-            .query("SELECT cluster, label FROM atlas_node WHERE project='demo'")
+            .query("SELECT cluster, label FROM atlas_node WHERE project=project:demo")
             .await
             .unwrap();
         let rows: Vec<Cl> = q.take(0).unwrap_or_default();
@@ -921,7 +921,7 @@ mod tests {
     async fn rel(store: &Store, x: &str, y: &str, w: f64) {
         store
             .db
-            .query("RELATE $a->atlas_edge->$b SET project='demo', relation='related', via='t', score=$w, created_at='2026-01-01'")
+            .query("RELATE $a->atlas_edge->$b SET project=project:demo, relation='related', via='t', score=$w, created_at='2026-01-01'")
             .bind(("a", RecordId::new("atlas_node", x.to_string())))
             .bind(("b", RecordId::new("atlas_node", y.to_string())))
             .bind(("w", w))

@@ -120,6 +120,7 @@ pub async fn extract_concepts(
 ) -> Result<ExtractReport> {
     let mut report = ExtractReport::default();
     let now = chrono::Utc::now().to_rfc3339();
+    let pid = store.pid(); // record<project> id for the project column binds
 
     // Idempotency (fix for the non-idempotent `RELATE`): wipe this project's
     // prior concept layer before recreating, exactly as code.rs:53-66 does for
@@ -132,18 +133,18 @@ pub async fn extract_concepts(
     let _ = store
         .db
         .query("DELETE atlas_edge WHERE project=$p AND via IN ['llm','embedding']")
-        .bind(("p", store.project.clone()))
+        .bind(("p", pid.clone()))
         .await;
     let _ = store
         .db
         .query("DELETE atlas_node WHERE project=$p AND kind='concept'")
-        .bind(("p", store.project.clone()))
+        .bind(("p", pid.clone()))
         .await;
 
     let mut dr = store
         .db
         .query("SELECT id, embedding FROM atlas_node WHERE project=$p AND kind='document'")
-        .bind(("p", store.project.clone()))
+        .bind(("p", pid.clone()))
         .await?;
     let docs: Vec<DocRow> = dr.take(0).unwrap_or_default();
 
@@ -165,7 +166,7 @@ pub async fn extract_concepts(
                         )
                         .bind(("a", docs[i].id.clone()))
                         .bind(("b", docs[j].id.clone()))
-                        .bind(("p", store.project.clone()))
+                        .bind(("p", pid.clone()))
                         .bind(("s", sim as f64))
                         .bind(("now", now.clone()))
                         .await;
@@ -256,7 +257,7 @@ pub async fn extract_concepts(
                              label=$l, embedding=$e, cluster=-1, created_at=$now",
                         )
                         .bind(("id", format!("atlas_node:{ckey}")))
-                        .bind(("p", store.project.clone()))
+                        .bind(("p", pid.clone()))
                         .bind(("l", label.trim().to_string()))
                         .bind(("e", emb))
                         .bind(("now", now.clone()))
@@ -277,7 +278,7 @@ pub async fn extract_concepts(
                         )
                         .bind(("d", doc.id.clone()))
                         .bind(("c", crid))
-                        .bind(("p", store.project.clone()))
+                        .bind(("p", pid.clone()))
                         .bind(("now", now.clone()))
                         .await;
                 }
@@ -303,7 +304,7 @@ pub async fn extract_concepts(
                         )
                         .bind(("s", RecordId::new("atlas_node", sk)))
                         .bind(("t", RecordId::new("atlas_node", tk)))
-                        .bind(("p", store.project.clone()))
+                        .bind(("p", pid.clone()))
                         .bind(("r", rel))
                         .bind(("now", now.clone()))
                         .await;
@@ -323,6 +324,7 @@ mod tests {
     async fn seed_doc(store: &Store, emb: &Embedder, label: &str, body: &str) {
         let id = format!("atlas_node:doc_{}", label.replace(' ', "_"));
         let e = emb.embed_single(body).ok();
+        let pid = store.pid();
         store
             .db
             .query(
@@ -330,7 +332,7 @@ mod tests {
                  label=$l, path=$l, embedding=$e, cluster=-1, created_at='2026-01-01'",
             )
             .bind(("id", id.clone()))
-            .bind(("p", store.project.clone()))
+            .bind(("p", pid.clone()))
             .bind(("l", label.to_string()))
             .bind(("e", e))
             .await
@@ -341,7 +343,7 @@ mod tests {
             .db
             .query("CREATE atlas_chunk SET node=type::record($id), project=$p, chunk_index=0, content=$c, created_at='2026-01-01'")
             .bind(("id", id))
-            .bind(("p", store.project.clone()))
+            .bind(("p", pid.clone()))
             .bind(("c", body.to_string()))
             .await
             .unwrap()

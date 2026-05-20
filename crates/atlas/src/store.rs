@@ -9,8 +9,11 @@
 use anyhow::Result;
 use kernel::db::Db;
 use surrealdb::Surreal;
+use surrealdb::types::RecordId;
 
 /// Thin handle: the shared connection + the project the CLI/REST operate on.
+/// `project` holds the project **slug** (the `project` table's record id key);
+/// bind [`Store::pid`] into queries for the `record<project>` columns.
 pub struct Store {
     pub db: Surreal<Db>,
     pub project: String,
@@ -22,6 +25,13 @@ impl Store {
             db,
             project: project.into(),
         }
+    }
+
+    /// The `record<project>` id for this store's project, i.e. `project:<slug>`.
+    /// Bind this (not the bare slug string) into every query touching a
+    /// `project` column on atlas_node / atlas_chunk / atlas_edge.
+    pub fn pid(&self) -> RecordId {
+        RecordId::new("project", self.project.as_str())
     }
 }
 
@@ -57,11 +67,29 @@ pub async fn init_atlas_schema(db: &Surreal<Db>, embed_dim: usize) -> Result<()>
 }
 
 const ATLAS_SCHEMA: &str = r#"
+-- Project: the first-class parent entity of the Atlas knowledge base. A user
+-- creates a project by name, then ingests documents / indexes code into it;
+-- every atlas_node/atlas_chunk/atlas_edge links here via `record<project>`.
+-- The record id IS the slug (`project:my-kb`) so a reference is constructable
+-- from a known slug without a lookup. Defined FIRST so the `record<project>`
+-- field references below resolve at init. Scoped to Atlas only — the kernel
+-- telemetry tables (session/observation/memory/…) keep their own string
+-- `project` scoping and are NOT part of this entity.
+DEFINE TABLE IF NOT EXISTS project SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS name        ON project TYPE string;
+DEFINE FIELD IF NOT EXISTS slug        ON project TYPE string;
+DEFINE FIELD IF NOT EXISTS description ON project TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS created_at  ON project TYPE string;
+DEFINE FIELD IF NOT EXISTS updated_at  ON project TYPE string;
+DEFINE FIELD IF NOT EXISTS metadata    ON project TYPE option<object> FLEXIBLE;
+DEFINE INDEX IF NOT EXISTS project_name_uniq ON TABLE project FIELDS name UNIQUE;
+DEFINE INDEX IF NOT EXISTS project_slug_uniq ON TABLE project FIELDS slug UNIQUE;
+
 -- One node in the corpus graph. `kind` ∈ document|concept|code_symbol|
 -- external|file. `qualified` mirrors hifz's semantic path for code nodes
 -- (projection target, E8). `cluster` = modularity cluster (E9, -1 = none).
 DEFINE TABLE IF NOT EXISTS atlas_node SCHEMAFULL;
-DEFINE FIELD IF NOT EXISTS project    ON atlas_node TYPE string;
+DEFINE FIELD IF NOT EXISTS project    ON atlas_node TYPE record<project>;
 DEFINE FIELD IF NOT EXISTS kind       ON atlas_node TYPE string;
 DEFINE FIELD IF NOT EXISTS label      ON atlas_node TYPE string;
 DEFINE FIELD IF NOT EXISTS qualified  ON atlas_node TYPE option<string>;
@@ -106,7 +134,16 @@ DEFINE TABLE IF NOT EXISTS atlas_edge SCHEMAFULL TYPE RELATION;
 -- `WHERE in IN (SELECT id FROM atlas_node WHERE project=$p)` shape hung
 -- >18 s, even with `FIELDS in` indexes present. The denormalization is the
 -- mechanism, not the index name. See the plan file.
-DEFINE FIELD IF NOT EXISTS project    ON atlas_edge TYPE string;
+-- `project` is `record<project>` and denormalized onto every edge: it is a
+-- pure scoping key (never traversed — endpoints live in `in`/`out`), set
+-- atomically at each RELATE site from the same Store, so the invariant
+-- `edge.project == in.project == out.project` holds by construction. The
+-- record type does NOT affect the perf fix: the >18s hang was the
+-- `in IN (SELECT … atlas_node …)` *subquery* shape (forbidden by the
+-- `no_atlas_edge_in_subquery_anywhere_in_atlas` test); the fast path is
+-- direct indexed equality `WHERE project=$p`, which SurrealDB serves from the
+-- `atlas_edge_project` index identically for a string or a record key.
+DEFINE FIELD IF NOT EXISTS project    ON atlas_edge TYPE record<project>;
 DEFINE FIELD IF NOT EXISTS relation   ON atlas_edge TYPE string;
 DEFINE FIELD IF NOT EXISTS via        ON atlas_edge TYPE string DEFAULT 'atlas';
 DEFINE FIELD IF NOT EXISTS score      ON atlas_edge TYPE float DEFAULT 1.0;
@@ -124,7 +161,7 @@ DEFINE INDEX IF NOT EXISTS atlas_edge_via      ON TABLE atlas_edge FIELDS via;
 -- Text chunks for document/PDF nodes (hybrid-searchable like hifz chunks).
 DEFINE TABLE IF NOT EXISTS atlas_chunk SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS node        ON atlas_chunk TYPE record<atlas_node>;
-DEFINE FIELD IF NOT EXISTS project     ON atlas_chunk TYPE string;
+DEFINE FIELD IF NOT EXISTS project     ON atlas_chunk TYPE record<project>;
 DEFINE FIELD IF NOT EXISTS chunk_index ON atlas_chunk TYPE int;
 DEFINE FIELD IF NOT EXISTS content     ON atlas_chunk TYPE string;
 DEFINE FIELD IF NOT EXISTS embedding   ON atlas_chunk TYPE option<array<float>>;

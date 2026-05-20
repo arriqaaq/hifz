@@ -13,6 +13,7 @@ pub mod code;
 pub mod extract;
 pub mod ingest;
 pub mod llm;
+pub mod project;
 pub mod query;
 pub mod store;
 pub mod web;

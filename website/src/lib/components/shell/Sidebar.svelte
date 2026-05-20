@@ -12,6 +12,7 @@
     Coins,
     History,
     HelpCircle,
+    MessageCircleQuestion,
   } from 'lucide-svelte';
 
   type Item = {
@@ -23,6 +24,7 @@
 
   const top: Item[] = [
     { icon: Home, href: '/', label: 'Home', match: (p) => p === '/' },
+    { icon: MessageCircleQuestion, href: '/ask', label: 'Ask', match: (p) => p.startsWith('/ask') },
     { icon: Layers, href: '/sessions', label: 'Sessions', match: (p) => p.startsWith('/sessions') },
     { icon: Workflow, href: '/runs', label: 'Runs', match: (p) => p.startsWith('/runs') },
     { icon: Activity, href: '/observations', label: 'Observations', match: (p) => p.startsWith('/observations') },

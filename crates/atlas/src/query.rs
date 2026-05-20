@@ -37,9 +37,21 @@ pub struct Hit {
     pub source_ref: Option<String>,
     /// Opaque within-source pointer (`"chunk 4"` now; `"p.12"`/block-id later).
     pub location: Option<String>,
-    /// Matched passage / summary excerpt.
+    /// Matched passage / summary excerpt (the best chunk's, for this doc).
     pub snippet: Option<String>,
     /// Fused RRF score (higher = more relevant). Results are sorted by it.
+    pub score: f64,
+    /// Document-level dedup (B1): how many chunks of this document matched.
+    pub chunk_count: usize,
+    /// The contributing chunks, best-first (top-level fields mirror chunks[0]).
+    pub chunks: Vec<ChunkRef>,
+}
+
+/// One contributing chunk of a deduplicated document hit.
+#[derive(Debug, serde::Serialize, Clone)]
+pub struct ChunkRef {
+    pub location: Option<String>,
+    pub snippet: Option<String>,
     pub score: f64,
 }
 
@@ -70,7 +82,7 @@ pub async fn query(store: &Store, embedder: &Embedder, q: &str, limit: usize) ->
     if q.is_empty() {
         return Ok(Vec::new());
     }
-    let p = store.project.clone();
+    let pid = store.pid();
     let qvec = embedder.embed_single(q)?;
 
     // Five RRF branches, all project-scoped, mirroring core search's
@@ -96,7 +108,7 @@ pub async fn query(store: &Store, embedder: &Embedder, q: &str, limit: usize) ->
     let mut resp = store
         .db
         .query(&sql)
-        .bind(("p", p.clone()))
+        .bind(("p", pid.clone()))
         .bind(("q", q.to_string()))
         .bind(("qv", qvec))
         .await?;
@@ -160,9 +172,14 @@ pub async fn query(store: &Store, embedder: &Embedder, q: &str, limit: usize) ->
     }
 
     let snip = |s: Option<String>| s.map(|t| t.chars().take(240).collect::<String>());
+    // Document-level dedup (B1): one Hit per parent document. `fused` is sorted
+    // by score desc, so the first chunk seen for a doc is its best — its
+    // location/snippet/score become the Hit's top-level fields; later chunks of
+    // the same doc append to `chunks` and bump `chunk_count`. `limit` now bounds
+    // documents, not chunks. Inline `[n]` citations stay stable: one number per
+    // document, the contributing chunk locations preserved in `chunks`.
     let mut out: Vec<Hit> = Vec::new();
-    let mut seen: std::collections::HashSet<(String, Option<String>)> =
-        std::collections::HashSet::new();
+    let mut doc_idx: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     for r in &fused {
         let (Some(id), score) = (&r.id, r.rrf_score.unwrap_or(0.0)) else {
             continue;
@@ -184,11 +201,21 @@ pub async fn query(store: &Store, embedder: &Embedder, q: &str, limit: usize) ->
                 continue;
             };
         let doc_id = rid_to_string(&node.id);
-        // Dedupe by (parent doc, location): distinct chunks of one doc stay
-        // distinct (different passages), exact repeats collapse.
-        if !seen.insert((doc_id.clone(), location.clone())) {
+        let cref = ChunkRef {
+            location: location.clone(),
+            snippet: snippet.clone(),
+            score,
+        };
+        if let Some(&i) = doc_idx.get(&doc_id) {
+            // Already have this document — append the chunk, keep best fields.
+            out[i].chunk_count += 1;
+            out[i].chunks.push(cref);
             continue;
         }
+        if out.len() >= limit {
+            continue; // document budget reached; don't start a new doc
+        }
+        doc_idx.insert(doc_id.clone(), out.len());
         out.push(Hit {
             id: doc_id,
             kind: node.kind.clone().unwrap_or_default(),
@@ -199,10 +226,9 @@ pub async fn query(store: &Store, embedder: &Embedder, q: &str, limit: usize) ->
             location,
             snippet,
             score,
+            chunk_count: 1,
+            chunks: vec![cref],
         });
-        if out.len() >= limit {
-            break;
-        }
     }
     Ok(out)
 }
@@ -215,6 +241,7 @@ mod tests {
         let id = format!("atlas_node:{key}");
         let summary: String = body.chars().take(280).collect();
         let nemb = emb.embed_single(&format!("{label}\n{summary}")).ok();
+        let pid = store.pid();
         store
             .db
             .query(
@@ -223,7 +250,7 @@ mod tests {
                  source_uri=$u, source_ref=$r, cluster=-1, created_at='2026-01-01'",
             )
             .bind(("id", id.clone()))
-            .bind(("p", store.project.clone()))
+            .bind(("p", pid.clone()))
             .bind(("l", label.to_string()))
             .bind(("r", format!("docs/{label}")))
             .bind(("s", summary))
@@ -242,7 +269,7 @@ mod tests {
                      chunk_index=$i, content=$c, embedding=$e, created_at='2026-01-01'",
                 )
                 .bind(("id", id.clone()))
-                .bind(("p", store.project.clone()))
+                .bind(("p", pid.clone()))
                 .bind(("i", ch.index as i64))
                 .bind(("c", ch.content.clone()))
                 .bind(("e", e))
@@ -300,6 +327,35 @@ mod tests {
         assert!(
             sem.iter().any(|h| h.doc_label == "auth.md"),
             "semantic (vector) retrieval finds the session-expiry doc"
+        );
+    }
+
+    #[tokio::test]
+    async fn dedups_document_with_many_matching_chunks() {
+        // B1 regression fence: a single document whose many chunks all match
+        // must appear ONCE (one Hit), not once-per-chunk, with chunk_count
+        // reflecting the matched chunks.
+        let db = kernel::db::connect_mem().await.unwrap();
+        crate::store::init_atlas_schema(&db, 384).await.unwrap();
+        let store = Store::new(db, "demo");
+        let emb = Embedder::new().unwrap();
+        seed(
+            &store,
+            &emb,
+            "big",
+            "big.md",
+            &"The authentication flow issues a JWT token and a session. ".repeat(200),
+        )
+        .await;
+
+        let hits = query(&store, &emb, "JWT token session", 10).await.unwrap();
+        let big: Vec<&Hit> = hits.iter().filter(|h| h.doc_label == "big.md").collect();
+        assert_eq!(big.len(), 1, "document deduped to a single hit");
+        assert!(
+            big[0].chunk_count >= 1 && big[0].chunks.len() == big[0].chunk_count,
+            "chunk_count tracks the contributing chunks ({} / {})",
+            big[0].chunk_count,
+            big[0].chunks.len()
         );
     }
 

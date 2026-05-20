@@ -11,7 +11,17 @@
     id: string;
     label: string;
     type: string;
-    kind: 'memory' | 'observation' | 'session' | 'run' | 'commit';
+    kind:
+      | 'memory'
+      | 'observation'
+      | 'session'
+      | 'run'
+      | 'commit'
+      | 'document'
+      | 'concept'
+      | 'code_symbol'
+      | 'external'
+      | 'file';
     keywords?: string[];
     files?: string[];
     timestamp?: string;

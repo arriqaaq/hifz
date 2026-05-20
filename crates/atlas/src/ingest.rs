@@ -80,6 +80,7 @@ pub async fn ingest_path(store: &Store, embedder: &Embedder, root: &Path) -> Res
     collect(root, &mut files);
     let mut report = IngestReport::default();
     let now = chrono::Utc::now().to_rfc3339();
+    let pid = store.pid(); // record<project> id for the project column binds
 
     for path in files {
         let ext = path
@@ -136,7 +137,7 @@ pub async fn ingest_path(store: &Store, embedder: &Embedder, root: &Path) -> Res
                  cluster=-1, created_at=$now",
             )
             .bind(("id", nid.clone()))
-            .bind(("p", store.project.clone()))
+            .bind(("p", pid.clone()))
             .bind(("label", label))
             .bind(("rel", rel.clone()))
             .bind(("summary", summary))
@@ -163,7 +164,7 @@ pub async fn ingest_path(store: &Store, embedder: &Embedder, root: &Path) -> Res
                      chunk_index=$idx, content=$c, embedding=$emb, created_at=$now",
                 )
                 .bind(("id", nid.clone()))
-                .bind(("p", store.project.clone()))
+                .bind(("p", pid.clone()))
                 .bind(("idx", ch.index as i64))
                 .bind(("c", ch.content.clone()))
                 .bind(("emb", emb))

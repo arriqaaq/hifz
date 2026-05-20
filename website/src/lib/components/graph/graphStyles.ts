@@ -27,6 +27,12 @@ export const TYPE_COLORS: Record<string, string> = {
   conversation: '#6B3FA0',
   search: '#2563EB',
   commit_made: '#C2410C',
+  // atlas corpus node kinds (concept map)
+  document: '#2563EB',
+  concept: '#9b59b6',
+  code_symbol: '#15803D',
+  external: '#94a3b8',
+  file: '#B45309',
   other: '#6a6a63',
 };
 
@@ -37,6 +43,11 @@ export const KIND_COLORS: Record<string, string> = {
   observation: '#B45309',
   memory: '#6B3FA0',
   commit: '#C2410C',
+  document: '#2563EB',
+  concept: '#9b59b6',
+  code_symbol: '#15803D',
+  external: '#94a3b8',
+  file: '#B45309',
 };
 
 export function colorFor(type: string): string {
@@ -91,6 +102,19 @@ export const stylesheet: StylesheetJson = [
   {
     selector: 'node[kind = "commit"]',
     style: { shape: 'tag', 'border-width': 2 },
+  },
+  // atlas corpus kinds (concept map)
+  {
+    selector: 'node[kind = "document"]',
+    style: { shape: 'round-rectangle', 'border-width': 2 },
+  },
+  {
+    selector: 'node[kind = "concept"]',
+    style: { shape: 'ellipse' },
+  },
+  {
+    selector: 'node[kind = "code_symbol"]',
+    style: { shape: 'diamond' },
   },
 
   // Selection / interaction states — neon ring on selection

@@ -98,43 +98,6 @@ notify-debouncer-mini  = "0.6"
 # `default` → standard builds/daemon are unaffected.
 atlas = ["dep:atlas"]
 
-[[bin]]
-name = "longmemeval-bench"
-path = "benchmark/longmemeval_bench.rs"
-
-[[bin]]
-name = "memory-bench"
-path = "benchmark/memory_bench.rs"
-
-[[bin]]
-name = "corpus-code-bench"
-path = "benchmark/corpus_code_bench.rs"
-
-[[bin]]
-name = "corpus-memory-bench"
-path = "benchmark/corpus_memory_bench.rs"
-
-[[bin]]
-name = "parity-bench"
-path = "benchmark/parity_bench.rs"
-
-[[bin]]
-name = "code-retrieval-bench"
-path = "benchmark/code_retrieval_bench.rs"
-
-[[bin]]
-name = "chunk-ablation-bench"
-path = "benchmark/chunk_ablation_bench.rs"
-
-# At-scale perf A/B for the atlas_edge project-scoped query (the
-# fast indexed shape vs the old IN-subquery shape). Lives in `benchmark/`
-# because seeding tens of thousands of awaited inserts is minutes-scale —
-# not a unit test. Needs the atlas feature.
-[[bin]]
-name = "atlas-edge-scaling-bench"
-path = "benchmark/atlas_edge_scaling_bench.rs"
-required-features = ["atlas"]
-
 # For local dev: uncomment to use local SurrealDB checkout instead of git
 # [patch.crates-io]
 # surrealdb = { path = "/path/to/surrealdb/surrealdb" }

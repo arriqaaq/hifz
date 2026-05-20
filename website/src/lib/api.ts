@@ -439,38 +439,19 @@ export function fetchSessionTotals(
 // --- atlas (corpus knowledge graph) ---
 const ATLAS = '/api/v1/atlas';
 
-export interface AtlasHubNode {
-  id: string;
-  label: string;
-  kind: string;
-  weighted_degree: number;
-  clusters_touched: number;
-}
-export interface AtlasSurprisingLink {
-  from: string;
-  to: string;
-  relation: string;
-  score: number;
-  surprise: number;
-  why: string;
-}
-export interface AtlasIsolatedNode {
-  id: string;
-  label: string;
-  kind: string;
-  weighted_degree: number;
-}
 export interface AtlasInsights {
   nodes: number;
   edges: number;
   clusters: number;
-  hub_nodes: AtlasHubNode[];
-  surprising_links: AtlasSurprisingLink[];
-  isolated_nodes: AtlasIsolatedNode[];
 }
 export interface AtlasGraph {
   nodes: Array<Record<string, unknown>>;
   edges: Array<Record<string, unknown>>;
+}
+export interface AtlasChunkRef {
+  location?: string | null;
+  snippet?: string | null;
+  score: number;
 }
 export interface AtlasHit {
   id: string;
@@ -482,6 +463,10 @@ export interface AtlasHit {
   location?: string | null;
   snippet?: string | null;
   score: number;
+  /** Document-level dedup: how many chunks of this doc matched (B1). */
+  chunk_count?: number;
+  /** The contributing chunks, best-first. */
+  chunks?: AtlasChunkRef[];
 }
 export interface AtlasCitation {
   n: number;
@@ -491,6 +476,20 @@ export interface AtlasCitation {
   source_ref?: string | null;
   location?: string | null;
   snippet?: string | null;
+  /** Document-level dedup: chunk count + the contributing locations (B1). */
+  chunk_count?: number;
+  locations?: string[];
+  /** Each contributing passage (location + snippet) — "where in the doc". */
+  chunks?: AtlasChunkRef[];
+}
+export interface AtlasProject {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  counts?: { documents: number; code: number; nodes: number; edges: number };
 }
 export interface AtlasAnswer {
   answer: string;
@@ -511,8 +510,12 @@ const pj = (p: string) => `project=${encodeURIComponent(p)}`;
 export function getAtlasInsights(project: string): Promise<AtlasInsights> {
   return get(`${ATLAS}/insights?${pj(project)}`);
 }
-export function getAtlasGraph(project: string): Promise<AtlasGraph> {
-  return get(`${ATLAS}/graph?${pj(project)}`);
+export function getAtlasGraph(
+  project: string,
+  opts?: { docsOnly?: boolean },
+): Promise<AtlasGraph> {
+  const d = opts?.docsOnly ? '&docs_only=true' : '';
+  return get(`${ATLAS}/graph?${pj(project)}${d}`);
 }
 export function atlasQuery(
   project: string,
@@ -528,10 +531,20 @@ export function atlasAnswer(
 ): Promise<AtlasAnswer> {
   return get(`${ATLAS}/answer?q=${encodeURIComponent(q)}&limit=${limit}&${pj(project)}`);
 }
-/** Distinct atlas projects (any project with ≥1 atlas_node). Atlas-only
- *  projects appear here even when they have no hifz session. */
-export function getAtlasProjects(): Promise<{ projects: string[] }> {
+/** All projects (table-backed, create-first) with per-project corpus counts.
+ *  This is the authoritative list — Atlas is project-first. */
+export function listProjects(): Promise<{ projects: AtlasProject[] }> {
   return get(`${ATLAS}/projects`);
+}
+/** Create a project by name (slug derived server-side; name/slug UNIQUE). */
+export function createProject(name: string, description?: string): Promise<AtlasProject> {
+  return post(`${ATLAS}/projects`, { name, description });
+}
+export function getProject(slug: string): Promise<AtlasProject> {
+  return get(`${ATLAS}/projects/${encodeURIComponent(slug)}`);
+}
+export function deleteProject(slug: string): Promise<{ deleted: string }> {
+  return del(`${ATLAS}/projects/${encodeURIComponent(slug)}`);
 }
 
 // Build endpoints are async: they return `{ started: true }` (or

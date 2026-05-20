@@ -3,7 +3,20 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { getHealth } from '$lib/api';
-  import { Layers, Workflow, Activity, Brain, GitCommit, Coins, Search } from 'lucide-svelte';
+  import {
+    Layers,
+    Workflow,
+    Activity,
+    Brain,
+    GitCommit,
+    Coins,
+    Search,
+    Home,
+    MessageCircleQuestion,
+    Boxes,
+    Network,
+    History,
+  } from 'lucide-svelte';
   import { shell } from '$lib/stores/shell.svelte';
 
   let counts = $state({
@@ -79,6 +92,18 @@
     </div>
 
     <div class="section">
+      <div class="section-h">Workspace</div>
+      <a href="/ask" class="link" class:active={page.url.pathname.startsWith('/ask')}>
+        <span class="link-icon" style="color: var(--neon-dim)"><MessageCircleQuestion size={14} strokeWidth={1.7} /></span>
+        <span class="link-label">Ask</span>
+      </a>
+      <a href="/" class="link" class:active={page.url.pathname === '/'}>
+        <span class="link-icon" style="color: var(--ink-muted)"><Home size={14} strokeWidth={1.7} /></span>
+        <span class="link-label">Home</span>
+      </a>
+    </div>
+
+    <div class="section">
       <div class="section-h">Entities</div>
       {#each links as l}
         {@const Icon = l.icon}
@@ -92,14 +117,26 @@
     </div>
 
     <div class="section">
+      <div class="section-h">Atlas</div>
+      <a href="/atlas" class="link" class:active={page.url.pathname.startsWith('/atlas')}>
+        <span class="link-icon" style="color: var(--c-project)"><Boxes size={14} strokeWidth={1.7} /></span>
+        <span class="link-label">Atlas</span>
+      </a>
+      <a href="/graph" class="link" class:active={page.url.pathname.startsWith('/graph')}>
+        <span class="link-icon" style="color: var(--c-project)"><Network size={14} strokeWidth={1.7} /></span>
+        <span class="link-label">Knowledge graph</span>
+      </a>
+    </div>
+
+    <div class="section">
       <div class="section-h">Tools</div>
       <a href="/tokens" class="link" class:active={page.url.pathname.startsWith('/tokens')}>
         <span class="link-icon" style="color: var(--ink-muted)"><Coins size={14} strokeWidth={1.7} /></span>
         <span class="link-label">Tokens</span>
       </a>
-      <a href="/graph" class="link" class:active={page.url.pathname.startsWith('/graph')}>
-        <span class="link-icon" style="color: var(--ink-muted)">⬡</span>
-        <span class="link-label">Knowledge graph</span>
+      <a href="/replay" class="link" class:active={page.url.pathname.startsWith('/replay')}>
+        <span class="link-icon" style="color: var(--ink-muted)"><History size={14} strokeWidth={1.7} /></span>
+        <span class="link-label">Replay</span>
       </a>
       <button type="button" class="link link-btn" onclick={() => shell.toggleCommand()}>
         <span class="link-icon" style="color: var(--ink-muted)">⌘</span>

@@ -175,11 +175,7 @@ claude plugin list                       # verify: hifz@hifz → enabled
 
 **5. Restart Claude Code.** Hooks, skills, and the MCP server load at startup. After restart, `/mcp` lists `hifz`.
 
-The adapter ships four skills — `/recall`, `/remember`, `/forget`, `/session-history` — plus lifecycle hooks that auto-capture tool use, prompts, and session/run boundaries. Optional auto-inject memory at session start, in `.claude/settings.local.json`:
-
-```json
-{ "env": { "HIFZ_INJECT_CONTEXT": "true" } }
-```
+The adapter ships four skills — `/recall`, `/remember`, `/forget`, `/session-history` — plus lifecycle hooks that auto-capture tool use, prompts, and session/run boundaries. Relevant project memory auto-injects at session start — no configuration needed.
 
 For non–Claude Code clients: anything that can `POST /api/v1/memories` and `POST /api/v1/search` is a first-class memory client; add `POST /api/v1/agent/observe` to populate the capture layer. See [AGENTS.md](AGENTS.md).
 
@@ -330,13 +326,14 @@ Same code path runs both ways. A row written in one mode reads fine in the other
 
 ## Memory tiers
 
-Three persistent tiers above raw `memory`:
+A per-project `core_memory` table sits above raw `memory`, and consolidation writes its
+output back into `memory` under two dedicated categories:
 
 | Tier | Shape | Origin |
 |---|---|---|
-| **`core_memory`** | One per project — identity, goals, invariants, watchlist. Always prepended to injected context. | Edited via `PATCH /core/{project}` or `hifz_core_edit`. |
-| **`semantic_memory`** | Consolidated facts. | Tier-1 consolidation merges session summaries (LLM). |
-| **`procedural_memory`** | Named workflows (trigger + steps). | Tier-3 consolidation extracts recurring sequences (LLM). |
+| **`core_memory`** *(table)* | One per project — identity, goals, invariants, watchlist. Always prepended to injected context. | Edited via `PATCH /core/{project}` or `hifz_core_edit`. |
+| **`semantic_fact`** *(memory category)* | Consolidated facts. | Tier-1 consolidation merges session summaries (LLM). |
+| **`procedure`** *(memory category)* | Named workflows (trigger + steps in `metadata`). | Tier-3 consolidation extracts recurring sequences (LLM). |
 
 Consolidation is on-demand via `POST /consolidate` (Semantic · Reflect · Procedural · Decay). LLM tiers are skipped silently when Ollama is unavailable.
 
@@ -380,7 +377,7 @@ cargo run --release --bin memory-bench -- full
 
 **`/plugin` says "not available".** Use the shell subcommand: `claude plugin marketplace add /path/to/hifz/adapters/claude-code` then `claude plugin install hifz@hifz`. Verify with `claude plugin list`.
 
-**Context not injected.** Ensure `HIFZ_INJECT_CONTEXT=true` in `.claude/settings.local.json`.
+**Context not injected.** Ensure the server is running, the plugin is enabled (`claude plugin list`), and Claude Code was restarted after install.
 
 **Test the MCP binary:**
 ```bash

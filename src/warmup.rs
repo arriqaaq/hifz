@@ -160,8 +160,10 @@ async fn pull_category(
 /// `closes` edge). This is the "active plan" the agent should resume.
 async fn pull_latest_plan(db: &Surreal<Db>, project: &str) -> Result<Option<WarmupEntry>> {
     // Sub-query: any memory that has been the target of a `closes` edge.
+    // `created_at` must appear in the projection because we ORDER BY it —
+    // SurrealDB rejects ordering by a field that isn't selected.
     let sql = "SELECT id, category, title, content, context_summary, \
-                      strength, retrieval_count, last_accessed_at \
+                      strength, retrieval_count, last_accessed_at, created_at \
                FROM memory \
                WHERE is_latest = true \
                  AND category = 'plan' \

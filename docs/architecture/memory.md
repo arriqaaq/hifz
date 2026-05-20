@@ -34,13 +34,11 @@ This document is the ground truth for hifz's memory model. It is updated at the 
 ### Tier semantics
 
 - **`observation`** — dense, ephemeral, auto-captured by hooks. Has `obs_type` and `metadata` fields. Notable types: `commit_made`, `plan_activated`, `session_summary`. Never evolved.
-- **`memory`** — curated, project-scoped long-term knowledge. Embedded + indexed + linked. `pinned=true` marks always-on entries (e.g. active plans). May be evolved.
-- **`semantic_memory`** — facts consolidated from sessions (tier 1 consolidation). May be evolved.
-- **`procedural_memory`** — workflows consolidated from observations (tier 3 consolidation). May be evolved.
+- **`memory`** — curated, project-scoped long-term knowledge. Embedded + indexed + linked. `pinned=true` marks always-on entries (e.g. active plans). May be evolved. Consolidation output also lands here under the `semantic_fact` category (facts merged from sessions, tier 1) and the `procedure` category (workflows extracted from observations, tier 3) — both evolvable, neither a separate table.
+- **`memory_chunk`** — token-windowed chunks of long-form `content_long`, each embedded and `part_of` its parent memory.
 - **`run`** — task-scoped trajectory.
 - **`core_memory`** — per-project singleton: identity, goals, invariants, watchlist.
-- **`edge`** — typed graph edges between memories.
-- **`entity`** — typed named things mentioned by observations and memories.
+- **`edge`** — typed graph edges between nodes. Named things (files, symbols, concepts) are not a separate table: they surface as `via='entity'` link edges scored on shared keywords + files.
 
 ---
 

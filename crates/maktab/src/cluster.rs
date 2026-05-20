@@ -233,14 +233,14 @@ fn refine(g: &Graph, part: &[usize], rng: &mut Rng) -> Vec<usize> {
     // Coarse community → its member node indices (BTreeMap → deterministic
     // community order; members pushed in node-index order).
     let mut groups: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
-    for i in 0..g.n {
-        groups.entry(part[i]).or_default().push(i);
+    for (i, &p) in part.iter().enumerate().take(g.n) {
+        groups.entry(p).or_default().push(i);
     }
     // tot/size per refined community id; id == a node index (singleton seed).
     let mut tot: Vec<f64> = g.k.clone();
     let mut size: Vec<usize> = vec![1; g.n];
 
-    for (_s, members) in &groups {
+    for members in groups.values() {
         let mut order = members.clone();
         rng.shuffle(&mut order);
         for _pass in 0..16 {

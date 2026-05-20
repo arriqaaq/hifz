@@ -248,6 +248,9 @@ async fn project_from_core(
 ) -> Result<CodeProjectReport> {
     let mut report = CodeProjectReport::default();
     // core record id → projected maktab_node id, for edge wiring.
+    // RecordId's interior mutability (regex caches in the deref chain) is never
+    // exercised as a key here, so the mutable_key_type lint is a false positive.
+    #[allow(clippy::mutable_key_type)]
     let mut node_map: HashMap<RecordId, RecordId> = HashMap::new();
 
     // Symbols.

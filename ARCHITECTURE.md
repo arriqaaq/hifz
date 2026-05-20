@@ -33,11 +33,14 @@ hifz separates **core knowledge** from **agent capture**:
 | Table | Purpose |
 |-------|---------|
 | `memory` | Curated, project-scoped long-term knowledge |
-| `edge` | Typed graph edges between memory nodes |
-| `entity` | Named things (files, symbols, concepts, errors) |
+| `memory_chunk` | Token-windowed chunks of long-form `content_long`, each embedded and `part_of` its parent |
+| `edge` | Typed graph edges between nodes |
 | `core_memory` | Per-project singleton (identity, goals, invariants, watchlist) |
-| `semantic_memory` | Facts consolidated from sessions (tier 1 consolidation) |
-| `procedural_memory` | Workflows consolidated from observations (tier 3 consolidation) |
+
+Consolidation output is **not** stored in separate tables — it lands in `memory` under the
+`semantic_fact` (tier 1) and `procedure` (tier 3) categories. Entities are likewise not a
+table: deterministic file/symbol/concept extraction produces `via='entity'` link edges
+keyed on shared keywords + files, with no `entity` row queried.
 
 **Agent capture layer** — optional, populated by adapter hooks:
 
@@ -67,7 +70,7 @@ LLM-proposed edges (opt-in): `semantic`
 
 **Hook → observe → compress → store → run::append**
 
-Claude Code fires shell hooks on events: `SessionStart`, `UserPromptSubmit`, `PostToolUse`, `Stop`, `TaskCompleted`, `SessionEnd`. Each hook POSTs a JSON payload to `/api/v1/observe`.
+Claude Code fires shell hooks on events: `SessionStart`, `UserPromptSubmit`, `PostToolUse`, `Stop`, `TaskCompleted`, `SessionEnd`. Each hook POSTs a JSON payload to `/api/v1/agent/observe`.
 
 ### observe.rs
 
@@ -124,11 +127,11 @@ When a memory is saved, `generate_links` compares it against every existing memo
 | Concept Jaccard | Overlap of `concepts[]` arrays. Jaccard = \|intersection\| / \|union\|. E.g. `["auth","JWT","session"]` vs `["auth","JWT","cookie"]` → 2/4 = 0.50 — linked. | ≥ 0.30 | Jaccard value |
 | File Jaccard | Same set math on `files[]` arrays. Two memories touching overlapping files get linked. | ≥ 0.30 | Jaccard value |
 
-Entity-based links (`via='entity'`) are added from `entities.rs`. Per-`via` deduplication keeps the highest score.
+Entity-based links (`via='entity'`) are added from `enrich.rs`. Per-`via` deduplication keeps the highest score.
 
-### entities.rs — Entity Extraction
+### enrich.rs — Entity-Shared Linking
 
-Deterministic (no LLM) extraction of four entity types from observations and memories: files, concepts, functions, and identifiers. Entities are upserted into the `entity` table and feed into `edge` records.
+Deterministic (no LLM) extraction of entities (files, symbols, identifiers, error codes) from observations and memories. There is **no `entity` table**: `via='entity'` is a plain string label on the `edge`, and `link_by_shared_entities` scores memory pairs by their shared keyword + file sets directly.
 
 ### evolve.rs — LLM Evolution (opt-in)
 
@@ -184,10 +187,10 @@ Per-project block: identity, goals, invariants, watchlist. Always prepended to i
 
 Plans are stored as `memory` records with `category='plan'`, `pinned=true`, and `tags=['active']` while active. The lifecycle:
 
-- `POST /api/v1/plans/activate` — promotes a memory to active, appends its title to `core_memory.goals` so the plan rides along on every context injection.
-- `POST /api/v1/plans/{id}/complete` — clears the `active` tag and unpins; the memory remains searchable as historical context.
-- `POST /api/v1/plans/{id}/abandon` — same as complete, but tagged `abandoned`.
-- `GET /api/v1/plans/current` and `GET /api/v1/plans` — list active or all plans.
+- `POST /api/v1/agent/plans/activate` — promotes a memory to active, appends its title to `core_memory.goals` so the plan rides along on every context injection.
+- `POST /api/v1/agent/plans/{id}/complete` — clears the `active` tag and unpins; the memory remains searchable as historical context.
+- `POST /api/v1/agent/plans/{id}/abandon` — same as complete, but tagged `abandoned`.
+- `GET /api/v1/agent/plans/current` and `GET /api/v1/agent/plans` — list active or all plans.
 
 Treating plans as memories means they participate in linking, search, and graph traversal; activation is just a pin + a goal injection.
 
@@ -195,9 +198,8 @@ Treating plans as memories means they participate in linking, search, and graph 
 
 Runs are persisted task-trajectories (see Observation Pipeline). After the fact they are queryable:
 
-- `POST /api/v1/runs` — search by query/project/session, full-text over the lesson summary.
-- `GET /api/v1/runs/{id}` — fetch a run with its observation chain.
-- `GET /api/v1/runs/count` — counts for dashboard tiles.
+- `POST /api/v1/agent/runs` — search by query/project/session, full-text over the lesson summary.
+- `GET /api/v1/agent/runs/{id}` — fetch a run with its observation chain.
 
 The `hifz_runs` MCP tool wraps `/runs`.
 
@@ -211,9 +213,9 @@ Triggered via `POST /api/v1/consolidate` (or the `hifz_consolidate` MCP tool). T
 
 | Tier | Name | What it does | Requires LLM |
 |------|------|-------------|:---:|
-| 1 | Semantic | Merges session summaries into `semantic_memory` facts | Yes |
+| 1 | Semantic | Merges session summaries into `memory` rows with category `semantic_fact` | Yes |
 | 2 | Reflect | Clusters related memories by shared concepts | No |
-| 3 | Procedural | Detects recurring action sequences from observations and extracts them as named workflows into `procedural_memory` (trigger condition + steps). | Yes |
+| 3 | Procedural | Detects recurring action sequences from observations and writes them as `memory` rows with category `procedure` (trigger condition + steps in `metadata`). | Yes |
 | 4 | Decay | Exponential decay on `strength` for stale memories | No |
 
 ### Enabling LLM features
@@ -286,7 +288,7 @@ This creates an append-only version chain where only the canonical version of ea
 
 ---
 
-## MCP Surface (17 tools)
+## MCP Surface (23 tools)
 
 The MCP proxy (`hifz mcp`) exposes a curated subset of the REST API as MCP tools, grouped by purpose. Each tool wraps one or more `/api/v1/*` endpoints.
 
@@ -299,16 +301,17 @@ The MCP proxy (`hifz mcp`) exposes a curated subset of the REST API as MCP tools
 | | `hifz_evolve` | `POST /memories/{id}/evolve` |
 | **Core** | `hifz_core_get` | `GET /core/{project}` |
 | | `hifz_core_edit` | `PATCH /core/{project}` |
-| **Plans** | `hifz_current_plan` | `GET /plans/current` |
-| | `hifz_plans` | `GET /plans` |
-| | `hifz_activate_plan` | `POST /plans/activate` |
-| **Trajectories** | `hifz_sessions` | `GET /sessions` |
-| | `hifz_runs` | `POST /runs` |
-| | `hifz_timeline` | `GET /timeline` |
-| | `hifz_digest` | `GET /digest` |
+| **Plans** | `hifz_current_plan` | `GET /agent/plans/current` |
+| | `hifz_plans` | `GET /agent/plans` |
+| | `hifz_activate_plan` | `POST /agent/plans/activate` |
+| | `hifz_complete_plan` | `POST /agent/plans/{id}/complete` |
+| **Trajectories** | `hifz_sessions` | `GET /agent/sessions` |
+| | `hifz_runs` | `POST /agent/runs` |
+| | `hifz_timeline` | `GET /agent/timeline` |
+| | `hifz_digest` | `GET /agent/digest` |
 | | `hifz_export` | `GET /export` |
 | **Graph** | `hifz_trace` | `POST /trace` |
-| **Provenance** | `hifz_commits` | `GET /commits` |
+| **Provenance** | `hifz_commits` | `GET /agent/commits` |
 | **Code** | `hifz_code_index` | `POST /code/index` |
 | | `hifz_code_search` | `POST /code/search` |
 | | `hifz_link_code` | `POST /code/link` |
@@ -392,10 +395,10 @@ A SvelteKit single-page app lives in `website/` and is served as static assets b
 
 | Route | Reads |
 |---|---|
-| `/` | `/health`, `/digest`, `/sessions`, `/commits` |
+| `/` | `/health`, `/agent/digest`, `/agent/sessions`, `/agent/commits` |
 | `/memories` | `/memories` (GET search) |
-| `/observations` | `/observations` |
-| `/sessions`, `/sessions/[id]` | `/sessions`, `/sessions/{id}/tree` |
-| `/runs`, `/runs/[id]` | `/runs`, `/runs/{id}` |
-| `/commits`, `/commits/[sha]` | `/commits`, `/commits/{sha}/diff` |
+| `/observations` | `/agent/observations` |
+| `/sessions`, `/sessions/[id]` | `/agent/sessions`, `/agent/sessions/{id}/tree` |
+| `/runs`, `/runs/[id]` | `/agent/runs`, `/agent/runs/{id}` |
+| `/commits`, `/commits/[sha]` | `/agent/commits`, `/agent/commits/{sha}/diff` |
 | `/graph` | `/trace`, `/memories/{id}/links` |

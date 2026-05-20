@@ -203,12 +203,11 @@ async fn status(State(s): State<MaktabState>, Query(sc): Query<Scoped>) -> Json<
 // --- git clone / paths --------------------------------------------------
 
 fn home_base() -> PathBuf {
-    if let Ok(db) = std::env::var("HIFZ_DB") {
-        if let Some(par) = std::path::Path::new(&db).parent() {
-            if !par.as_os_str().is_empty() {
-                return par.to_path_buf();
-            }
-        }
+    if let Ok(db) = std::env::var("HIFZ_DB")
+        && let Some(par) = std::path::Path::new(&db).parent()
+        && !par.as_os_str().is_empty()
+    {
+        return par.to_path_buf();
     }
     PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".into())).join(".hifz")
 }
@@ -401,10 +400,10 @@ async fn upload(
         let cutoff =
             std::time::SystemTime::now().checked_sub(std::time::Duration::from_secs(7 * 24 * 3600));
         for ent in rd.flatten() {
-            if let (Some(c), Ok(m)) = (cutoff, ent.metadata()) {
-                if m.modified().map(|t| t < c).unwrap_or(false) {
-                    let _ = std::fs::remove_file(ent.path());
-                }
+            if let (Some(c), Ok(m)) = (cutoff, ent.metadata())
+                && m.modified().map(|t| t < c).unwrap_or(false)
+            {
+                let _ = std::fs::remove_file(ent.path());
             }
         }
     }

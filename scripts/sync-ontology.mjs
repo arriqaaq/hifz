@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // sync-ontology.mjs
 //
-// Generate the TypeScript ontology mirrors from src/models.rs.
+// Generate the TypeScript ontology mirrors from crates/kernel/src/models.rs.
 //
-// Reads:  src/models.rs (parses the `Category` and `EdgeRelation` enums)
+// Reads:  crates/kernel/src/models.rs (parses the `Category` and `EdgeRelation` enums)
 // Writes:
 //   - website/src/lib/ontology.ts
 //   - adapters/pi-extension/src/ontology.ts
@@ -22,7 +22,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const MODELS = resolve(ROOT, "src/models.rs");
+const MODELS = resolve(ROOT, "crates/kernel/src/models.rs");
 
 const args = process.argv.slice(2);
 const CHECK = args.includes("--check");

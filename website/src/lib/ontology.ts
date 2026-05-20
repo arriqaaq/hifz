@@ -25,6 +25,8 @@ export const CATEGORIES = [
   'code_review',
   'ship_report',
   'context_slice',
+  'semantic_fact',
+  'procedure',
   'note',
 ] as const;
 // === GENERATED CATEGORIES END ===
@@ -133,6 +135,11 @@ export const ALL_RELATIONS_RAW: readonly string[] = [
   'touches_file',
   'commits_for',
   'tests',
+  'references',
+  'references_symbol',
+  'calls',
+  'imports',
+  'contains',
 ] as const;
 // === GENERATED RELATIONS END ===
 

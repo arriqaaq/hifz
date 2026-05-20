@@ -23,6 +23,8 @@ export const CATEGORIES = [
   "code_review",
   "ship_report",
   "context_slice",
+  "semantic_fact",
+  "procedure",
   "note",
 ] as const;
 // === GENERATED CATEGORIES END ===

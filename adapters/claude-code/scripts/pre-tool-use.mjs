@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 //#region src/hooks/pre-tool-use.ts
-const INJECT_CONTEXT = process.env["HIFZ_INJECT_CONTEXT"] === "true";
 const REST_URL = process.env["HIFZ_URL"] || "http://localhost:3111";
 const HEADERS = { "Content-Type": "application/json" };
 
 async function main() {
-	if (!INJECT_CONTEXT) return;
+	// Pre-tool context injection is intentionally disabled — it overlaps with
+	// the per-prompt injection in prompt-submit.mjs (UserPromptSubmit). The
+	// implementation below is kept inert (early return) for easy re-enable.
+	return;
 	let input = "";
 	for await (const chunk of process.stdin) input += chunk;
 	let data;

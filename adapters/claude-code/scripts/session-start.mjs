@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 //#region src/hooks/session-start.ts
-const INJECT_CONTEXT = process.env["HIFZ_INJECT_CONTEXT"] !== "false";
 const REST_URL = process.env["HIFZ_URL"] || "http://localhost:3111";
 const HEADERS = { "Content-Type": "application/json" };
 const WARMUP_TOP_N = Number.parseInt(process.env["HIFZ_WARMUP_TOP_N"] || "15", 10);
@@ -58,56 +57,54 @@ async function main() {
 		// context. Failure here is silent — warmup is a nice-to-have,
 		// not a session-blocker, and is project-scoped (no session row
 		// required).
-		if (INJECT_CONTEXT) {
-			const warmupRes = await fetch(
-				`${REST_URL}/api/v1/agent/sessions/${encodeURIComponent(sessionId)}/warmup?project=${encodeURIComponent(project)}&top_n=${WARMUP_TOP_N}`,
-				{
-					method: "GET",
-					headers: HEADERS,
-					signal: AbortSignal.timeout(5e3),
-				},
-			);
-			if (warmupRes.ok) {
-				const digest = await warmupRes.json();
-				if (digest && !digest.error && digest.top && digest.top.length > 0) {
-					const block = formatWarmup(digest);
-					// Claude Code hooks: stdout is injected as additional
-					// context for the upcoming model turn.
-					process.stdout.write(block);
-				}
+		const warmupRes = await fetch(
+			`${REST_URL}/api/v1/agent/sessions/${encodeURIComponent(sessionId)}/warmup?project=${encodeURIComponent(project)}&top_n=${WARMUP_TOP_N}`,
+			{
+				method: "GET",
+				headers: HEADERS,
+				signal: AbortSignal.timeout(5e3),
+			},
+		);
+		if (warmupRes.ok) {
+			const digest = await warmupRes.json();
+			if (digest && !digest.error && digest.top && digest.top.length > 0) {
+				const block = formatWarmup(digest);
+				// Claude Code hooks: stdout is injected as additional
+				// context for the upcoming model turn.
+				process.stdout.write(block);
 			}
+		}
 
-			// Graph-assembled provenance: the active decision and the
-			// commits that DECLARED-ly implemented it (deterministic
-			// `implemented_by`, not BM25). This is the Phase-1 causal layer
-			// surfaced to the next session. Best-effort; never blocks.
-			try {
-				const planRes = await fetch(
-					`${REST_URL}/api/v1/agent/plans/current?project=${encodeURIComponent(project)}`,
+		// Graph-assembled provenance: the active decision and the
+		// commits that DECLARED-ly implemented it (deterministic
+		// `implemented_by`, not BM25). This is the Phase-1 causal layer
+		// surfaced to the next session. Best-effort; never blocks.
+		try {
+			const planRes = await fetch(
+				`${REST_URL}/api/v1/agent/plans/current?project=${encodeURIComponent(project)}`,
+				{ method: "GET", headers: HEADERS, signal: AbortSignal.timeout(3e3) },
+			);
+			const plan = planRes.ok ? await planRes.json() : null;
+			const planId =
+				plan && typeof plan === "object" && typeof plan.id === "string"
+					? plan.id
+					: null;
+			if (planId) {
+				const cRes = await fetch(
+					`${REST_URL}/api/v1/agent/timeline/causal?seed=${encodeURIComponent(planId)}&max_hops=3`,
 					{ method: "GET", headers: HEADERS, signal: AbortSignal.timeout(3e3) },
 				);
-				const plan = planRes.ok ? await planRes.json() : null;
-				const planId =
-					plan && typeof plan === "object" && typeof plan.id === "string"
-						? plan.id
-						: null;
-				if (planId) {
-					const cRes = await fetch(
-						`${REST_URL}/api/v1/agent/timeline/causal?seed=${encodeURIComponent(planId)}&max_hops=3`,
-						{ method: "GET", headers: HEADERS, signal: AbortSignal.timeout(3e3) },
-					);
-					const c = cRes.ok ? await cRes.json() : null;
-					if (c && Array.isArray(c.nodes) && c.nodes.length > 1) {
-						const out = ["", "## Active decision — provenance (time-ordered)"];
-						for (const n of c.nodes.slice(0, 12)) {
-							const lbl = String(n.label || n.id || "").slice(0, 70);
-							out.push(`- [${n.table}] ${lbl}`);
-						}
-						process.stdout.write(out.join("\n") + "\n");
+				const c = cRes.ok ? await cRes.json() : null;
+				if (c && Array.isArray(c.nodes) && c.nodes.length > 1) {
+					const out = ["", "## Active decision — provenance (time-ordered)"];
+					for (const n of c.nodes.slice(0, 12)) {
+						const lbl = String(n.label || n.id || "").slice(0, 70);
+						out.push(`- [${n.table}] ${lbl}`);
 					}
+					process.stdout.write(out.join("\n") + "\n");
 				}
-			} catch {}
-		}
+			}
+		} catch {}
 	} catch {}
 }
 main();

@@ -37,8 +37,8 @@
   </g>
   <g>
     <rect class="node node-core" x="310" y="72" width="125" height="68" rx="8"/>
-    <text class="node-name" x="372.5" y="100" text-anchor="middle">entity</text>
-    <text class="node-desc" x="372.5" y="120" text-anchor="middle">files · concepts · ids</text>
+    <text class="node-name" x="372.5" y="100" text-anchor="middle">memory_chunk</text>
+    <text class="node-desc" x="372.5" y="120" text-anchor="middle">long-form chunks</text>
   </g>
   <g>
     <rect class="node node-core" x="445" y="72" width="160" height="68" rx="8"/>
@@ -46,19 +46,14 @@
     <text class="node-desc" x="525" y="120" text-anchor="middle">always-on, per project</text>
   </g>
   <g>
-    <rect class="node node-core" x="615" y="72" width="115" height="68" rx="8"/>
-    <text class="node-name" x="672.5" y="100" text-anchor="middle">semantic</text>
-    <text class="node-desc" x="672.5" y="120" text-anchor="middle">consolidated facts</text>
-  </g>
-  <g>
-    <rect class="node node-core" x="740" y="72" width="100" height="68" rx="8"/>
-    <text class="node-name" x="790" y="100" text-anchor="middle">procedural</text>
-    <text class="node-desc" x="790" y="120" text-anchor="middle">workflows</text>
+    <rect class="node node-core" x="615" y="72" width="225" height="68" rx="8"/>
+    <text class="node-name" x="727.5" y="100" text-anchor="middle">code graph</text>
+    <text class="node-desc" x="727.5" y="120" text-anchor="middle">code_file · code_chunk · code_symbol</text>
   </g>
 
   <!-- Description for core -->
-  <text class="node-desc" x="40" y="180" font-size="13">Curated knowledge that survives sessions. Memories carry strength, recency, and version history; edges connect them; entities ground them in files and concepts.</text>
-  <text class="node-desc" x="40" y="200" font-size="13">core_memory holds identity, goals, invariants, and a watchlist that is always prepended to context. semantic and procedural tiers are populated by consolidation.</text>
+  <text class="node-desc" x="40" y="180" font-size="13">Curated knowledge that survives sessions. Memories carry strength, recency, and version history; edges connect them; memory_chunk holds long-form bodies; the code graph grounds them in files and symbols.</text>
+  <text class="node-desc" x="40" y="200" font-size="13">core_memory holds identity, goals, invariants, and a watchlist that is always prepended to context. Consolidation writes semantic_fact and procedure rows back into memory (not separate tables).</text>
 
   <!-- Consolidate arrow -->
   <path class="arrow" d="M 440 360 C 440 320, 440 290, 440 260" marker-end="url(#arrowhead)" stroke-dasharray="4 4"/>

@@ -1,5 +1,5 @@
 //! Document ingestion: PDF + markdown/txt → `maktab_node{kind:document}`
-//! + `maktab_chunk` rows (chunked via hifz-core's splitter, embedded via
+//! and `maktab_chunk` rows (chunked via hifz-core's splitter, embedded via
 //! hifz-core's local embedder). Deterministic node id keyed on
 //! `(project, rel_path)` so re-ingest UPSERTs in place.
 
@@ -188,7 +188,7 @@ mod tests {
         std::fs::write(
             dir.path().join("README.md"),
             "# Title\n\nThis is the auth flow doc. "
-                .repeat(1)
+                .to_string()
                 .to_string()
                 + &"More content about tokens and sessions. ".repeat(120),
         )

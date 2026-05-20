@@ -11,7 +11,7 @@ variant in [src/models.rs](../src/models.rs), update those mirrors too.
 ## Categories
 
 Memories are typed via `Memory.category`, a string that maps to the
-`Category` enum in [src/models.rs](../src/models.rs).
+`Category` enum in [crates/kernel/src/models.rs](../crates/kernel/src/models.rs).
 
 | Category | Long-form? | Typical use | Default link relations |
 |---|---|---|---|
@@ -28,6 +28,8 @@ Memories are typed via `Memory.category`, a string that maps to the
 | `code_review` | yes | Long-form code review report | `commits_for` (incoming) |
 | `ship_report` | yes | Long-form ship/release verdict | `commits_for` (incoming) |
 | `context_slice` | yes | Long-form project-context note | `mentions` to file entities |
+| `semantic_fact` | no | Consolidation output: a recurring fact merged across sessions (tier 1). Confidence in `metadata.confidence`. | `derived_from` to source memories |
+| `procedure` | no | Consolidation output: a recurring workflow extracted across sessions (tier 3). Trigger + steps in `metadata`. | `derived_from` to source observations |
 | `note` | no | Catch-all for ad-hoc memories. Default. | (none) |
 
 **Long-form behavior**: when `category.is_long_form()` is true, hifz expects
@@ -103,6 +105,18 @@ records *which signal* produced the edge, not a fake semantic claim.
 | `touches_file` | Observation → Memory | Observation's `files` overlap with the memory's `files`. Score = `1.0 / matched_count`, capped at 20 memories per file. |
 | `commits_for` | Observation → Memory | A `commit_made` observation's message BM25-matches an open Bug/Plan/Decision. Top-3 hits, score = `bm25 / 4` clamped. |
 | `tests` | Memory → Memory | A memory describes tests for code another memory describes. |
+| `references` | Memory → CodeChunk | A memory points at a precise line range; `metadata` records `(ref_path, ref_start, ref_end)` for re-anchoring on re-index. See [`docs/code-indexing.md`](code-indexing.md). |
+| `references_symbol` | Memory → CodeSymbol | A memory points at a named symbol; survives chunk re-splitting. See [`docs/code-indexing.md`](code-indexing.md). |
+
+### Code-graph (deterministic, produced by the code-intelligence core)
+
+Symbol→symbol / symbol→external edges. Each carries `resolution ∈ {resolved, external, ambiguous}`.
+
+| Relation | Endpoints | When |
+|---|---|---|
+| `calls` | CodeSymbol → CodeSymbol \| ExternalSymbol | Caller symbol invokes callee symbol. |
+| `imports` | CodeFile → CodeSymbol \| ExternalSymbol | A file/module imports another module or symbol. |
+| `contains` | CodeSymbol → CodeSymbol | Structural containment (file→class→method); not `part_of` (that is chunk/symbol→file). |
 
 ### Catch-all
 
@@ -173,7 +187,6 @@ rows written in one mode read fine in the other.
 | `OLLAMA_URL` | unset | When set, hifz attempts to reach Ollama at this URL. If unreachable, mode degrades to deterministic. |
 | `OLLAMA_MODEL` | `qwen2.5:7b` | Model used for enrichment + evolve. |
 | `HIFZ_LLM_EVOLVE` | `false` | Enables LLM enrichment + bounded neighbor evolution at insert time. Controls the `enable_llm` flag passed to `enrich::save_enriched`. |
-| `HIFZ_INJECT_CONTEXT` | `true` | Claude Code adapter: inject the SessionStart warmup digest as system context. |
 | `HIFZ_WARMUP_TOP_N` | `15` | Top-N entries in the warmup digest. |
 
 ---

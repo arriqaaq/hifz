@@ -28,7 +28,7 @@
       <text class="field" y="0">project</text><text class="ftype" x="160" y="0">string</text>
       <text class="field" y="18">title</text><text class="ftype" x="160" y="18">string</text>
       <text class="field" y="36">content</text><text class="ftype" x="160" y="36">string</text>
-      <text class="field" y="54">category</text><text class="ftype" x="160" y="54">pattern · fact …</text>
+      <text class="field" y="54">category</text><text class="ftype" x="160" y="54">lesson · decision · bug …</text>
       <text class="field" y="72">concepts</text><text class="ftype" x="160" y="72">array&lt;string&gt;</text>
       <text class="field" y="90">files</text><text class="ftype" x="160" y="90">array&lt;string&gt;</text>
       <text class="field" y="108">tags · keywords</text><text class="ftype" x="160" y="108">array&lt;string&gt;</text>
@@ -48,27 +48,28 @@
     <rect class="header-core" x="340" y="40" width="240" height="8"/>
     <text class="title-core" x="354" y="39">EDGE  (relation)</text>
     <g transform="translate(354, 66)">
-      <text class="field key" y="0">in</text><text class="ftype" x="60" y="0">→ memory</text>
-      <text class="field key" y="18">out</text><text class="ftype" x="60" y="18">→ memory</text>
-      <text class="field" y="36">via</text><text class="ftype" x="60" y="36">embedding · concept ·</text>
-      <text class="ftype" x="60" y="50">file · entity · semantic ·</text>
-      <text class="ftype" x="60" y="64">similar_to · contradicts ·</text>
-      <text class="ftype" x="60" y="78">depends_on · supports …</text>
-      <text class="field" y="96">score</text><text class="ftype" x="60" y="96">float</text>
+      <text class="field key" y="0">in</text><text class="ftype" x="80" y="0">→ node</text>
+      <text class="field key" y="18">out</text><text class="ftype" x="80" y="18">→ node</text>
+      <text class="field" y="36">relation</text><text class="ftype" x="80" y="36">co_occurs · derived_from ·</text>
+      <text class="ftype" x="80" y="50">supersedes · references …</text>
+      <text class="field" y="68">via</text><text class="ftype" x="80" y="68">embedding · keyword · file ·</text>
+      <text class="ftype" x="80" y="82">entity · llm · code</text>
+      <text class="field" y="100">score</text><text class="ftype" x="80" y="100">float</text>
     </g>
   </g>
 
-  <!-- ENTITY (top-right) -->
+  <!-- MEMORY_CHUNK (top-right) -->
   <g>
     <rect class="table-core" x="620" y="20" width="280" height="170" rx="8"/>
     <rect class="header-core" x="620" y="20" width="280" height="28" rx="8"/>
     <rect class="header-core" x="620" y="40" width="280" height="8"/>
-    <text class="title-core" x="634" y="39">ENTITY</text>
+    <text class="title-core" x="634" y="39">MEMORY_CHUNK</text>
     <g transform="translate(634, 66)">
-      <text class="field" y="0">project</text><text class="ftype" x="120" y="0">string</text>
-      <text class="field" y="18">kind</text><text class="ftype" x="120" y="18">file · symbol · concept · error</text>
-      <text class="field" y="36">name</text><text class="ftype" x="120" y="36">string</text>
-      <text class="field" y="54">count</text><text class="ftype" x="120" y="54">int</text>
+      <text class="field key" y="0">parent_id</text><text class="ftype" x="120" y="0">→ memory</text>
+      <text class="field" y="18">project</text><text class="ftype" x="120" y="18">string</text>
+      <text class="field" y="36">chunk_index</text><text class="ftype" x="120" y="36">int</text>
+      <text class="field" y="54">content</text><text class="ftype" x="120" y="54">string · ~500 tok</text>
+      <text class="field key" y="72">embedding</text><text class="ftype vec" x="120" y="72">vector · HNSW 384d</text>
     </g>
   </g>
 
@@ -87,17 +88,19 @@
     </g>
   </g>
 
-  <!-- SEMANTIC + PROCEDURAL (right column) -->
+  <!-- CONSOLIDATION OUTPUT — categories of MEMORY, not separate tables -->
   <g>
     <rect class="table-core" x="620" y="220" width="280" height="160" rx="8"/>
     <rect class="header-core" x="620" y="220" width="280" height="28" rx="8"/>
     <rect class="header-core" x="620" y="240" width="280" height="8"/>
-    <text class="title-core" x="634" y="239">SEMANTIC_MEMORY · PROCEDURAL_MEMORY</text>
+    <text class="title-core" x="634" y="239">CONSOLIDATION OUTPUT</text>
     <g transform="translate(634, 266)">
-      <text class="ftype" y="0">consolidated tiers above raw memory.</text>
-      <text class="ftype" y="18">semantic · facts merged from session summaries</text>
-      <text class="ftype" y="36">procedural · workflows extracted from observations</text>
-      <text class="ftype" y="58">share fields with MEMORY (embedded, linked, evolved).</text>
+      <text class="ftype" y="0">Not separate tables — rows in MEMORY:</text>
+      <text class="ftype" y="20">category=semantic_fact · facts merged from</text>
+      <text class="ftype" y="34">session summaries (tier 1)</text>
+      <text class="ftype" y="56">category=procedure · workflows extracted from</text>
+      <text class="ftype" y="70">observations, steps in metadata (tier 3)</text>
+      <text class="ftype" y="92">code_* tables hold the indexed code graph.</text>
     </g>
   </g>
 
@@ -160,8 +163,9 @@
   <path class="rel-line" d="M 580 60 C 600 60, 600 100, 620 100"/>
   <path class="rel-line" d="M 580 60 C 600 60, 600 60, 620 60"/>
 
-  <!-- MEMORY ⟶ ENTITY (mentions) -->
+  <!-- MEMORY ⟶ MEMORY_CHUNK (part_of) -->
   <path class="rel-line" d="M 300 80 C 470 60, 580 60, 620 60"/>
+  <text class="rel-label" x="430" y="52">part_of</text>
 
   <!-- MEMORY ⟶ CORE_MEMORY (per-project) -->
   <path class="rel-line" d="M 300 270 L 340 270"/>
@@ -179,9 +183,9 @@
   <path class="rel-line" d="M 580 490 L 620 490"/>
   <text class="rel-label" x="585" y="482">groups</text>
 
-  <!-- OBSERVATION ⟶ ENTITY mentions (cross-layer) -->
-  <path class="rel-line" d="M 760 420 L 760 200" stroke-dasharray="4 3"/>
-  <text class="rel-label" x="768" y="318">mentions</text>
+  <!-- OBSERVATION ⟶ MEMORY (touches_file / derived_from, cross-layer) -->
+  <path class="rel-line" d="M 620 470 C 360 440, 200 360, 160 300" stroke-dasharray="4 3"/>
+  <text class="rel-label" x="250" y="372">touches_file</text>
 
   <!-- Legend -->
   <g>

@@ -8,10 +8,10 @@ Turn hifz from log-with-search into a system whose injected context the LLM cons
 
 ## A. Design decisions
 
-- **Memory Evolution is opt-in, on curated tiers only.** When `HIFZ_LLM_EVOLVE=true`, a new-memory write triggers the LLM to inspect the note's KNN/graph neighbours and rewrite *their* tags/context/links. We deliberately keep this off the write path by default and run it only on `memory`, `semantic_memory`, and `procedural_memory` — never on raw observations, where it would cost tokens with no retrieval payoff.
+- **Memory Evolution is opt-in, on curated tiers only.** When `HIFZ_LLM_EVOLVE=true`, a new-memory write triggers the LLM to inspect the note's KNN/graph neighbours and rewrite *their* tags/context/links. We deliberately keep this off the write path by default and run it only on curated `memory` rows (including the `semantic_fact` and `procedure` consolidation categories) — never on raw observations, where it would cost tokens with no retrieval payoff.
 - **Retrieval is deterministic and local-first.** Hybrid BM25 + vector + graph fused with SurrealDB RRF, recency decay `exp(-age/30)`, and access reinforcement (`+0.1` per retrieval, capped). No external service is required for any retrieval, linking, or injection path.
 - **Always-on core memory.** A small per-project block (identity, goals, invariants, watchlist) is always prepended to injected context so it never drifts out under compaction. SurrealDB is local, so we don't need OS-style paging between tiers.
-- **Typed memory layers.** `semantic_memory`, `procedural_memory`, and task-scoped `run` give us distinct fact / how-to / episodic layers without a heavyweight multi-module store.
+- **Typed memory layers.** The `semantic_fact` and `procedure` categories within `memory`, plus task-scoped `run`, give us distinct fact / how-to / episodic layers without a heavyweight multi-module store (and without separate tables per layer).
 - **Recency default.** The `exp(-age/30)` half-life follows a forgetting-curve intuition; the 30-day constant is a tunable default, not a claim.
 
 ## B. Design tradeoffs
@@ -48,9 +48,9 @@ All patterns were verified against local copies of the SurrealDB source and the 
 
 ## D. Resolved design questions
 
-1. **Memory scoping — project-scoped.** `project: string` is present on `memory`, `semantic_memory`, `procedural_memory`, `core_memory`, `run`, `edge`, `entity`. All search and context queries filter on `project`. Existing rows backfill from `session_ids[0].project`.
+1. **Memory scoping — project-scoped.** `project: string` is present on `memory`, `core_memory`, `run`, `observation`, `edge`, and the `code_*` tables. All search and context queries filter on `project`. Existing rows backfill from `session_ids[0].project`.
 2. **Embedding input — richer text.** We embed `title + "\n" + content + "\nconcepts: " + concepts + "\nfiles: " + files`. Ablations can compare against title+content only.
-3. **Evolution scope — curated tiers only.** Evolution runs on `memory`, `semantic_memory`, `procedural_memory`. Observations stay ephemeral — evolving them would be cost-prohibitive with no retrieval benefit, and evolution is meant for curated notes, not raw traces.
+3. **Evolution scope — curated tiers only.** Evolution runs on curated `memory` rows (any category, including `semantic_fact` and `procedure`). Observations stay ephemeral — evolving them would be cost-prohibitive with no retrieval benefit, and evolution is meant for curated notes, not raw traces.
 
 ## E. LLM-as-reranker: the debate
 

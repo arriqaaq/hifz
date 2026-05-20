@@ -22,10 +22,10 @@ pub async fn serve(state: Hifz, port: u16) -> Result<()> {
         .allow_methods(Any)
         .allow_headers(Any);
 
-    // atlas (feature-gated): ensure its tables exist in the shared store.
-    #[cfg(feature = "atlas")]
-    if let Err(e) = atlas::store::init_atlas_schema(&state.db, state.embedder.dimension()).await {
-        tracing::error!("atlas schema init failed: {e}");
+    // maktab (feature-gated): ensure its tables exist in the shared store.
+    #[cfg(feature = "maktab")]
+    if let Err(e) = maktab::store::init_maktab_schema(&state.db, state.embedder.dimension()).await {
+        tracing::error!("maktab schema init failed: {e}");
     }
 
     // Core Memory API (no session/hook/git dependency, scoped by project)
@@ -141,10 +141,10 @@ pub async fn serve(state: Hifz, port: u16) -> Result<()> {
             axum::routing::get(api::usage_project),
         );
 
-    // atlas router carries its own state (→ `Router<()>` after `with_state`);
+    // maktab router carries its own state (→ `Router<()>` after `with_state`);
     // build it before `state` is consumed below.
-    #[cfg(feature = "atlas")]
-    let atlas_router = atlas::web::router(atlas::web::AtlasState {
+    #[cfg(feature = "maktab")]
+    let maktab_router = maktab::web::router(maktab::web::MaktabState {
         db: state.db.clone(),
         embedder: state.embedder.clone(),
         jobs: Default::default(),
@@ -156,12 +156,12 @@ pub async fn serve(state: Hifz, port: u16) -> Result<()> {
         .with_state(state);
 
     // Both are now `Router<()>` → composes cleanly.
-    #[cfg(feature = "atlas")]
-    let api = api.nest("/api/v1/atlas", atlas_router);
+    #[cfg(feature = "maktab")]
+    let api = api.nest("/api/v1/maktab", maktab_router);
 
     // Serve frontend static files with SPA fallback. A plain
     // `ServeFile` not_found_service returns the shell body but a 404 status,
-    // so deep links / refresh on client-routed pages (/atlas, /sessions, …)
+    // so deep links / refresh on client-routed pages (/maktab, /sessions, …)
     // 404. A handler returns the SvelteKit shell with an explicit 200.
     let static_files = ServeDir::new("website/build").not_found_service(get(spa_index));
 
@@ -176,7 +176,7 @@ pub async fn serve(state: Hifz, port: u16) -> Result<()> {
 }
 
 /// SPA fallback handler: serve the SvelteKit shell with an explicit **200**
-/// so client-routed deep links / refresh (e.g. `/atlas`) work. Path is
+/// so client-routed deep links / refresh (e.g. `/maktab`) work. Path is
 /// relative to the daemon `WorkingDirectory` (the repo root).
 async fn spa_index() -> impl IntoResponse {
     match tokio::fs::read("website/build/index.html").await {

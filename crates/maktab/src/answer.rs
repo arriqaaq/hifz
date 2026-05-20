@@ -86,7 +86,7 @@ pub async fn answer(
         return Ok(AnswerResult {
             answer: String::new(),
             citations,
-            note: Some("No relevant sources found in the atlas corpus.".into()),
+            note: Some("No relevant sources found in the maktab corpus.".into()),
         });
     }
 
@@ -95,7 +95,7 @@ pub async fn answer(
             answer: String::new(),
             citations,
             note: Some(
-                "No answer model configured (set OLLAMA_URL or ATLAS_LLM) — \
+                "No answer model configured (set OLLAMA_URL or MAKTAB_LLM) — \
                  showing ranked sources only."
                     .into(),
             ),
@@ -139,7 +139,7 @@ mod tests {
     use crate::store::Store;
 
     async fn seed(store: &Store, emb: &Embedder) {
-        let id = "atlas_node:s1".to_string();
+        let id = "maktab_node:s1".to_string();
         let body = "The service mesh uses mutual TLS between all pods.";
         let pid = store.pid();
         store
@@ -161,7 +161,7 @@ mod tests {
         store
             .db
             .query(
-                "CREATE atlas_chunk SET node=type::record($id), project=$p, \
+                "CREATE maktab_chunk SET node=type::record($id), project=$p, \
                  chunk_index=0, content=$c, embedding=$e, created_at='2026-01-01'",
             )
             .bind(("id", id))
@@ -177,7 +177,7 @@ mod tests {
     #[tokio::test]
     async fn stub_llm_answers_with_citations() {
         let db = kernel::db::connect_mem().await.unwrap();
-        crate::store::init_atlas_schema(&db, 384).await.unwrap();
+        crate::store::init_maktab_schema(&db, 384).await.unwrap();
         let store = Store::new(db, "demo");
         let emb = Embedder::new().unwrap();
         seed(&store, &emb).await;
@@ -198,7 +198,7 @@ mod tests {
     #[tokio::test]
     async fn no_llm_degrades_to_ranked_sources() {
         let db = kernel::db::connect_mem().await.unwrap();
-        crate::store::init_atlas_schema(&db, 384).await.unwrap();
+        crate::store::init_maktab_schema(&db, 384).await.unwrap();
         let store = Store::new(db, "demo");
         let emb = Embedder::new().unwrap();
         seed(&store, &emb).await;
@@ -215,7 +215,7 @@ mod tests {
     #[tokio::test]
     async fn no_sources_is_noted_not_failed() {
         let db = kernel::db::connect_mem().await.unwrap();
-        crate::store::init_atlas_schema(&db, 384).await.unwrap();
+        crate::store::init_maktab_schema(&db, 384).await.unwrap();
         let store = Store::new(db, "demo");
         let emb = Embedder::new().unwrap();
         let r = answer(&store, &emb, None, "anything", 10).await.unwrap();

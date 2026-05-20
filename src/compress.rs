@@ -457,7 +457,7 @@ mod tests {
     /// failure mode that silently dropped every compaction summary.
     #[test]
     fn post_compact_compresses_summary_into_title_and_narrative() {
-        let summary = "Refactored atlas_edge to denormalize project; tests 25/25 green.";
+        let summary = "Refactored maktab_edge to denormalize project; tests 25/25 green.";
         let p = payload(
             "post_compact",
             json!({ "trigger": "manual", "custom_instructions": "", "summary": summary }),
@@ -573,7 +573,7 @@ mod tests {
     #[test]
     fn bash_command_title_preserves_full_pipeline() {
         let cmd = "cd /repo && cargo test --release \
-                   --features atlas | tee /tmp/out | grep -E 'test result|FAILED'";
+                   --features maktab | tee /tmp/out | grep -E 'test result|FAILED'";
         let p = payload(
             "post_tool_use",
             json!({

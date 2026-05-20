@@ -1,7 +1,7 @@
 //! **Canonical Leiden** (Traag, Waltman, van Eck, *Sci Rep* 9:5233, 2019 —
 //! arXiv:1810.08473): local-moving → seeded randomized refinement →
 //! aggregation, recursing until convergence. Writes `cluster` onto
-//! `atlas_node`.
+//! `maktab_node`.
 //!
 //! - **Connected-community guarantee:** refinement only ever merges a node
 //!   that is still its own singleton, and only into a sub-community it shares
@@ -417,7 +417,7 @@ pub async fn cluster(store: &Store) -> Result<ClusterReport> {
 
     let mut nr = store
         .db
-        .query("SELECT id FROM atlas_node WHERE project=$p ORDER BY id")
+        .query("SELECT id FROM maktab_node WHERE project=$p ORDER BY id")
         .bind(("p", pid.clone()))
         .await?;
     let nodes: Vec<RecordId> = nr
@@ -439,7 +439,7 @@ pub async fn cluster(store: &Store) -> Result<ClusterReport> {
 
     let mut er = store
         .db
-        .query("SELECT in, out, score FROM atlas_edge WHERE project=$p")
+        .query("SELECT in, out, score FROM maktab_edge WHERE project=$p")
         .bind(("p", pid.clone()))
         .await?;
     let edges: Vec<EdgeRow> = er.take(0).unwrap_or_default();
@@ -509,7 +509,7 @@ pub async fn cluster(store: &Store) -> Result<ClusterReport> {
     for (c, ids) in groups {
         let _ = store
             .db
-            .query("UPDATE atlas_node SET cluster=$c WHERE id IN $ids")
+            .query("UPDATE maktab_node SET cluster=$c WHERE id IN $ids")
             .bind(("c", c as i64))
             .bind(("ids", ids))
             .await;
@@ -811,13 +811,13 @@ mod tests {
     async fn t4_cluster_deterministic_on_db() {
         async fn build() -> Vec<i64> {
             let db = kernel::db::connect_mem().await.unwrap();
-            crate::store::init_atlas_schema(&db, 384).await.unwrap();
+            crate::store::init_maktab_schema(&db, 384).await.unwrap();
             let store = Store::new(db, "demo");
             for nm in ["a1", "a2", "a3", "b1", "b2", "b3"] {
                 store
                     .db
                     .query("UPSERT type::record($id) SET project=project:demo, kind='concept', label=$l, cluster=-1, created_at='2026-01-01'")
-                    .bind(("id", format!("atlas_node:{nm}")))
+                    .bind(("id", format!("maktab_node:{nm}")))
                     .bind(("l", nm.to_string()))
                     .await
                     .unwrap()
@@ -835,9 +835,9 @@ mod tests {
             ] {
                 store
                     .db
-                    .query("RELATE $a->atlas_edge->$b SET project=project:demo, relation='related', via='t', score=$w, created_at='2026-01-01'")
-                    .bind(("a", RecordId::new("atlas_node", x.to_string())))
-                    .bind(("b", RecordId::new("atlas_node", y.to_string())))
+                    .query("RELATE $a->maktab_edge->$b SET project=project:demo, relation='related', via='t', score=$w, created_at='2026-01-01'")
+                    .bind(("a", RecordId::new("maktab_node", x.to_string())))
+                    .bind(("b", RecordId::new("maktab_node", y.to_string())))
                     .bind(("w", w))
                     .await
                     .unwrap();
@@ -849,7 +849,7 @@ mod tests {
             }
             let mut q = store
                 .db
-                .query("SELECT id, cluster FROM atlas_node WHERE project=project:demo ORDER BY id")
+                .query("SELECT id, cluster FROM maktab_node WHERE project=project:demo ORDER BY id")
                 .await
                 .unwrap();
             q.take::<Vec<C>>(0)
@@ -866,13 +866,13 @@ mod tests {
     #[tokio::test]
     async fn two_cliques_two_clusters() {
         let db = kernel::db::connect_mem().await.unwrap();
-        crate::store::init_atlas_schema(&db, 384).await.unwrap();
+        crate::store::init_maktab_schema(&db, 384).await.unwrap();
         let store = Store::new(db, "demo");
         for nname in ["a1", "a2", "a3", "b1", "b2", "b3"] {
             store
                 .db
                 .query("UPSERT type::record($id) SET project=project:demo, kind='concept', label=$l, cluster=-1, created_at='2026-01-01'")
-                .bind(("id", format!("atlas_node:{nname}")))
+                .bind(("id", format!("maktab_node:{nname}")))
                 .bind(("l", nname.to_string()))
                 .await
                 .unwrap()
@@ -897,7 +897,7 @@ mod tests {
         }
         let mut q = store
             .db
-            .query("SELECT cluster, label FROM atlas_node WHERE project=project:demo")
+            .query("SELECT cluster, label FROM maktab_node WHERE project=project:demo")
             .await
             .unwrap();
         let rows: Vec<Cl> = q.take(0).unwrap_or_default();
@@ -920,9 +920,9 @@ mod tests {
     async fn rel(store: &Store, x: &str, y: &str, w: f64) {
         store
             .db
-            .query("RELATE $a->atlas_edge->$b SET project=project:demo, relation='related', via='t', score=$w, created_at='2026-01-01'")
-            .bind(("a", RecordId::new("atlas_node", x.to_string())))
-            .bind(("b", RecordId::new("atlas_node", y.to_string())))
+            .query("RELATE $a->maktab_edge->$b SET project=project:demo, relation='related', via='t', score=$w, created_at='2026-01-01'")
+            .bind(("a", RecordId::new("maktab_node", x.to_string())))
+            .bind(("b", RecordId::new("maktab_node", y.to_string())))
             .bind(("w", w))
             .await
             .unwrap();

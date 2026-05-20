@@ -32,7 +32,7 @@ const CORE_TOOLS: &[&str] = &[
     "hifz_link_symbol",
 ];
 
-/// List the advertised MCP tools (the `CORE_TOOLS` allowlist). Atlas tools are
+/// List the advertised MCP tools (the `CORE_TOOLS` allowlist). Maktab tools are
 /// never core. Hidden tools remain dispatchable — see `CORE_TOOLS`.
 pub fn list_tools() -> Result<serde_json::Value> {
     let tools: Vec<serde_json::Value> = tool_defs()
@@ -46,15 +46,15 @@ pub fn list_tools() -> Result<serde_json::Value> {
     Ok(serde_json::json!({ "tools": tools }))
 }
 
-#[cfg(feature = "atlas")]
-fn atlas_tool_defs() -> Vec<serde_json::Value> {
+#[cfg(feature = "maktab")]
+fn maktab_tool_defs() -> Vec<serde_json::Value> {
     vec![
-        serde_json::json!({"name": "atlas_ingest", "description": "Ingest PDFs/markdown/txt under a path into the atlas corpus graph", "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}),
-        serde_json::json!({"name": "atlas_code", "description": "Project a repo's code graph (scope-qualified symbols + calls/imports/contains with resolution) into atlas", "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}),
-        serde_json::json!({"name": "atlas_extract", "description": "LLM concept-graph extraction over ingested docs (no-LLM embedding fallback if no backend)", "inputSchema": {"type": "object", "properties": {}}}),
-        serde_json::json!({"name": "atlas_cluster", "description": "Modularity clustering + >25% re-split over the atlas graph", "inputSchema": {"type": "object", "properties": {}}}),
-        serde_json::json!({"name": "atlas_insights", "description": "Hub nodes / surprising cross-cluster links / isolated nodes (JSON)", "inputSchema": {"type": "object", "properties": {}}}),
-        serde_json::json!({"name": "atlas_query", "description": "Ranked hybrid retrieval (vector + BM25, RRF-fused) over the atlas corpus graph. Returns evidence hits sorted by relevance, each with full source provenance — doc_label, source_kind, source_uri (openable), source_ref, location, snippet, score. Use this to answer questions from ingested docs/code and CITE the source_ref/source_uri of each hit you rely on.", "inputSchema": {"type": "object", "properties": {"q": {"type": "string"}}, "required": ["q"]}}),
+        serde_json::json!({"name": "maktab_ingest", "description": "Ingest PDFs/markdown/txt under a path into the maktab corpus graph", "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}),
+        serde_json::json!({"name": "maktab_code", "description": "Project a repo's code graph (scope-qualified symbols + calls/imports/contains with resolution) into maktab", "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}),
+        serde_json::json!({"name": "maktab_extract", "description": "LLM concept-graph extraction over ingested docs (no-LLM embedding fallback if no backend)", "inputSchema": {"type": "object", "properties": {}}}),
+        serde_json::json!({"name": "maktab_cluster", "description": "Modularity clustering + >25% re-split over the maktab graph", "inputSchema": {"type": "object", "properties": {}}}),
+        serde_json::json!({"name": "maktab_insights", "description": "Hub nodes / surprising cross-cluster links / isolated nodes (JSON)", "inputSchema": {"type": "object", "properties": {}}}),
+        serde_json::json!({"name": "maktab_query", "description": "Ranked hybrid retrieval (vector + BM25, RRF-fused) over the maktab corpus graph. Returns evidence hits sorted by relevance, each with full source provenance — doc_label, source_kind, source_uri (openable), source_ref, location, snippet, score. Use this to answer questions from ingested docs/code and CITE the source_ref/source_uri of each hit you rely on.", "inputSchema": {"type": "object", "properties": {"q": {"type": "string"}}, "required": ["q"]}}),
     ]
 }
 
@@ -508,57 +508,57 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
                 .await?
         }
 
-        // --- atlas corpus-graph tools (feature-gated, proxied to REST) ---
-        #[cfg(feature = "atlas")]
-        "atlas_ingest" => {
+        // --- maktab corpus-graph tools (feature-gated, proxied to REST) ---
+        #[cfg(feature = "maktab")]
+        "maktab_ingest" => {
             state
                 .client
-                .post(format!("{}/api/v1/atlas/ingest", state.base_url))
+                .post(format!("{}/api/v1/maktab/ingest", state.base_url))
                 .json(&args)
                 .send_decode()
                 .await?
         }
-        #[cfg(feature = "atlas")]
-        "atlas_code" => {
+        #[cfg(feature = "maktab")]
+        "maktab_code" => {
             state
                 .client
-                .post(format!("{}/api/v1/atlas/code", state.base_url))
+                .post(format!("{}/api/v1/maktab/code", state.base_url))
                 .json(&args)
                 .send_decode()
                 .await?
         }
-        #[cfg(feature = "atlas")]
-        "atlas_extract" => {
+        #[cfg(feature = "maktab")]
+        "maktab_extract" => {
             state
                 .client
-                .post(format!("{}/api/v1/atlas/extract", state.base_url))
+                .post(format!("{}/api/v1/maktab/extract", state.base_url))
                 .json(&args)
                 .send_decode()
                 .await?
         }
-        #[cfg(feature = "atlas")]
-        "atlas_cluster" => {
+        #[cfg(feature = "maktab")]
+        "maktab_cluster" => {
             state
                 .client
-                .post(format!("{}/api/v1/atlas/cluster", state.base_url))
+                .post(format!("{}/api/v1/maktab/cluster", state.base_url))
                 .json(&args)
                 .send_decode()
                 .await?
         }
-        #[cfg(feature = "atlas")]
-        "atlas_insights" => {
+        #[cfg(feature = "maktab")]
+        "maktab_insights" => {
             state
                 .client
-                .get(format!("{}/api/v1/atlas/insights", state.base_url))
+                .get(format!("{}/api/v1/maktab/insights", state.base_url))
                 .send_decode()
                 .await?
         }
-        #[cfg(feature = "atlas")]
-        "atlas_query" => {
+        #[cfg(feature = "maktab")]
+        "maktab_query" => {
             let q = args.get("q").and_then(|v| v.as_str()).unwrap_or("");
             state
                 .client
-                .get(format!("{}/api/v1/atlas/query", state.base_url))
+                .get(format!("{}/api/v1/maktab/query", state.base_url))
                 .query(&[("q", q)])
                 .send_decode()
                 .await?
@@ -663,8 +663,8 @@ fn mcp_content(result: &serde_json::Value) -> Result<Vec<serde_json::Value>> {
 fn validate_required(name: &str, args: &serde_json::Value) -> Result<()> {
     #[allow(unused_mut)]
     let mut defs = tool_defs();
-    #[cfg(feature = "atlas")]
-    defs.extend(atlas_tool_defs());
+    #[cfg(feature = "maktab")]
+    defs.extend(maktab_tool_defs());
 
     let Some(def) = defs
         .iter()
@@ -875,8 +875,8 @@ mod tests {
             );
         }
         assert!(
-            !names.iter().any(|n| n.starts_with("atlas_")),
-            "atlas tools must not be advertised"
+            !names.iter().any(|n| n.starts_with("maktab_")),
+            "maktab tools must not be advertised"
         );
         // feature-independent core members are all present
         for must in [

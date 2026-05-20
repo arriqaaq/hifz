@@ -63,8 +63,8 @@
     <g transform="translate(0,240)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#6B3FA0"/><text class="lbl" x="86" y="24">Memories</text><text class="faint mono" x="312" y="24" text-anchor="end" font-size="11">347</text></g>
     <g transform="translate(0,268)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#C2410C"/><text class="lbl" x="86" y="24">Commits</text><text class="faint mono" x="312" y="24" text-anchor="end" font-size="11">529</text></g>
   </g>
-  <text class="faint h11" x="66" y="316">Atlas</text>
-  <g transform="translate(0,322)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#475569"/><text class="lbl" x="86" y="24">Atlas</text></g>
+  <text class="faint h11" x="66" y="316">Maktab</text>
+  <g transform="translate(0,322)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#475569"/><text class="lbl" x="86" y="24">Maktab</text></g>
   <g transform="translate(0,350)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#475569"/><text class="lbl" x="86" y="24">Knowledge graph</text></g>
   <text class="faint h11" x="66" y="398">Tools</text>
   <g transform="translate(0,404)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#6a6a63"/><text class="lbl" x="86" y="24">Tokens</text></g>

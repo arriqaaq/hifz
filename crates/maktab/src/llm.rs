@@ -20,14 +20,14 @@ pub enum LlmBackend {
 }
 
 impl LlmBackend {
-    /// `ATLAS_LLM=openai` + `ATLAS_LLM_BASE`/`ATLAS_LLM_KEY`/`ATLAS_LLM_MODEL`
+    /// `MAKTAB_LLM=openai` + `MAKTAB_LLM_BASE`/`MAKTAB_LLM_KEY`/`MAKTAB_LLM_MODEL`
     /// → cloud; else `OLLAMA_URL` (+`OLLAMA_MODEL`) → local Ollama; else
     /// `None` (caller uses the no-LLM fallback).
     pub fn from_env() -> Option<Self> {
-        if std::env::var("ATLAS_LLM").ok().as_deref() == Some("openai") {
-            let base_url = std::env::var("ATLAS_LLM_BASE").ok()?;
-            let api_key = std::env::var("ATLAS_LLM_KEY").unwrap_or_default();
-            let model = std::env::var("ATLAS_LLM_MODEL").unwrap_or_else(|_| "gpt-4o-mini".into());
+        if std::env::var("MAKTAB_LLM").ok().as_deref() == Some("openai") {
+            let base_url = std::env::var("MAKTAB_LLM_BASE").ok()?;
+            let api_key = std::env::var("MAKTAB_LLM_KEY").unwrap_or_default();
+            let model = std::env::var("MAKTAB_LLM_MODEL").unwrap_or_else(|_| "gpt-4o-mini".into());
             return Some(LlmBackend::OpenAiCompat {
                 base_url,
                 api_key,

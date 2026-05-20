@@ -1,7 +1,7 @@
 //! hifz-core — shared primitives extracted from the `hifz` crate so both
-//! `hifz` and `atlas` can depend on them without a dependency cycle.
+//! `hifz` and `maktab` can depend on them without a dependency cycle.
 //!
-//! Dependency direction: `hifz-core ← atlas ← hifz`. hifz-core has NO
+//! Dependency direction: `hifz-core ← maktab ← hifz`. hifz-core has NO
 //! intra-`hifz` deps (verified at extraction time). The `hifz` crate
 //! re-exports every module here (`pub use kernel::db;` …) so existing
 //! `crate::db::*` / external `hifz::db::*` paths resolve unchanged.

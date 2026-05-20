@@ -27,7 +27,7 @@ export const TYPE_COLORS: Record<string, string> = {
   conversation: '#6B3FA0',
   search: '#2563EB',
   commit_made: '#C2410C',
-  // atlas corpus node kinds (concept map)
+  // maktab corpus node kinds (concept map)
   document: '#2563EB',
   concept: '#9b59b6',
   code_symbol: '#15803D',
@@ -103,7 +103,7 @@ export const stylesheet: StylesheetJson = [
     selector: 'node[kind = "commit"]',
     style: { shape: 'tag', 'border-width': 2 },
   },
-  // atlas corpus kinds (concept map)
+  // maktab corpus kinds (concept map)
   {
     selector: 'node[kind = "document"]',
     style: { shape: 'round-rectangle', 'border-width': 2 },

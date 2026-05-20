@@ -1,5 +1,5 @@
-//! Document ingestion: PDF + markdown/txt → `atlas_node{kind:document}`
-//! + `atlas_chunk` rows (chunked via hifz-core's splitter, embedded via
+//! Document ingestion: PDF + markdown/txt → `maktab_node{kind:document}`
+//! + `maktab_chunk` rows (chunked via hifz-core's splitter, embedded via
 //! hifz-core's local embedder). Deterministic node id keyed on
 //! `(project, rel_path)` so re-ingest UPSERTs in place.
 
@@ -115,7 +115,7 @@ pub async fn ingest_path(store: &Store, embedder: &Embedder, root: &Path) -> Res
             .unwrap_or(&rel)
             .to_string();
         let summary: String = text.chars().take(280).collect();
-        let nid = format!("atlas_node:{}", node_key(&store.project, &rel));
+        let nid = format!("maktab_node:{}", node_key(&store.project, &rel));
 
         // Node embedding = label + summary (captures topic for clustering).
         let node_emb = embedder.embed_single(&format!("{label}\n{summary}")).ok();
@@ -151,7 +151,7 @@ pub async fn ingest_path(store: &Store, embedder: &Embedder, root: &Path) -> Res
         // Re-ingest idempotency: replace this node's chunks.
         let _ = store
             .db
-            .query("DELETE atlas_chunk WHERE node = type::record($id)")
+            .query("DELETE maktab_chunk WHERE node = type::record($id)")
             .bind(("id", nid.clone()))
             .await;
 
@@ -160,7 +160,7 @@ pub async fn ingest_path(store: &Store, embedder: &Embedder, root: &Path) -> Res
             store
                 .db
                 .query(
-                    "CREATE atlas_chunk SET node=type::record($id), project=$p, \
+                    "CREATE maktab_chunk SET node=type::record($id), project=$p, \
                      chunk_index=$idx, content=$c, embedding=$emb, created_at=$now",
                 )
                 .bind(("id", nid.clone()))
@@ -198,7 +198,7 @@ mod tests {
         std::fs::write(dir.path().join("broken.pdf"), b"%PDF-1.4 not really").unwrap();
 
         let db = kernel::db::connect_mem().await.unwrap();
-        crate::store::init_atlas_schema(&db, 384).await.unwrap();
+        crate::store::init_maktab_schema(&db, 384).await.unwrap();
         let store = Store::new(db, "demo");
         let emb = Embedder::new().unwrap();
 
@@ -217,7 +217,7 @@ mod tests {
         }
         let mut r = store
             .db
-            .query("SELECT count() AS c FROM atlas_node WHERE kind='document' GROUP ALL")
+            .query("SELECT count() AS c FROM maktab_node WHERE kind='document' GROUP ALL")
             .await
             .unwrap();
         let rows: Vec<C> = r.take(0).unwrap_or_default();
@@ -236,7 +236,7 @@ mod tests {
         }
         let mut pr = store
             .db
-            .query("SELECT source_kind, source_uri, source_ref FROM atlas_node WHERE label='notes.txt'")
+            .query("SELECT source_kind, source_uri, source_ref FROM maktab_node WHERE label='notes.txt'")
             .await
             .unwrap();
         let p = pr

@@ -74,7 +74,7 @@ error; health stable. Build clean, restarted.
 - Verified end-to-end: simulated Write→plan-capture → current_plan returns the
   plan (activate fired); commit_made → plan--implemented_by(via:declared)-->commit
   count=1; session-start emits the provenance block. Revert commit with active
-  plan → implemented_by count=0 (correctly demoted). atlas untouched (no atlas
+  plan → implemented_by count=0 (correctly demoted). maktab untouched (no maktab
   files changed — deliberately separate). Health healthy, no regression.
 - Builds: Rust (P1) clean release default + --features code; daemon restarted.
   P2 = .mjs only (no rebuild). Nothing committed (no commit requested).

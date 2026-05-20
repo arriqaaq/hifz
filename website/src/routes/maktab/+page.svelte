@@ -1,25 +1,25 @@
 <script lang="ts">
   import {
-    getAtlasInsights,
-    atlasStatus,
-    atlasBuildAll,
-    atlasCode,
-    atlasIngest,
-    atlasExtract,
-    atlasCluster,
-    atlasUpload,
+    getMaktabInsights,
+    maktabStatus,
+    maktabBuildAll,
+    maktabCode,
+    maktabIngest,
+    maktabExtract,
+    maktabCluster,
+    maktabUpload,
     codeIndex,
-    type AtlasInsights,
-    type AtlasStatus,
+    type MaktabInsights,
+    type MaktabStatus,
   } from '$lib/api';
   import LoadingSpinner from '$lib/components/common/LoadingSpinner.svelte';
-  import ProjectPicker from '$lib/components/atlas/ProjectPicker.svelte';
+  import ProjectPicker from '$lib/components/maktab/ProjectPicker.svelte';
 
   // Selected project slug — owned by the ProjectPicker (create-first; no
   // implicit 'default'). Ask/Search now live on the dedicated /ask page.
   let project = $state('');
 
-  let ins = $state<AtlasInsights | null>(null);
+  let ins = $state<MaktabInsights | null>(null);
   let loading = $state(true);
   let error = $state('');
 
@@ -30,7 +30,7 @@
   let docsPath = $state('');
   let fileList = $state<FileList | null>(null);
   let buildLog = $state<string[]>([]);
-  let job = $state<AtlasStatus | null>(null);
+  let job = $state<MaktabStatus | null>(null);
   let polling = $state(false);
 
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -57,7 +57,7 @@
           12000,
         ),
       );
-      ins = await Promise.race([getAtlasInsights(project), timeout]);
+      ins = await Promise.race([getMaktabInsights(project), timeout]);
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     } finally {
@@ -77,7 +77,7 @@
       return;
     }
     try {
-      job = await atlasStatus(project);
+      job = await maktabStatus(project);
     } catch {
       /* ignore */
     }
@@ -91,7 +91,7 @@
       // give the spawned job a beat to flip `running`
       await sleep(800);
       for (;;) {
-        job = await atlasStatus(project);
+        job = await maktabStatus(project);
         if (!job.running) break;
         await sleep(2000);
       }
@@ -127,8 +127,8 @@
     }
   }
 
-  // Code is parsed ONCE by hifz core (`/code/index`); Atlas then projects the
-  // corpus graph from core. Run the core index first so the Atlas job reads it
+  // Code is parsed ONCE by hifz core (`/code/index`); Maktab then projects the
+  // corpus graph from core. Run the core index first so the Maktab job reads it
   // instead of re-walking the repo. Returns false on failure (abort the build).
   async function coreIndex(): Promise<boolean> {
     if (source === 'upload') return true; // uploads are docs, not code
@@ -157,7 +157,7 @@
     if (!(await coreIndex())) return;
     await kick(
       () =>
-        atlasBuildAll(project, {
+        maktabBuildAll(project, {
           path: source === 'path' ? codePath || undefined : undefined,
           git: source === 'git' ? gitUrl || undefined : undefined,
           docs: docsPath || undefined,
@@ -173,25 +173,25 @@
     if (!(await coreIndex())) return;
     await kick(
       () =>
-        atlasCode(project, {
+        maktabCode(project, {
           path: source === 'path' ? codePath || undefined : undefined,
           git: source === 'git' ? gitUrl || undefined : undefined,
         }),
       'project code → corpus graph',
     );
   };
-  const ingestDocs = () => kick(() => atlasIngest(project, docsPath), 'ingest docs');
-  const doExtract = () => kick(() => atlasExtract(project), 'extract concepts');
-  const doCluster = () => kick(() => atlasCluster(project), 'cluster');
+  const ingestDocs = () => kick(() => maktabIngest(project, docsPath), 'ingest docs');
+  const doExtract = () => kick(() => maktabExtract(project), 'extract concepts');
+  const doCluster = () => kick(() => maktabCluster(project), 'cluster');
   function doUpload() {
     if (!fileList || !fileList.length) return;
-    kick(() => atlasUpload(project, fileList as FileList), 'upload + ingest');
+    kick(() => maktabUpload(project, fileList as FileList), 'upload + ingest');
   }
 </script>
 
 <div class="page">
   <header class="head">
-    <h1>Atlas</h1>
+    <h1>Maktab</h1>
     <p class="sub">Corpus knowledge graph — documents, concepts, and the code graph, clustered.</p>
   </header>
 
@@ -243,7 +243,7 @@
     <div class="card empty">
       <div class="card-title">No project selected</div>
       <p class="sub">
-        Atlas is project-first — create a project above, then point it at a
+        Maktab is project-first — create a project above, then point it at a
         repo / docs folder and <strong>Build all</strong>. Ask its corpus on the
         <a href="/ask">Ask</a> page.
       </p>
@@ -254,9 +254,9 @@
     <div class="card"><span class="badge badge-red">error</span> {error}</div>
   {:else if ins && ins.nodes === 0}
     <div class="card empty">
-      <div class="card-title">Atlas is empty for “{project}”</div>
+      <div class="card-title">Maktab is empty for “{project}”</div>
       <p class="sub">
-        No corpus for this project yet — point Atlas at a repo/docs folder
+        No corpus for this project yet — point Maktab at a repo/docs folder
         above and <strong>Build all</strong>. Then <a href={`/ask?project=${encodeURIComponent(project)}`}>Ask</a> its corpus.
       </p>
     </div>

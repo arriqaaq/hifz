@@ -122,10 +122,10 @@
     </div>
 
     <div class="section">
-      <div class="section-h">Atlas</div>
-      <a href="/atlas" class="link" class:active={page.url.pathname.startsWith('/atlas')}>
+      <div class="section-h">Maktab</div>
+      <a href="/maktab" class="link" class:active={page.url.pathname.startsWith('/maktab')}>
         <span class="link-icon" style="color: var(--c-project)"><Boxes size={14} strokeWidth={1.7} /></span>
-        <span class="link-label">Atlas</span>
+        <span class="link-label">Maktab</span>
       </a>
       <a href="/graph" class="link" class:active={page.url.pathname.startsWith('/graph')}>
         <span class="link-icon" style="color: var(--c-project)"><Network size={14} strokeWidth={1.7} /></span>

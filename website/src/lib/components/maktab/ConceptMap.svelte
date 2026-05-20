@@ -3,11 +3,11 @@
     type GraphInputNode,
     type GraphInputEdge,
   } from '$lib/components/graph/CytoscapeGraph.svelte';
-  import type { AtlasGraph } from '$lib/api';
+  import type { MaktabGraph } from '$lib/api';
 
-  let { graph }: { graph: AtlasGraph | null } = $props();
+  let { graph }: { graph: MaktabGraph | null } = $props();
 
-  // The /atlas/graph endpoint returns RecordId-typed `id`/`in`/`out`. The same
+  // The /maktab/graph endpoint returns RecordId-typed `id`/`in`/`out`. The same
   // extractor runs on nodes and edges, so endpoints resolve to node ids
   // consistently regardless of the exact serialization shape.
   function extractId(v: unknown): string {

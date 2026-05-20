@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { page } from '$app/state';
-  import { getExport, getSessions, getAtlasGraph, listProjects } from '$lib/api';
+  import { getExport, getSessions, getMaktabGraph, listProjects } from '$lib/api';
   import CytoscapeGraph, {
     type GraphInputNode,
     type GraphInputEdge,
@@ -28,7 +28,7 @@
   let loading = $state(true);
   let error = $state('');
   let projects = $state<string[]>([]);
-  let atlasProjects = $state<string[]>([]);
+  let maktabProjects = $state<string[]>([]);
   let selectedId = $state<string | undefined>(undefined);
   let localMode = $state(false);
   let localDepth = $state(2);
@@ -36,15 +36,15 @@
 
   let filters = $derived<Filters>(readFilters(page.url));
   let split = $derived(page.url.searchParams.get('split') ?? '');
-  // `Atlas` (corpus graph) is the default; `Activity` is the hifz
+  // `Maktab` (corpus graph) is the default; `Activity` is the hifz
   // observation/session/run/memory graph. Lives in the URL so links/reloads
-  // keep it (default `atlas` is omitted from the query string).
-  let source = $derived<'atlas' | 'activity'>(
-    page.url.searchParams.get('source') === 'activity' ? 'activity' : 'atlas',
+  // keep it (default `maktab` is omitted from the query string).
+  let source = $derived<'maktab' | 'activity'>(
+    page.url.searchParams.get('source') === 'activity' ? 'activity' : 'maktab',
   );
-  // Project namespaces differ: Atlas uses slugs (`dst`), Activity uses hifz
+  // Project namespaces differ: Maktab uses slugs (`dst`), Activity uses hifz
   // session projects (full paths). Show the source-appropriate list.
-  let projectOptions = $derived(source === 'atlas' ? atlasProjects : projects);
+  let projectOptions = $derived(source === 'maktab' ? maktabProjects : projects);
 
   function toggleSplit() {
     const url = new URL(page.url);
@@ -76,8 +76,8 @@
     loading = true;
     error = '';
     try {
-      if (source === 'atlas') {
-        await loadAtlas(f.project);
+      if (source === 'maktab') {
+        await loadMaktab(f.project);
         return;
       }
       const apiParams = toApiParams(f);
@@ -145,10 +145,10 @@
     }
   }
 
-  // Atlas corpus graph — `atlas_node` / `atlas_edge` for the selected project
-  // slug. Colors + shapes for the atlas kinds (document/concept/code_symbol/
+  // Maktab corpus graph — `maktab_node` / `maktab_edge` for the selected project
+  // slug. Colors + shapes for the maktab kinds (document/concept/code_symbol/
   // external/file) already live in graphStyles.ts, keyed off `kind`/`type`.
-  async function loadAtlas(project: string) {
+  async function loadMaktab(project: string) {
     rawById = new Map();
     if (!project) {
       // Guard the reassignment: the $effect tracks `allNodes`, so handing it a
@@ -159,7 +159,7 @@
       edges = [];
       return;
     }
-    const data = await getAtlasGraph(project);
+    const data = await getMaktabGraph(project);
     const ns: GraphInputNode[] = data.nodes.map((n) => {
       const id = extractId((n as { id?: unknown }).id);
       return {
@@ -227,8 +227,8 @@
   }
 
   onMount(async () => {
-    // Activity projects come from hifz sessions; Atlas projects from the
-    // atlas project registry (slugs) — union both so neither namespace's
+    // Activity projects come from hifz sessions; Maktab projects from the
+    // maktab project registry (slugs) — union both so neither namespace's
     // projects go missing from the dropdown.
     try {
       const r = await getSessions(200);
@@ -240,7 +240,7 @@
     }
     try {
       const r = await listProjects();
-      atlasProjects = r.projects.map((p) => p.slug).sort();
+      maktabProjects = r.projects.map((p) => p.slug).sort();
     } catch {
       // ignore
     }
@@ -292,7 +292,7 @@
 
   // `applyFilters` rebuilds the query string from filters alone and would drop
   // our `source` param, so navigate through a helper that re-appends it.
-  function navigate(f: Filters, src: 'atlas' | 'activity') {
+  function navigate(f: Filters, src: 'maktab' | 'activity') {
     const p = new URLSearchParams();
     if (f.query) p.set('q', f.query);
     if (f.sessionId) p.set('session', f.sessionId);
@@ -302,7 +302,7 @@
     if (f.until) p.set('until', f.until);
     if (f.minImportance > 0) p.set('min_importance', String(f.minImportance));
     if (split) p.set('split', split);
-    if (src !== 'atlas') p.set('source', src); // default `atlas` stays implicit
+    if (src !== 'maktab') p.set('source', src); // default `maktab` stays implicit
     const qs = p.toString();
     void goto(qs ? `${page.url.pathname}?${qs}` : page.url.pathname, {
       replaceState: true,
@@ -315,9 +315,9 @@
     navigate(next, source);
   }
 
-  function setSource(src: 'atlas' | 'activity') {
+  function setSource(src: 'maktab' | 'activity') {
     if (src === source) return;
-    // Project slugs (Atlas) and session paths (Activity) are different
+    // Project slugs (Maktab) and session paths (Activity) are different
     // namespaces — clear the selection when switching.
     navigate({ ...filters, project: '' }, src);
   }
@@ -333,10 +333,10 @@
     <button
       type="button"
       class="source-btn"
-      class:active={source === 'atlas'}
-      onclick={() => setSource('atlas')}
+      class:active={source === 'maktab'}
+      onclick={() => setSource('maktab')}
     >
-      Atlas
+      Maktab
     </button>
     <button
       type="button"
@@ -386,8 +386,8 @@
           <p style="color: var(--danger); margin: 0;">{error}</p>
         </div>
       {:else if nodes.length === 0}
-        {#if source === 'atlas' && !filters.project}
-          <p class="empty">Select an Atlas project to visualize its corpus graph.</p>
+        {#if source === 'maktab' && !filters.project}
+          <p class="empty">Select an Maktab project to visualize its corpus graph.</p>
         {:else}
           <p class="empty">No data to visualize. Try clearing filters or check the server is running.</p>
         {/if}

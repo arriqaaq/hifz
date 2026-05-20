@@ -1,23 +1,23 @@
 <script lang="ts">
   import {
-    atlasAnswer,
-    atlasQuery,
-    getAtlasGraph,
-    type AtlasAnswer,
-    type AtlasHit,
-    type AtlasGraph,
-    type AtlasCitation,
+    maktabAnswer,
+    maktabQuery,
+    getMaktabGraph,
+    type MaktabAnswer,
+    type MaktabHit,
+    type MaktabGraph,
+    type MaktabCitation,
   } from '$lib/api';
-  import ProjectPicker from '$lib/components/atlas/ProjectPicker.svelte';
-  import ConceptMap from '$lib/components/atlas/ConceptMap.svelte';
+  import ProjectPicker from '$lib/components/maktab/ProjectPicker.svelte';
+  import ConceptMap from '$lib/components/maktab/ConceptMap.svelte';
   import { ArrowRight, FileText, Code, Sparkles, File } from 'lucide-svelte';
 
   let project = $state('');
   let mode = $state<'ask' | 'search'>('ask');
   let q = $state('');
 
-  let ans = $state<AtlasAnswer | null>(null);
-  let hits = $state<AtlasHit[]>([]);
+  let ans = $state<MaktabAnswer | null>(null);
+  let hits = $state<MaktabHit[]>([]);
   let asking = $state(false);
   let searching = $state(false);
   let error = $state('');
@@ -28,10 +28,10 @@
   let moreOpen = $state<Set<number>>(new Set()); // "+N more" passage reveals
 
   // Concept map (B3): doc↔doc graph, shown only when a corpus is large enough.
-  let graph = $state<AtlasGraph | null>(null);
+  let graph = $state<MaktabGraph | null>(null);
 
   // Per-project chat history (single-turn Q&A), persisted in localStorage.
-  type Chat = { id: number; q: string; ans: AtlasAnswer };
+  type Chat = { id: number; q: string; ans: MaktabAnswer };
   let history = $state<Chat[]>([]);
 
   const STARTERS = ['Summarize this project', 'What are the key concepts?', 'How does it work?'];
@@ -90,7 +90,7 @@
     hits = [];
     error = '';
     try {
-      ans = await atlasAnswer(project, q.trim());
+      ans = await maktabAnswer(project, q.trim());
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     } finally {
@@ -104,7 +104,7 @@
     error = '';
     facet = 'all';
     try {
-      const r = await atlasQuery(project, q.trim());
+      const r = await maktabQuery(project, q.trim());
       hits = r.hits ?? [];
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
@@ -218,7 +218,7 @@
     loadHistory(project);
     if (!project) return;
     try {
-      graph = await getAtlasGraph(project, { docsOnly: true });
+      graph = await getMaktabGraph(project, { docsOnly: true });
     } catch {
       graph = null;
     }
@@ -248,7 +248,7 @@
   </div>
 {/snippet}
 
-{#snippet passages(c: AtlasCitation)}
+{#snippet passages(c: MaktabCitation)}
   {#if (c.chunk_count ?? 1) > 1 && (c.chunks?.length ?? 0) > 1}
     {@const all = c.chunks ?? []}
     {@const visible = moreOpen.has(c.n) ? all : all.slice(0, PASSAGE_CAP)}

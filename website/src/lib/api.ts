@@ -482,24 +482,24 @@ export function codeProjects(): Promise<{ projects: { project: string; chunks: n
   return get(`${CODE}/projects`);
 }
 
-// --- atlas (corpus knowledge graph) ---
-const ATLAS = '/api/v1/atlas';
+// --- maktab (corpus knowledge graph) ---
+const MAKTAB = '/api/v1/maktab';
 
-export interface AtlasInsights {
+export interface MaktabInsights {
   nodes: number;
   edges: number;
   clusters: number;
 }
-export interface AtlasGraph {
+export interface MaktabGraph {
   nodes: Array<Record<string, unknown>>;
   edges: Array<Record<string, unknown>>;
 }
-export interface AtlasChunkRef {
+export interface MaktabChunkRef {
   location?: string | null;
   snippet?: string | null;
   score: number;
 }
-export interface AtlasHit {
+export interface MaktabHit {
   id: string;
   kind: string;
   doc_label: string;
@@ -512,9 +512,9 @@ export interface AtlasHit {
   /** Document-level dedup: how many chunks of this doc matched (B1). */
   chunk_count?: number;
   /** The contributing chunks, best-first. */
-  chunks?: AtlasChunkRef[];
+  chunks?: MaktabChunkRef[];
 }
-export interface AtlasCitation {
+export interface MaktabCitation {
   n: number;
   doc_label: string;
   source_kind?: string | null;
@@ -526,9 +526,9 @@ export interface AtlasCitation {
   chunk_count?: number;
   locations?: string[];
   /** Each contributing passage (location + snippet) — "where in the doc". */
-  chunks?: AtlasChunkRef[];
+  chunks?: MaktabChunkRef[];
 }
-export interface AtlasProject {
+export interface MaktabProject {
   id: string;
   name: string;
   slug: string;
@@ -537,13 +537,13 @@ export interface AtlasProject {
   updated_at?: string;
   counts?: { documents: number; code: number; nodes: number; edges: number };
 }
-export interface AtlasAnswer {
+export interface MaktabAnswer {
   answer: string;
-  citations: AtlasCitation[];
+  citations: MaktabCitation[];
   note?: string | null;
 }
 
-export interface AtlasStatus {
+export interface MaktabStatus {
   project: string;
   running: boolean;
   step: string;
@@ -553,83 +553,83 @@ export interface AtlasStatus {
 
 const pj = (p: string) => `project=${encodeURIComponent(p)}`;
 
-export function getAtlasInsights(project: string): Promise<AtlasInsights> {
-  return get(`${ATLAS}/insights?${pj(project)}`);
+export function getMaktabInsights(project: string): Promise<MaktabInsights> {
+  return get(`${MAKTAB}/insights?${pj(project)}`);
 }
-export function getAtlasGraph(
+export function getMaktabGraph(
   project: string,
   opts?: { docsOnly?: boolean },
-): Promise<AtlasGraph> {
+): Promise<MaktabGraph> {
   const d = opts?.docsOnly ? '&docs_only=true' : '';
-  return get(`${ATLAS}/graph?${pj(project)}${d}`);
+  return get(`${MAKTAB}/graph?${pj(project)}${d}`);
 }
-export function atlasQuery(
+export function maktabQuery(
   project: string,
   q: string,
   limit = 20,
-): Promise<{ hits: AtlasHit[] }> {
-  return get(`${ATLAS}/query?q=${encodeURIComponent(q)}&limit=${limit}&${pj(project)}`);
+): Promise<{ hits: MaktabHit[] }> {
+  return get(`${MAKTAB}/query?q=${encodeURIComponent(q)}&limit=${limit}&${pj(project)}`);
 }
-export function atlasAnswer(
+export function maktabAnswer(
   project: string,
   q: string,
   limit = 8,
-): Promise<AtlasAnswer> {
-  return get(`${ATLAS}/answer?q=${encodeURIComponent(q)}&limit=${limit}&${pj(project)}`);
+): Promise<MaktabAnswer> {
+  return get(`${MAKTAB}/answer?q=${encodeURIComponent(q)}&limit=${limit}&${pj(project)}`);
 }
 /** All projects (table-backed, create-first) with per-project corpus counts.
- *  This is the authoritative list — Atlas is project-first. */
-export function listProjects(): Promise<{ projects: AtlasProject[] }> {
-  return get(`${ATLAS}/projects`);
+ *  This is the authoritative list — Maktab is project-first. */
+export function listProjects(): Promise<{ projects: MaktabProject[] }> {
+  return get(`${MAKTAB}/projects`);
 }
 /** Create a project by name (slug derived server-side; name/slug UNIQUE). */
-export function createProject(name: string, description?: string): Promise<AtlasProject> {
-  return post(`${ATLAS}/projects`, { name, description });
+export function createProject(name: string, description?: string): Promise<MaktabProject> {
+  return post(`${MAKTAB}/projects`, { name, description });
 }
-export function getProject(slug: string): Promise<AtlasProject> {
-  return get(`${ATLAS}/projects/${encodeURIComponent(slug)}`);
+export function getProject(slug: string): Promise<MaktabProject> {
+  return get(`${MAKTAB}/projects/${encodeURIComponent(slug)}`);
 }
 export function deleteProject(slug: string): Promise<{ deleted: string }> {
-  return del(`${ATLAS}/projects/${encodeURIComponent(slug)}`);
+  return del(`${MAKTAB}/projects/${encodeURIComponent(slug)}`);
 }
 
 // Build endpoints are async: they return `{ started: true }` (or
-// `{ error }` if a job is already running). Poll `atlasStatus`.
-export function atlasStatus(project: string): Promise<AtlasStatus> {
-  return get(`${ATLAS}/status?${pj(project)}`);
+// `{ error }` if a job is already running). Poll `maktabStatus`.
+export function maktabStatus(project: string): Promise<MaktabStatus> {
+  return get(`${MAKTAB}/status?${pj(project)}`);
 }
-export function atlasBuildAll(
+export function maktabBuildAll(
   project: string,
   src: { path?: string; git?: string; docs?: string },
 ): Promise<{ started?: boolean; error?: string }> {
-  return post(`${ATLAS}/build?${pj(project)}`, { ...src, project });
+  return post(`${MAKTAB}/build?${pj(project)}`, { ...src, project });
 }
-export function atlasCode(
+export function maktabCode(
   project: string,
   src: { path?: string; git?: string },
 ): Promise<{ started?: boolean; error?: string }> {
-  return post(`${ATLAS}/code?${pj(project)}`, { ...src, project });
+  return post(`${MAKTAB}/code?${pj(project)}`, { ...src, project });
 }
-export function atlasIngest(
+export function maktabIngest(
   project: string,
   path: string,
 ): Promise<{ started?: boolean; error?: string }> {
-  return post(`${ATLAS}/ingest?${pj(project)}`, { path, project });
+  return post(`${MAKTAB}/ingest?${pj(project)}`, { path, project });
 }
-export function atlasExtract(project: string): Promise<{ started?: boolean; error?: string }> {
-  return post(`${ATLAS}/extract?${pj(project)}`);
+export function maktabExtract(project: string): Promise<{ started?: boolean; error?: string }> {
+  return post(`${MAKTAB}/extract?${pj(project)}`);
 }
-export function atlasCluster(project: string): Promise<{ started?: boolean; error?: string }> {
-  return post(`${ATLAS}/cluster?${pj(project)}`);
+export function maktabCluster(project: string): Promise<{ started?: boolean; error?: string }> {
+  return post(`${MAKTAB}/cluster?${pj(project)}`);
 }
-export async function atlasUpload(
+export async function maktabUpload(
   project: string,
   files: FileList | File[],
 ): Promise<{ started?: boolean; error?: string }> {
   const fd = new FormData();
   for (const f of Array.from(files)) fd.append('file', f, f.name);
-  const res = await fetch(`${ATLAS}/upload?${pj(project)}`, { method: 'POST', body: fd });
-  if (!res.ok) throw new Error(`POST ${ATLAS}/upload: ${res.status}`);
+  const res = await fetch(`${MAKTAB}/upload?${pj(project)}`, { method: 'POST', body: fd });
+  if (!res.ok) throw new Error(`POST ${MAKTAB}/upload: ${res.status}`);
   return res.json();
 }
 

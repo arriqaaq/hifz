@@ -29,7 +29,7 @@ It captures your work as observations, sessions, and runs; distills the durable 
 | 🧠 **Memory** | Save lessons, decisions, bugs, fixes, plans. Recall by meaning, recency, and grounding. |
 | 🕸 **Knowledge graph** | Every memory, observation, session, run, and commit is a typed node with typed edges. |
 | 🔍 **Code search** | Tree-sitter indexing for 8 languages, hybrid BM25 + vector search, memory↔code links. |
-| 🗺 **Atlas** | Ingest a repo + docs into a clustered corpus graph and ask it questions, with citations. |
+| 🗺 **Maktab** | Ingest a repo + docs into a clustered corpus graph and ask it questions, with citations. |
 | ⏳ **Lifecycle** | Recency decay, commit-grounding, contradiction detection, append-only versioning. |
 
 ---
@@ -75,35 +75,35 @@ hifz_code_index  { "project": "hifz", "root": "/path/to/repo" }
 hifz_code_search { "project": "hifz", "query": "session refresh token", "language": "rust" }
 ```
 
-Code lives in dedicated tables (`code_chunk`, `code_symbol`), so this search is **always code** — scoped by project, with optional language/path filters. A repo is **parsed once**: this index is the single source of truth, and Atlas builds its corpus graph by *projecting* from it (no second parse). Memory→code edges record the original `(path, start, end)` and **re-anchor on re-index**: when a file is re-split, the edge follows the lines it pointed at, or is dropped if those lines were deleted. Symbol links survive chunk re-splitting entirely. Indexing is idempotent (mtime + content hash), honors `.gitignore`, and reconciles deletions. Operator's guide: [`docs/code-indexing.md`](docs/code-indexing.md).
+Code lives in dedicated tables (`code_chunk`, `code_symbol`), so this search is **always code** — scoped by project, with optional language/path filters. A repo is **parsed once**: this index is the single source of truth, and Maktab builds its corpus graph by *projecting* from it (no second parse). Memory→code edges record the original `(path, start, end)` and **re-anchor on re-index**: when a file is re-split, the edge follows the lines it pointed at, or is dropped if those lines were deleted. Symbol links survive chunk re-splitting entirely. Indexing is idempotent (mtime + content hash), honors `.gitignore`, and reconciles deletions. Operator's guide: [`docs/code-indexing.md`](docs/code-indexing.md).
 
-### Finding code in a mixed corpus (Atlas)
+### Finding code in a mixed corpus (Maktab)
 
-When a project mixes **documents and code**, [Atlas](#atlas--corpus-knowledge-graph--cited-qa) search (the `/ask` page in Search mode) returns every kind together and you narrow with the **type facet** — `Code_symbol`, `External`, `Document`, `Concept`. Atlas's `code_symbol` nodes are projected from the same core index above; this is the corpus-wide view, where core code search is the precise, line-level one.
+When a project mixes **documents and code**, [Maktab](#maktab--corpus-knowledge-graph--cited-qa) search (the `/ask` page in Search mode) returns every kind together and you narrow with the **type facet** — `Code_symbol`, `External`, `Document`, `Concept`. Maktab's `code_symbol` nodes are projected from the same core index above; this is the corpus-wide view, where core code search is the precise, line-level one.
 
-<p align="center"><img src="docs/img/ui-atlas-search.svg" alt="Atlas search faceted to code symbols" width="100%"></p>
+<p align="center"><img src="docs/img/ui-maktab-search.svg" alt="Maktab search faceted to code symbols" width="100%"></p>
 
 ---
 
-## Atlas — corpus knowledge graph & cited Q&A
+## Maktab — corpus knowledge graph & cited Q&A
 
-Atlas rides the same substrate to turn a codebase plus its docs into a clustered, queryable corpus graph. Point it at a repo path, a git URL, or upload files; then **build** runs a pipeline — ingest docs → project the code graph → extract concepts → cluster → insights.
+Maktab rides the same substrate to turn a codebase plus its docs into a clustered, queryable corpus graph. Point it at a repo path, a git URL, or upload files; then **build** runs a pipeline — ingest docs → project the code graph → extract concepts → cluster → insights.
 
-<p align="center"><img src="docs/img/ui-atlas.svg" alt="Atlas builder" width="100%"></p>
+<p align="center"><img src="docs/img/ui-maktab.svg" alt="Maktab builder" width="100%"></p>
 
 Ask the corpus a question and get an answer grounded in **citations** — every claim links back to a source document, code symbol, or concept, with the openable URI and the matching passages.
 
-<p align="center"><img src="docs/img/ui-ask.svg" alt="Atlas corpus Q&A with citations" width="100%"></p>
+<p align="center"><img src="docs/img/ui-ask.svg" alt="Maktab corpus Q&A with citations" width="100%"></p>
 
 ```bash
-atlas code   /path/to/repo      # project the code graph
-atlas ingest /path/to/docs      # PDFs, markdown, txt
-atlas extract                   # concept extraction (LLM)
-atlas cluster                   # modularity clustering
-atlas query  "how does recall rank results?"
+maktab code   /path/to/repo      # project the code graph
+maktab ingest /path/to/docs      # PDFs, markdown, txt
+maktab extract                   # concept extraction (LLM)
+maktab cluster                   # modularity clustering
+maktab query  "how does recall rank results?"
 ```
 
-Atlas is feature-gated — build with `--features atlas` to mount its routes under `/api/v1/atlas`.
+Maktab is feature-gated — build with `--features maktab` to mount its routes under `/api/v1/maktab`.
 
 ---
 
@@ -206,8 +206,8 @@ Logs: `~/.hifz/logs/server.{out,err}.log`. DB: `~/.hifz/data`, port `3111`.
 
 | Surface | Shape | Use it from |
 |---|---|---|
-| **REST** | `/api/v1/*` — core memory, agent pipeline, code intelligence, and (optional) Atlas groups | Any HTTP client, any language |
-| **MCP** | Tools across Memory, Code, Core, Plans, Trajectories, Graph, and (optional) Atlas groups | Any MCP-speaking agent |
+| **REST** | `/api/v1/*` — core memory, agent pipeline, code intelligence, and (optional) Maktab groups | Any HTTP client, any language |
+| **MCP** | Tools across Memory, Code, Core, Plans, Trajectories, Graph, and (optional) Maktab groups | Any MCP-speaking agent |
 | **Dashboard** | SvelteKit SPA served by the same Axum process | Browser at `http://localhost:3111` |
 
 <details>
@@ -228,7 +228,7 @@ Logs: `~/.hifz/logs/server.{out,err}.log`. DB: `~/.hifz/data`, port `3111`.
 | Plans | `hifz_current_plan` / `hifz_plans` / `hifz_activate_plan` / `hifz_complete_plan` | Plan lifecycle |
 | Trajectories | `hifz_sessions` / `hifz_runs` / `hifz_timeline` / `hifz_digest` / `hifz_export` | Sessions, runs, timeline, project intel, export |
 | Graph | `hifz_trace` | Walk the knowledge graph from a node |
-| Atlas *(feature-gated)* | `atlas_ingest` / `atlas_code` / `atlas_extract` / `atlas_cluster` / `atlas_insights` / `atlas_query` | Build and query the corpus graph |
+| Maktab *(feature-gated)* | `maktab_ingest` / `maktab_code` / `maktab_extract` / `maktab_cluster` / `maktab_insights` / `maktab_query` | Build and query the corpus graph |
 
 </details>
 
@@ -242,7 +242,7 @@ Logs: `~/.hifz/logs/server.{out,err}.log`. DB: `~/.hifz/data`, port `3111`.
 | `/memories` | Search, filter, expand, delete |
 | `/code` | Core code search — file · line range · highlighted snippet |
 | `/graph` | Interactive knowledge graph |
-| `/atlas` | Build & inspect the corpus graph |
+| `/maktab` | Build & inspect the corpus graph |
 | `/sessions`, `/runs`, `/observations` | Captured trajectory |
 | `/commits` | Git log with diff viewer |
 | `/replay` | Causal session replay |

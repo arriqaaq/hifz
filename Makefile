@@ -106,10 +106,10 @@ backfill-commits:
 # with the service on port $(PORT).
 
 # `frontend` first: the daemon serves website/build as the SPA, so a stale
-# or missing build means /atlas (and every deep route) 404s / serves old UI.
+# or missing build means /maktab (and every deep route) 404s / serves old UI.
 install-service: frontend
-	@echo "==> Building release binary (with atlas)..."
-	cargo build --release --features atlas
+	@echo "==> Building release binary (with maktab)..."
+	cargo build --release --features maktab
 	@echo "==> Installing launchd LaunchAgent ($(LABEL))..."
 	@HIFZ_PORT=$(PORT) sh scripts/install-service.sh
 
@@ -122,7 +122,7 @@ uninstall-service:
 # `frontend` first for the same reason as install-service (the daemon serves
 # website/build; a stale build serves the old UI after restart).
 restart-service: frontend
-	cargo build --release --features atlas
+	cargo build --release --features maktab
 	@launchctl kickstart -k "gui/$$(id -u)/$(LABEL)" && echo "hifz service restarted"
 
 service-status:

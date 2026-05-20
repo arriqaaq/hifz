@@ -1,9 +1,9 @@
-//! atlas — a corpus knowledge graph built on hifz.
+//! maktab — a corpus knowledge graph built on hifz.
 //!
 //! Ingests code + docs + PDFs into a clustered graph with analytics,
 //! riding hifz's living/grounded substrate (hifz-core: db, embed, the
-//! code-intelligence core). atlas owns its own SurrealDB tables
-//! (`atlas_node` / `atlas_edge` / `atlas_chunk`) in the *same* instance —
+//! code-intelligence core). maktab owns its own SurrealDB tables
+//! (`maktab_node` / `maktab_edge` / `maktab_chunk`) in the *same* instance —
 //! it only ever reads hifz's `code_symbol`/`edge`, never writes them.
 
 pub mod analyze;
@@ -18,4 +18,4 @@ pub mod query;
 pub mod store;
 pub mod web;
 
-pub use store::{Store, init_atlas_schema};
+pub use store::{Store, init_maktab_schema};

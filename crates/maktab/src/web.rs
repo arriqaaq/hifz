@@ -1,5 +1,5 @@
-//! atlas REST surface — an `axum::Router` the hifz daemon nests at
-//! `/api/v1/atlas` behind the `atlas` feature (and the standalone CLI can
+//! maktab REST surface — an `axum::Router` the hifz daemon nests at
+//! `/api/v1/maktab` behind the `maktab` feature (and the standalone CLI can
 //! also serve).
 //!
 //! Project is **per-request** (`?project=`), not process-fixed. Build
@@ -36,7 +36,7 @@ pub struct JobState {
 }
 
 #[derive(Clone)]
-pub struct AtlasState {
+pub struct MaktabState {
     pub db: Surreal<Db>,
     pub embedder: Arc<Embedder>,
     /// Per-project background build status.
@@ -88,14 +88,14 @@ struct Q {
 }
 
 /// The selected project slug, or "" when none is given. There is NO default
-/// project — Atlas is create-first; write handlers reject an empty/unknown
+/// project — Maktab is create-first; write handlers reject an empty/unknown
 /// slug via [`require`], reads return an empty result for it.
 fn proj(p: Option<String>) -> String {
     p.map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
         .unwrap_or_default()
 }
-fn store(s: &AtlasState, p: Option<String>) -> Store {
+fn store(s: &MaktabState, p: Option<String>) -> Store {
     Store::new(s.db.clone(), proj(p))
 }
 fn err(e: anyhow::Error) -> Json<Value> {
@@ -105,7 +105,7 @@ fn err(e: anyhow::Error) -> Json<Value> {
 /// Create-first gate for write handlers: the project slug must be non-empty
 /// and already exist in the `project` table. Returns the error JSON to return
 /// to the caller, or `Ok(())` to proceed.
-async fn require(s: &AtlasState, slug: &str) -> Result<(), Json<Value>> {
+async fn require(s: &MaktabState, slug: &str) -> Result<(), Json<Value>> {
     if slug.is_empty() {
         return Err(Json(
             json!({ "error": "no project selected — create a project first" }),
@@ -120,7 +120,7 @@ async fn require(s: &AtlasState, slug: &str) -> Result<(), Json<Value>> {
     }
 }
 
-pub fn router(state: AtlasState) -> Router {
+pub fn router(state: MaktabState) -> Router {
     Router::new()
         .route("/build", post(build))
         .route("/code", post(code))
@@ -167,7 +167,7 @@ fn job_done(jobs: &Arc<DashMap<String, JobState>>, project: &str, report: anyhow
 
 /// Spawn `run` on a background task (owned `Store` + `Arc<Embedder>` so the
 /// future is `'static + Send`). Returns immediately. One job per project.
-fn spawn_job<F, Fut>(s: &AtlasState, project: String, run: F) -> Json<Value>
+fn spawn_job<F, Fut>(s: &MaktabState, project: String, run: F) -> Json<Value>
 where
     F: FnOnce(Store, Arc<Embedder>, Arc<DashMap<String, JobState>>, String) -> Fut + Send + 'static,
     Fut: std::future::Future<Output = ()> + Send + 'static,
@@ -191,7 +191,7 @@ where
     Json(json!({ "started": true, "project": project }))
 }
 
-async fn status(State(s): State<AtlasState>, Query(sc): Query<Scoped>) -> Json<Value> {
+async fn status(State(s): State<MaktabState>, Query(sc): Query<Scoped>) -> Json<Value> {
     let p = proj(sc.project);
     let j = s.jobs.get(&p).map(|j| j.clone()).unwrap_or_default();
     Json(json!({
@@ -238,7 +238,7 @@ fn git_sync(url: &str) -> anyhow::Result<PathBuf> {
             .collect::<Vec<_>>()
             .join("_"),
     );
-    let dir = home_base().join("atlas-repos").join(slug);
+    let dir = home_base().join("maktab-repos").join(slug);
     if dir.join(".git").is_dir() {
         let ok = Command::new(&git)
             .arg("-C")
@@ -307,7 +307,7 @@ async fn run_build(
     Ok(Value::Object(out))
 }
 
-async fn build(State(s): State<AtlasState>, Json(r): Json<PathReq>) -> Json<Value> {
+async fn build(State(s): State<MaktabState>, Json(r): Json<PathReq>) -> Json<Value> {
     let project = proj(r.project.clone());
     if let Err(e) = require(&s, &project).await {
         return e;
@@ -318,7 +318,7 @@ async fn build(State(s): State<AtlasState>, Json(r): Json<PathReq>) -> Json<Valu
     })
 }
 
-async fn code(State(s): State<AtlasState>, Json(r): Json<PathReq>) -> Json<Value> {
+async fn code(State(s): State<MaktabState>, Json(r): Json<PathReq>) -> Json<Value> {
     let project = proj(r.project.clone());
     if let Err(e) = require(&s, &project).await {
         return e;
@@ -341,7 +341,7 @@ async fn code(State(s): State<AtlasState>, Json(r): Json<PathReq>) -> Json<Value
     })
 }
 
-async fn ingest(State(s): State<AtlasState>, Json(r): Json<PathReq>) -> Json<Value> {
+async fn ingest(State(s): State<MaktabState>, Json(r): Json<PathReq>) -> Json<Value> {
     let project = proj(r.project.clone());
     if let Err(e) = require(&s, &project).await {
         return e;
@@ -356,7 +356,7 @@ async fn ingest(State(s): State<AtlasState>, Json(r): Json<PathReq>) -> Json<Val
     })
 }
 
-async fn extract(State(s): State<AtlasState>, Query(sc): Query<Scoped>) -> Json<Value> {
+async fn extract(State(s): State<MaktabState>, Query(sc): Query<Scoped>) -> Json<Value> {
     let project = proj(sc.project);
     if let Err(e) = require(&s, &project).await {
         return e;
@@ -371,7 +371,7 @@ async fn extract(State(s): State<AtlasState>, Query(sc): Query<Scoped>) -> Json<
     })
 }
 
-async fn cluster(State(s): State<AtlasState>, Query(sc): Query<Scoped>) -> Json<Value> {
+async fn cluster(State(s): State<MaktabState>, Query(sc): Query<Scoped>) -> Json<Value> {
     let project = proj(sc.project);
     if let Err(e) = require(&s, &project).await {
         return e;
@@ -384,7 +384,7 @@ async fn cluster(State(s): State<AtlasState>, Query(sc): Query<Scoped>) -> Json<
 }
 
 async fn upload(
-    State(s): State<AtlasState>,
+    State(s): State<MaktabState>,
     Query(sc): Query<Scoped>,
     mut mp: Multipart,
 ) -> Json<Value> {
@@ -392,7 +392,7 @@ async fn upload(
     if let Err(e) = require(&s, &project).await {
         return e;
     }
-    let dir = home_base().join("atlas-uploads").join(sanitize(&project));
+    let dir = home_base().join("maktab-uploads").join(sanitize(&project));
     if let Err(e) = std::fs::create_dir_all(&dir) {
         return err(e.into());
     }
@@ -456,7 +456,7 @@ async fn upload(
 
 // --- read handlers ------------------------------------------------------
 
-async fn insights(State(s): State<AtlasState>, Query(sc): Query<Scoped>) -> Json<Value> {
+async fn insights(State(s): State<MaktabState>, Query(sc): Query<Scoped>) -> Json<Value> {
     if proj(sc.project.clone()).is_empty() {
         return Json(json!({
             "nodes": 0, "edges": 0, "clusters": 0,
@@ -469,7 +469,7 @@ async fn insights(State(s): State<AtlasState>, Query(sc): Query<Scoped>) -> Json
     }
 }
 
-async fn query(State(s): State<AtlasState>, Query(q): Query<Q>) -> Json<Value> {
+async fn query(State(s): State<MaktabState>, Query(q): Query<Q>) -> Json<Value> {
     if proj(q.project.clone()).is_empty() {
         return Json(json!({ "hits": [] }));
     }
@@ -489,7 +489,7 @@ async fn query(State(s): State<AtlasState>, Query(q): Query<Q>) -> Json<Value> {
 /// Query-time RAG for the UI "Ask": retrieve → LLM answer + citations.
 /// `LlmBackend::from_env()` is read per-request; absent → degraded
 /// (ranked sources + note), never a 500.
-async fn answer(State(s): State<AtlasState>, Query(q): Query<Q>) -> Json<Value> {
+async fn answer(State(s): State<MaktabState>, Query(q): Query<Q>) -> Json<Value> {
     if proj(q.project.clone()).is_empty() {
         return Json(json!({
             "answer": "", "citations": [],
@@ -513,8 +513,8 @@ async fn answer(State(s): State<AtlasState>, Query(q): Query<Q>) -> Json<Value> 
 
 /// List all projects (table-backed, create-first) with per-project corpus
 /// counts. This is the authoritative project list — the old "distinct project
-/// from atlas_node" union is gone.
-async fn projects_list(State(s): State<AtlasState>) -> Json<Value> {
+/// from maktab_node" union is gone.
+async fn projects_list(State(s): State<MaktabState>) -> Json<Value> {
     match crate::project::list_with_counts(&s.db).await {
         Ok(v) => Json(v),
         Err(e) => err(e),
@@ -523,7 +523,7 @@ async fn projects_list(State(s): State<AtlasState>) -> Json<Value> {
 
 /// Create a project by name (slug derived; name/slug UNIQUE).
 async fn projects_create(
-    State(s): State<AtlasState>,
+    State(s): State<MaktabState>,
     Json(r): Json<CreateProjectReq>,
 ) -> Json<Value> {
     match crate::project::create(&s.db, &r.name, r.description).await {
@@ -532,7 +532,7 @@ async fn projects_create(
     }
 }
 
-async fn project_get(State(s): State<AtlasState>, Path(slug): Path<String>) -> Json<Value> {
+async fn project_get(State(s): State<MaktabState>, Path(slug): Path<String>) -> Json<Value> {
     match crate::project::get(&s.db, &slug).await {
         Ok(Some(v)) => Json(v),
         Ok(None) => Json(json!({ "error": format!("project '{slug}' not found") })),
@@ -541,7 +541,7 @@ async fn project_get(State(s): State<AtlasState>, Path(slug): Path<String>) -> J
 }
 
 async fn project_patch(
-    State(s): State<AtlasState>,
+    State(s): State<MaktabState>,
     Path(slug): Path<String>,
     Json(r): Json<PatchProjectReq>,
 ) -> Json<Value> {
@@ -551,7 +551,7 @@ async fn project_patch(
     }
 }
 
-async fn project_delete(State(s): State<AtlasState>, Path(slug): Path<String>) -> Json<Value> {
+async fn project_delete(State(s): State<MaktabState>, Path(slug): Path<String>) -> Json<Value> {
     match crate::project::delete(&s.db, &slug).await {
         Ok(()) => Json(json!({ "deleted": slug })),
         Err(e) => err(e),
@@ -561,7 +561,7 @@ async fn project_delete(State(s): State<AtlasState>, Path(slug): Path<String>) -
 /// Node+edge dump for the UI (Cytoscape-friendly). With `docs_only=true`
 /// (Phase B3 concept map): only `kind='document'` nodes and the
 /// document↔document `related`/`embedding` edges.
-async fn graph(State(s): State<AtlasState>, Query(sc): Query<Scoped>) -> Json<Value> {
+async fn graph(State(s): State<MaktabState>, Query(sc): Query<Scoped>) -> Json<Value> {
     let p = proj(sc.project.clone());
     if p.is_empty() {
         return Json(json!({ "nodes": [], "edges": [] }));
@@ -569,15 +569,15 @@ async fn graph(State(s): State<AtlasState>, Query(sc): Query<Scoped>) -> Json<Va
     let pid = crate::project::rid(&p);
     let (node_sql, edge_sql) = if sc.docs_only {
         (
-            "SELECT id, kind, label, cluster FROM atlas_node \
+            "SELECT id, kind, label, cluster FROM maktab_node \
              WHERE project=$p AND kind='document' LIMIT 4000",
-            "SELECT in, out, relation, resolution, score FROM atlas_edge \
+            "SELECT in, out, relation, resolution, score FROM maktab_edge \
              WHERE project=$p AND relation='related' AND via='embedding' LIMIT 8000",
         )
     } else {
         (
-            "SELECT id, kind, label, cluster FROM atlas_node WHERE project=$p LIMIT 4000",
-            "SELECT in, out, relation, resolution, score FROM atlas_edge \
+            "SELECT id, kind, label, cluster FROM maktab_node WHERE project=$p LIMIT 4000",
+            "SELECT in, out, relation, resolution, score FROM maktab_edge \
              WHERE project=$p LIMIT 8000",
         )
     };

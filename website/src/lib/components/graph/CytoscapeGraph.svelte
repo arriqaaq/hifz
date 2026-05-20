@@ -47,7 +47,7 @@
     source: string;
     target: string;
     kind?: EdgeClass;
-    // hifz activity rels (EdgeRel) or atlas relations
+    // hifz activity rels (EdgeRel) or maktab relations
     // (calls/imports/contains/related/mentions, …) — accept any string.
     rel?: EdgeRel | string;
   }
@@ -103,7 +103,7 @@
     for (const e of es) {
       // Cytoscape throws on an edge whose source/target node is absent, which
       // blanks the whole canvas — skip orphans defensively (the backend also
-      // prunes them, but atlas graphs can exceed the node cap and dangle).
+      // prunes them, but maktab graphs can exceed the node cap and dangle).
       if (!nodeIds.has(e.source) || !nodeIds.has(e.target)) continue;
       els.push({
         data: {

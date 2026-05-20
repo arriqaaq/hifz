@@ -1,4 +1,4 @@
-//! Code parsing primitives shared by hifz indexing and atlas.
+//! Code parsing primitives shared by hifz indexing and maktab.
 //!
 //! `lang` (extension → tree-sitter grammar) and `walker` (gitignore-respecting
 //! file discovery), plus the code-intelligence core (`langcfg`, `langmod`,

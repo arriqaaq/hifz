@@ -850,7 +850,10 @@ impl Hifz {
             })
             .collect();
         let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let dir = PathBuf::from(home).join(".hifz").join("code-repos").join(slug);
+        let dir = PathBuf::from(home)
+            .join(".hifz")
+            .join("code-repos")
+            .join(slug);
         if dir.join(".git").is_dir() {
             let ok = std::process::Command::new("git")
                 .arg("-C")

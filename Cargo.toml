@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "crates/kernel", "crates/memdiff", "crates/atlas"]
+members = [".", "crates/kernel", "crates/memdiff", "crates/maktab"]
 
 # Shared deps that MUST share one resolution across the workspace.
 # surrealdb is a git-rev pin (not on crates.io) — a rev mismatch between
@@ -16,9 +16,9 @@ default-run = "hifz"
 [dependencies]
 kernel = { path = "crates/kernel" }
 memdiff = { path = "crates/memdiff" }
-# atlas corpus-graph product, mounted under /api/v1/atlas behind the
-# `atlas` feature. Optional → default build is byte-identical without it.
-atlas = { path = "crates/atlas", optional = true }
+# maktab corpus-graph product, mounted under /api/v1/maktab behind the
+# `maktab` feature. Optional → default build is byte-identical without it.
+maktab = { path = "crates/maktab", optional = true }
 # Web
 axum = { version = "0.8", features = ["macros"] }
 tokio = { version = "1", features = ["full"] }
@@ -94,9 +94,9 @@ notify                 = "8"
 notify-debouncer-mini  = "0.6"
 
 [features]
-# atlas: mount the corpus-graph product under /api/v1/atlas. Not in
+# maktab: mount the corpus-graph product under /api/v1/maktab. Not in
 # `default` → standard builds/daemon are unaffected.
-atlas = ["dep:atlas"]
+maktab = ["dep:maktab"]
 
 # For local dev: uncomment to use local SurrealDB checkout instead of git
 # [patch.crates-io]

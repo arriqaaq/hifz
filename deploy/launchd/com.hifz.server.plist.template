@@ -52,7 +52,7 @@
         <string>__PORT__</string>
         <key>PATH</key>
         <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
-        <!-- LLM backend for atlas RAG ("Ask") + compression/consolidation.
+        <!-- LLM backend for maktab RAG ("Ask") + compression/consolidation.
              Rendered by install-service.sh (env-overridable defaults). -->
         <key>OLLAMA_URL</key>
         <string>__OLLAMA_URL__</string>

@@ -1,10 +1,10 @@
 [package]
-name = "atlas"
+name = "maktab"
 version = "0.1.0"
 edition = "2024"
 
 [[bin]]
-name = "atlas"
+name = "maktab"
 path = "src/main.rs"
 
 [dependencies]

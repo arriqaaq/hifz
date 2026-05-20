@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { listProjects, createProject, type AtlasProject } from '$lib/api';
+  import { listProjects, createProject, type MaktabProject } from '$lib/api';
 
   // `project` is the selected slug (bindable). `onchange` fires whenever the
   // selection changes (incl. on initial restore) so the parent can refetch.
@@ -9,7 +9,7 @@
     onchange,
   }: { project?: string; onchange?: (slug: string) => void } = $props();
 
-  let projects = $state<AtlasProject[]>([]);
+  let projects = $state<MaktabProject[]>([]);
   let loading = $state(true);
   let showNew = $state(false);
   let newName = $state('');
@@ -18,7 +18,7 @@
   function restore(): string {
     try {
       const u = new URL(window.location.href);
-      return u.searchParams.get('project') || localStorage.getItem('atlas.project') || '';
+      return u.searchParams.get('project') || localStorage.getItem('maktab.project') || '';
     } catch {
       return '';
     }
@@ -29,7 +29,7 @@
       if (slug) u.searchParams.set('project', slug);
       else u.searchParams.delete('project');
       window.history.replaceState({}, '', u.toString());
-      localStorage.setItem('atlas.project', slug);
+      localStorage.setItem('maktab.project', slug);
     } catch {
       /* non-browser context */
     }

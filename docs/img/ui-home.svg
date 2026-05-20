@@ -47,7 +47,7 @@
   <circle class="ic" cx="31" cy="278" r="2.5"/>
   <circle class="ic" cx="28" cy="290" r="2.5"/>
   <path class="ic" d="M20 281 L29 279 M20 284 L27 289"/>
-  <!-- Atlas (boxes / cube) -->
+  <!-- Maktab (boxes / cube) -->
   <path class="ic" d="M24 313 l7 4 v8 l-7 4 -7 -4 v-8 z M24 313 v8 M24 321 l7 -4 M24 321 l-7 -4"/>
   <!-- Commits -->
   <circle class="ic" cx="24" cy="356" r="4"/>
@@ -114,11 +114,11 @@
     </g>
   </g>
 
-  <!-- Atlas -->
-  <text class="faint h11" x="66" y="316">Atlas</text>
+  <!-- Maktab -->
+  <text class="faint h11" x="66" y="316">Maktab</text>
   <g transform="translate(0,322)">
     <rect x="66" y="13" width="8" height="8" rx="2" fill="#475569"/>
-    <text class="lbl" x="86" y="24">Atlas</text>
+    <text class="lbl" x="86" y="24">Maktab</text>
   </g>
   <g transform="translate(0,350)">
     <rect x="66" y="13" width="8" height="8" rx="2" fill="#475569"/>
@@ -305,7 +305,7 @@
     <line class="line" x1="818" y1="316" x2="1074" y2="316"/>
     <g transform="translate(0,72)"><text class="lbl" x="818" y="258">code-index</text><text class="faint mono" x="1074" y="258" text-anchor="end" font-size="12">118</text></g>
     <line class="line" x1="818" y1="340" x2="1074" y2="340"/>
-    <g transform="translate(0,96)"><text class="lbl" x="818" y="258">atlas</text><text class="faint mono" x="1074" y="258" text-anchor="end" font-size="12">96</text></g>
+    <g transform="translate(0,96)"><text class="lbl" x="818" y="258">maktab</text><text class="faint mono" x="1074" y="258" text-anchor="end" font-size="12">96</text></g>
   </g>
 
   <!-- right column: Recent Commits -->
@@ -319,9 +319,9 @@
     <line class="line" x1="818" y1="458" x2="1074" y2="458"/>
     <g transform="translate(0,24)"><text class="mono" x="818" y="448" fill="#C2410C" font-size="12">0aaa0eb</text><text class="faint" x="1074" y="448" text-anchor="end" font-size="12">remove truncation</text></g>
     <line class="line" x1="818" y1="482" x2="1074" y2="482"/>
-    <g transform="translate(0,48)"><text class="mono" x="818" y="448" fill="#C2410C" font-size="12">85fbfad</text><text class="faint" x="1074" y="448" text-anchor="end" font-size="12">atlas fixes</text></g>
+    <g transform="translate(0,48)"><text class="mono" x="818" y="448" fill="#C2410C" font-size="12">85fbfad</text><text class="faint" x="1074" y="448" text-anchor="end" font-size="12">maktab fixes</text></g>
     <line class="line" x1="818" y1="506" x2="1074" y2="506"/>
-    <g transform="translate(0,72)"><text class="mono" x="818" y="448" fill="#C2410C" font-size="12">5958e25</text><text class="faint" x="1074" y="448" text-anchor="end" font-size="12">atlas qna</text></g>
+    <g transform="translate(0,72)"><text class="mono" x="818" y="448" fill="#C2410C" font-size="12">5958e25</text><text class="faint" x="1074" y="448" text-anchor="end" font-size="12">maktab qna</text></g>
     <line class="line" x1="818" y1="530" x2="1074" y2="530"/>
     <g transform="translate(0,96)"><text class="mono" x="818" y="448" fill="#C2410C" font-size="12">7106ed0</text><text class="faint" x="1074" y="448" text-anchor="end" font-size="12">clippy fixes</text></g>
   </g>

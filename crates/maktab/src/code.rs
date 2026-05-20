@@ -1,6 +1,6 @@
-//! Code-graph projection. atlas runs hifz-core's code-intelligence core
+//! Code-graph projection. maktab runs hifz-core's code-intelligence core
 //! (walk → semantic scope-qualified identity → 3-state resolution) itself
-//! and *projects* the result into its own `atlas_node`/`atlas_edge` so the
+//! and *projects* the result into its own `maktab_node`/`maktab_edge` so the
 //! code graph clusters jointly with documents/concepts. Fully recomputed
 //! each run (derived data) → idempotent. Nothing is dropped: `external`
 //! targets become `external` nodes; `ambiguous` fans out to candidates.
@@ -38,7 +38,7 @@ fn nkey(project: &str, ns: &str, val: &str) -> String {
     hex::encode(&h.finalize()[..16])
 }
 fn rid(project: &str, ns: &str, val: &str) -> RecordId {
-    RecordId::new("atlas_node", nkey(project, ns, val))
+    RecordId::new("maktab_node", nkey(project, ns, val))
 }
 
 pub async fn project_code_graph(
@@ -53,19 +53,19 @@ pub async fn project_code_graph(
     // Wipe prior derived code graph for this project (doc/concept untouched).
     let _ = store
         .db
-        .query("DELETE atlas_edge WHERE project=$p AND via='code'")
+        .query("DELETE maktab_edge WHERE project=$p AND via='code'")
         .bind(("p", pid.clone()))
         .await;
     let _ = store
         .db
-        .query("DELETE atlas_node WHERE project=$p AND kind IN ['code_symbol','external','file']")
+        .query("DELETE maktab_node WHERE project=$p AND kind IN ['code_symbol','external','file']")
         .bind(("p", pid.clone()))
         .await;
 
     // If hifz core has already parsed this project, project the code graph
     // *from core* (the single source of truth) instead of re-walking the repo.
     // Falls through to the standalone parse below only when core is empty
-    // (e.g. `atlas serve` with no hifz code index).
+    // (e.g. `maktab serve` with no hifz code index).
     {
         #[derive(Debug, SurrealValue)]
         struct Cnt {
@@ -118,7 +118,7 @@ pub async fn project_code_graph(
 
     // File/module nodes (so `imports` edges have a real source).
     for m in &modules {
-        let id = format!("atlas_node:{}", nkey(&p, "file", m));
+        let id = format!("maktab_node:{}", nkey(&p, "file", m));
         let _ = store
             .db
             .query(
@@ -137,7 +137,7 @@ pub async fn project_code_graph(
     let known: std::collections::HashSet<&str> =
         pg.defs.iter().map(|d| d.qualified.as_str()).collect();
     for d in &pg.defs {
-        let id = format!("atlas_node:{}", nkey(&p, "code", &d.qualified));
+        let id = format!("maktab_node:{}", nkey(&p, "code", &d.qualified));
         let lang = qual_lang.get(&d.qualified).copied().unwrap_or("");
         let emb = embedder.embed_single(&d.qualified).ok();
         let _ = store
@@ -178,7 +178,7 @@ pub async fn project_code_graph(
                 }
             }
             Resolution::External => {
-                let id = format!("atlas_node:{}", nkey(&p, "ext", &e.to));
+                let id = format!("maktab_node:{}", nkey(&p, "ext", &e.to));
                 let _ = store
                     .db
                     .query(
@@ -210,7 +210,7 @@ pub async fn project_code_graph(
             let _ = store
                 .db
                 .query(
-                    "RELATE $f->atlas_edge->$t SET project=$p, relation=$rel, \
+                    "RELATE $f->maktab_edge->$t SET project=$p, relation=$rel, \
                      via='code', score=$s, resolution=$res, created_at=$now",
                 )
                 .bind(("f", from.clone()))
@@ -226,7 +226,7 @@ pub async fn project_code_graph(
     }
 
     tracing::info!(
-        "atlas code projection: symbols={} files={} ext={} edges={}",
+        "maktab code projection: symbols={} files={} ext={} edges={}",
         report.symbols,
         report.files,
         report.externals,
@@ -236,9 +236,9 @@ pub async fn project_code_graph(
 }
 
 /// Project the code graph from hifz core's already-parsed tables
-/// (`code_symbol` / `external_symbol` / `edge`) into `atlas_node`/`atlas_edge`.
+/// (`code_symbol` / `external_symbol` / `edge`) into `maktab_node`/`maktab_edge`.
 /// No repo walk — core is the single source of truth. Caller has already
-/// wiped this project's `via='code'` atlas rows.
+/// wiped this project's `via='code'` maktab rows.
 async fn project_from_core(
     store: &Store,
     embedder: &Embedder,
@@ -247,7 +247,7 @@ async fn project_from_core(
     now: &str,
 ) -> Result<CodeProjectReport> {
     let mut report = CodeProjectReport::default();
-    // core record id → projected atlas_node id, for edge wiring.
+    // core record id → projected maktab_node id, for edge wiring.
     let mut node_map: HashMap<RecordId, RecordId> = HashMap::new();
 
     // Symbols.
@@ -291,7 +291,7 @@ async fn project_from_core(
                  qualified=$q, language=$lang, summary=$sig, path=$path, source_kind='code', \
                  source_uri=$uri, source_ref=$sref, embedding=$e, cluster=-1, created_at=$now",
             )
-            .bind(("id", format!("atlas_node:{}", nkey(p, "code", &q))))
+            .bind(("id", format!("maktab_node:{}", nkey(p, "code", &q))))
             .bind(("p", pid.clone()))
             .bind(("l", s.name.clone().unwrap_or_else(|| q.clone())))
             .bind(("q", q.clone()))
@@ -330,7 +330,7 @@ async fn project_from_core(
                 "UPSERT type::record($id) SET project=$p, kind='external', label=$l, \
                  qualified=$l, cluster=-1, created_at=$now",
             )
-            .bind(("id", format!("atlas_node:{}", nkey(p, "ext", &c))))
+            .bind(("id", format!("maktab_node:{}", nkey(p, "ext", &c))))
             .bind(("p", pid.clone()))
             .bind(("l", c.clone()))
             .bind(("now", now.to_string()))
@@ -362,7 +362,7 @@ async fn project_from_core(
                 "UPSERT type::record($id) SET project=$p, kind='file', label=$l, \
                  qualified=$l, path=$l, cluster=-1, created_at=$now",
             )
-            .bind(("id", format!("atlas_node:{}", nkey(p, "file", &path))))
+            .bind(("id", format!("maktab_node:{}", nkey(p, "file", &path))))
             .bind(("p", pid.clone()))
             .bind(("l", path.clone()))
             .bind(("now", now.to_string()))
@@ -371,7 +371,7 @@ async fn project_from_core(
         report.files += 1;
     }
 
-    // Edges — translate core endpoints to projected atlas_node ids.
+    // Edges — translate core endpoints to projected maktab_node ids.
     #[derive(Debug, SurrealValue)]
     struct Ed {
         r#in: RecordId,
@@ -398,7 +398,7 @@ async fn project_from_core(
         let _ = store
             .db
             .query(
-                "RELATE $f->atlas_edge->$t SET project=$p, relation=$rel, via='code', \
+                "RELATE $f->maktab_edge->$t SET project=$p, relation=$rel, via='code', \
                  score=$s, resolution=$res, created_at=$now",
             )
             .bind(("f", from.clone()))
@@ -406,14 +406,17 @@ async fn project_from_core(
             .bind(("p", pid.clone()))
             .bind(("rel", e.relation.clone().unwrap_or_default()))
             .bind(("s", e.score.unwrap_or(1.0)))
-            .bind(("res", e.resolution.clone().unwrap_or_else(|| "resolved".into())))
+            .bind((
+                "res",
+                e.resolution.clone().unwrap_or_else(|| "resolved".into()),
+            ))
             .bind(("now", now.to_string()))
             .await;
         report.edges += 1;
     }
 
     tracing::info!(
-        "atlas code projection (from core): symbols={} files={} ext={} edges={}",
+        "maktab code projection (from core): symbols={} files={} ext={} edges={}",
         report.symbols,
         report.files,
         report.externals,
@@ -446,7 +449,7 @@ mod tests {
         .unwrap();
 
         let db = kernel::db::connect_mem().await.unwrap();
-        crate::store::init_atlas_schema(&db, 384).await.unwrap();
+        crate::store::init_maktab_schema(&db, 384).await.unwrap();
         let store = Store::new(db, "demo");
         let emb = Embedder::new().unwrap();
 
@@ -460,7 +463,7 @@ mod tests {
         }
         let mut q = store
             .db
-            .query("SELECT qualified FROM atlas_node WHERE kind='code_symbol' AND label='run'")
+            .query("SELECT qualified FROM maktab_node WHERE kind='code_symbol' AND label='run'")
             .await
             .unwrap();
         let rows: Vec<Q> = q.take(0).unwrap_or_default();
@@ -477,7 +480,7 @@ mod tests {
         }
         let mut cc = store
             .db
-            .query("SELECT count() AS c FROM atlas_edge WHERE relation='calls' AND resolution='resolved' GROUP ALL")
+            .query("SELECT count() AS c FROM maktab_edge WHERE relation='calls' AND resolution='resolved' GROUP ALL")
             .await
             .unwrap();
         let rows: Vec<C> = cc.take(0).unwrap_or_default();

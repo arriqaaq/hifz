@@ -1,13 +1,13 @@
-//! Project: the first-class parent entity of the Atlas knowledge base.
+//! Project: the first-class parent entity of the Maktab knowledge base.
 //!
 //! A user creates a project by name; everything they ingest (documents,
 //! indexed code, future links) is scoped to it via `record<project>` on
-//! `atlas_node` / `atlas_chunk` / `atlas_edge`. The record id **is the slug**
+//! `maktab_node` / `maktab_chunk` / `maktab_edge`. The record id **is the slug**
 //! (`project:my-kb`), so a reference is constructable from a known slug with
 //! no lookup ([`rid`]). Creation is **explicit** — nothing auto-creates a
 //! project; build/ingest handlers reject an unknown slug (see `web::require`).
 //!
-//! Scoped to Atlas only: the kernel telemetry tables (session/observation/
+//! Scoped to Maktab only: the kernel telemetry tables (session/observation/
 //! memory/…) keep their own cwd-derived string `project` and are NOT part of
 //! this entity.
 
@@ -124,7 +124,7 @@ pub async fn patch(db: &Surreal<Db>, slug: &str, description: Option<String>) ->
 /// table whose endpoints are nodes) → chunks → nodes → the project row.
 pub async fn delete(db: &Surreal<Db>, slug: &str) -> Result<()> {
     let pid = rid(slug);
-    for tbl in ["atlas_edge", "atlas_chunk", "atlas_node"] {
+    for tbl in ["maktab_edge", "maktab_chunk", "maktab_node"] {
         db.query(format!("DELETE {tbl} WHERE project=$p"))
             .bind(("p", pid.clone()))
             .await?
@@ -170,11 +170,11 @@ pub async fn list_with_counts(db: &Surreal<Db>) -> Result<Value> {
     let projects: Vec<ProjRow> = pr.take(0).unwrap_or_default();
 
     let mut nq = db
-        .query("SELECT project, kind, count() AS c FROM atlas_node GROUP BY project, kind")
+        .query("SELECT project, kind, count() AS c FROM maktab_node GROUP BY project, kind")
         .await?;
     let node_counts: Vec<NodeGroup> = nq.take(0).unwrap_or_default();
     let mut eq = db
-        .query("SELECT project, count() AS c FROM atlas_edge GROUP BY project")
+        .query("SELECT project, count() AS c FROM maktab_edge GROUP BY project")
         .await?;
     let edge_counts: Vec<EdgeGroup> = eq.take(0).unwrap_or_default();
 
@@ -230,7 +230,7 @@ mod tests {
     #[tokio::test]
     async fn create_list_delete_roundtrip() {
         let db = kernel::db::connect_mem().await.unwrap();
-        crate::store::init_atlas_schema(&db, 384).await.unwrap();
+        crate::store::init_maktab_schema(&db, 384).await.unwrap();
 
         assert!(!exists(&db, "my-kb").await.unwrap());
         let p = create(&db, "My KB", Some("notes".into())).await.unwrap();

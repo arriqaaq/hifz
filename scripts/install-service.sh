@@ -19,9 +19,9 @@ LOG_DIR="$HOME/.hifz/logs"
 PLIST_SRC="$REPO/deploy/launchd/$LABEL.plist.template"
 PLIST_DST="$HOME/Library/LaunchAgents/$LABEL.plist"
 DOMAIN="gui/$(id -u)"
-# LLM backend for the daemon (atlas "Ask" RAG + compression/consolidation).
+# LLM backend for the daemon (maktab "Ask" RAG + compression/consolidation).
 # Env-overridable; defaults to a local Ollama. The model must be pulled
-# (`ollama pull <model>`) or completions fail and atlas degrades to
+# (`ollama pull <model>`) or completions fail and maktab degrades to
 # sources-only. `qwen3:8b` is the locally-available default.
 OLLAMA_URL="${OLLAMA_URL:-http://127.0.0.1:11434}"
 OLLAMA_MODEL="${OLLAMA_MODEL:-qwen3:8b}"

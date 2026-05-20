@@ -132,18 +132,18 @@ pub async fn extract_concepts(
     // a re-run can't leave orphans (they UPSERT back deterministically).
     let _ = store
         .db
-        .query("DELETE atlas_edge WHERE project=$p AND via IN ['llm','embedding']")
+        .query("DELETE maktab_edge WHERE project=$p AND via IN ['llm','embedding']")
         .bind(("p", pid.clone()))
         .await;
     let _ = store
         .db
-        .query("DELETE atlas_node WHERE project=$p AND kind='concept'")
+        .query("DELETE maktab_node WHERE project=$p AND kind='concept'")
         .bind(("p", pid.clone()))
         .await;
 
     let mut dr = store
         .db
-        .query("SELECT id, embedding FROM atlas_node WHERE project=$p AND kind='document'")
+        .query("SELECT id, embedding FROM maktab_node WHERE project=$p AND kind='document'")
         .bind(("p", pid.clone()))
         .await?;
     let docs: Vec<DocRow> = dr.take(0).unwrap_or_default();
@@ -160,7 +160,7 @@ pub async fn extract_concepts(
                     let _ = store
                         .db
                         .query(
-                            "RELATE $a->atlas_edge->$b SET project=$p, \
+                            "RELATE $a->maktab_edge->$b SET project=$p, \
                              relation='related', via='embedding', score=$s, \
                              created_at=$now",
                         )
@@ -189,7 +189,7 @@ pub async fn extract_concepts(
         let mut cr = store
             .db
             .query(
-                "SELECT content, chunk_index FROM atlas_chunk WHERE node=$n \
+                "SELECT content, chunk_index FROM maktab_chunk WHERE node=$n \
                  ORDER BY chunk_index LIMIT $lim",
             )
             .bind(("n", doc.id.clone()))
@@ -245,7 +245,7 @@ pub async fn extract_concepts(
                     continue;
                 }
                 let ckey = concept_key(&store.project, label);
-                let crid = RecordId::new("atlas_node", ckey.clone());
+                let crid = RecordId::new("maktab_node", ckey.clone());
                 if seen_concept.insert(ckey.clone()) {
                     let emb = embedder.embed_single(label).ok();
                     let created = store
@@ -254,7 +254,7 @@ pub async fn extract_concepts(
                             "UPSERT type::record($id) SET project=$p, kind='concept', \
                              label=$l, embedding=$e, cluster=-1, created_at=$now",
                         )
-                        .bind(("id", format!("atlas_node:{ckey}")))
+                        .bind(("id", format!("maktab_node:{ckey}")))
                         .bind(("p", pid.clone()))
                         .bind(("l", label.trim().to_string()))
                         .bind(("e", emb))
@@ -270,7 +270,7 @@ pub async fn extract_concepts(
                     let _ = store
                         .db
                         .query(
-                            "RELATE $d->atlas_edge->$c SET project=$p, \
+                            "RELATE $d->maktab_edge->$c SET project=$p, \
                              relation='mentions', via='llm', score=1.0, \
                              created_at=$now",
                         )
@@ -297,11 +297,11 @@ pub async fn extract_concepts(
                     let _ = store
                         .db
                         .query(
-                            "RELATE $s->atlas_edge->$t SET project=$p, \
+                            "RELATE $s->maktab_edge->$t SET project=$p, \
                              relation=$r, via='llm', score=0.8, created_at=$now",
                         )
-                        .bind(("s", RecordId::new("atlas_node", sk)))
-                        .bind(("t", RecordId::new("atlas_node", tk)))
+                        .bind(("s", RecordId::new("maktab_node", sk)))
+                        .bind(("t", RecordId::new("maktab_node", tk)))
                         .bind(("p", pid.clone()))
                         .bind(("r", rel))
                         .bind(("now", now.clone()))
@@ -320,7 +320,7 @@ mod tests {
     use crate::store::Store;
 
     async fn seed_doc(store: &Store, emb: &Embedder, label: &str, body: &str) {
-        let id = format!("atlas_node:doc_{}", label.replace(' ', "_"));
+        let id = format!("maktab_node:doc_{}", label.replace(' ', "_"));
         let e = emb.embed_single(body).ok();
         let pid = store.pid();
         store
@@ -339,7 +339,7 @@ mod tests {
             .unwrap();
         store
             .db
-            .query("CREATE atlas_chunk SET node=type::record($id), project=$p, chunk_index=0, content=$c, created_at='2026-01-01'")
+            .query("CREATE maktab_chunk SET node=type::record($id), project=$p, chunk_index=0, content=$c, created_at='2026-01-01'")
             .bind(("id", id))
             .bind(("p", pid.clone()))
             .bind(("c", body.to_string()))
@@ -352,7 +352,7 @@ mod tests {
     #[tokio::test]
     async fn stub_backend_extracts_and_dedupes() {
         let db = kernel::db::connect_mem().await.unwrap();
-        crate::store::init_atlas_schema(&db, 384).await.unwrap();
+        crate::store::init_maktab_schema(&db, 384).await.unwrap();
         let store = Store::new(db, "demo");
         let emb = Embedder::new().unwrap();
         seed_doc(
@@ -382,19 +382,19 @@ mod tests {
         };
         let concepts = cnt(
             store.db.clone(),
-            "SELECT count() AS c FROM atlas_node WHERE kind='concept' GROUP ALL",
+            "SELECT count() AS c FROM maktab_node WHERE kind='concept' GROUP ALL",
         )
         .await;
         assert_eq!(concepts, 2, "Auth Flow + JWT, deduped");
         let mentions = cnt(
             store.db.clone(),
-            "SELECT count() AS c FROM atlas_edge WHERE relation='mentions' GROUP ALL",
+            "SELECT count() AS c FROM maktab_edge WHERE relation='mentions' GROUP ALL",
         )
         .await;
         assert_eq!(mentions, 2, "document mentions both concepts, once each");
         let all_edges = cnt(
             store.db.clone(),
-            "SELECT count() AS c FROM atlas_edge GROUP ALL",
+            "SELECT count() AS c FROM maktab_edge GROUP ALL",
         )
         .await;
         assert_eq!(all_edges, 3, "2 mentions + 1 concept→concept, no dup");
@@ -406,13 +406,13 @@ mod tests {
         }
         let concepts2 = cnt(
             store.db.clone(),
-            "SELECT count() AS c FROM atlas_node WHERE kind='concept' GROUP ALL",
+            "SELECT count() AS c FROM maktab_node WHERE kind='concept' GROUP ALL",
         )
         .await;
         assert_eq!(concepts2, 2, "no concept duplication after 3 more runs");
         let edges2 = cnt(
             store.db.clone(),
-            "SELECT count() AS c FROM atlas_edge GROUP ALL",
+            "SELECT count() AS c FROM maktab_edge GROUP ALL",
         )
         .await;
         assert_eq!(edges2, 3, "edge count STABLE across re-runs (B1 fixed)");
@@ -421,7 +421,7 @@ mod tests {
     #[tokio::test]
     async fn no_backend_fallback_links_similar_docs() {
         let db = kernel::db::connect_mem().await.unwrap();
-        crate::store::init_atlas_schema(&db, 384).await.unwrap();
+        crate::store::init_maktab_schema(&db, 384).await.unwrap();
         let store = Store::new(db, "demo");
         let emb = Embedder::new().unwrap();
         seed_doc(

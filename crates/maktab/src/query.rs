@@ -1,9 +1,9 @@
-//! Corpus retrieval: hybrid search over the atlas graph — vector KNN and
+//! Corpus retrieval: hybrid search over the maktab graph — vector KNN and
 //! BM25, fused with SurrealDB's `search::rrf`, the same idiom hifz-core uses
 //! (`src/search.rs` `search_hybrid_with_config`).
 //!
-//! Every branch is project-scoped. Document *content* lives in `atlas_chunk`;
-//! topical labels/summaries live in `atlas_node`. We fuse five branches
+//! Every branch is project-scoped. Document *content* lives in `maktab_chunk`;
+//! topical labels/summaries live in `maktab_node`. We fuse five branches
 //! across both tables in one `search::rrf` call so a strong chunk match
 //! outranks a weak label match by reciprocal rank, then hydrate each fused
 //! id back to its **source provenance** (the parent document's
@@ -89,15 +89,15 @@ pub async fn query(store: &Store, embedder: &Embedder, q: &str, limit: usize) ->
     // answer text; node label/summary catch topical/title matches.
     let sql = format!(
         "search::rrf([\
-             (SELECT id FROM atlas_chunk \
+             (SELECT id FROM maktab_chunk \
               WHERE project=$p AND embedding <|{limit},80|> $qv),\
-             (SELECT id, search::score(1) AS ft FROM atlas_chunk \
+             (SELECT id, search::score(1) AS ft FROM maktab_chunk \
               WHERE project=$p AND content @1,OR@ $q ORDER BY ft DESC LIMIT {limit}),\
-             (SELECT id FROM atlas_node \
+             (SELECT id FROM maktab_node \
               WHERE project=$p AND embedding <|{limit},80|> $qv),\
-             (SELECT id, search::score(2) AS ft FROM atlas_node \
+             (SELECT id, search::score(2) AS ft FROM maktab_node \
               WHERE project=$p AND label @2,OR@ $q ORDER BY ft DESC LIMIT {limit}),\
-             (SELECT id, search::score(3) AS ft FROM atlas_node \
+             (SELECT id, search::score(3) AS ft FROM maktab_node \
               WHERE project=$p AND summary @3,OR@ $q ORDER BY ft DESC LIMIT {limit})\
          ], {limit}, {RRF_K})"
     );
@@ -130,7 +130,7 @@ pub async fn query(store: &Store, embedder: &Embedder, q: &str, limit: usize) ->
     let mut node_ids: Vec<RecordId> = Vec::new();
     for r in &fused {
         let Some(id) = &r.id else { continue };
-        if rid_to_string(id).starts_with("atlas_chunk:") {
+        if rid_to_string(id).starts_with("maktab_chunk:") {
             chunk_ids.push(id.clone());
         } else {
             node_ids.push(id.clone());
@@ -143,7 +143,7 @@ pub async fn query(store: &Store, embedder: &Embedder, q: &str, limit: usize) ->
     if !chunk_ids.is_empty() {
         let mut cr = store
             .db
-            .query("SELECT id, node, content, chunk_index FROM atlas_chunk WHERE id IN $ids")
+            .query("SELECT id, node, content, chunk_index FROM maktab_chunk WHERE id IN $ids")
             .bind(("ids", chunk_ids))
             .await?;
         for c in cr.take::<Vec<ChunkRow>>(0).unwrap_or_default() {
@@ -159,7 +159,7 @@ pub async fn query(store: &Store, embedder: &Embedder, q: &str, limit: usize) ->
             .db
             .query(
                 "SELECT id, kind, label, summary, source_kind, source_uri, source_ref \
-                 FROM atlas_node WHERE id IN $ids",
+                 FROM maktab_node WHERE id IN $ids",
             )
             .bind(("ids", node_ids))
             .await?;
@@ -235,7 +235,7 @@ mod tests {
     use super::*;
 
     async fn seed(store: &Store, emb: &Embedder, key: &str, label: &str, body: &str) {
-        let id = format!("atlas_node:{key}");
+        let id = format!("maktab_node:{key}");
         let summary: String = body.chars().take(280).collect();
         let nemb = emb.embed_single(&format!("{label}\n{summary}")).ok();
         let pid = store.pid();
@@ -262,7 +262,7 @@ mod tests {
             store
                 .db
                 .query(
-                    "CREATE atlas_chunk SET node=type::record($id), project=$p, \
+                    "CREATE maktab_chunk SET node=type::record($id), project=$p, \
                      chunk_index=$i, content=$c, embedding=$e, created_at='2026-01-01'",
                 )
                 .bind(("id", id.clone()))
@@ -280,7 +280,7 @@ mod tests {
     #[tokio::test]
     async fn ranks_by_relevance_and_carries_provenance() {
         let db = kernel::db::connect_mem().await.unwrap();
-        crate::store::init_atlas_schema(&db, 384).await.unwrap();
+        crate::store::init_maktab_schema(&db, 384).await.unwrap();
         let store = Store::new(db, "demo");
         let emb = Embedder::new().unwrap();
         seed(
@@ -333,7 +333,7 @@ mod tests {
         // must appear ONCE (one Hit), not once-per-chunk, with chunk_count
         // reflecting the matched chunks.
         let db = kernel::db::connect_mem().await.unwrap();
-        crate::store::init_atlas_schema(&db, 384).await.unwrap();
+        crate::store::init_maktab_schema(&db, 384).await.unwrap();
         let store = Store::new(db, "demo");
         let emb = Embedder::new().unwrap();
         seed(
@@ -359,7 +359,7 @@ mod tests {
     #[tokio::test]
     async fn empty_query_is_empty() {
         let db = kernel::db::connect_mem().await.unwrap();
-        crate::store::init_atlas_schema(&db, 384).await.unwrap();
+        crate::store::init_maktab_schema(&db, 384).await.unwrap();
         let store = Store::new(db, "demo");
         let emb = Embedder::new().unwrap();
         assert!(query(&store, &emb, "   ", 10).await.unwrap().is_empty());

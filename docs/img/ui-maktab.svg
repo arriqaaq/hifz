@@ -58,11 +58,11 @@
     <g transform="translate(0,240)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#6B3FA0"/><text class="lbl" x="86" y="24">Memories</text><text class="faint mono" x="312" y="24" text-anchor="end" font-size="11">347</text></g>
     <g transform="translate(0,268)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#C2410C"/><text class="lbl" x="86" y="24">Commits</text><text class="faint mono" x="312" y="24" text-anchor="end" font-size="11">529</text></g>
   </g>
-  <text class="faint h11" x="66" y="316">Atlas</text>
+  <text class="faint h11" x="66" y="316">Maktab</text>
   <g transform="translate(0,322)">
     <rect class="alt" x="58" y="11" width="260" height="26" rx="6"/>
     <rect x="66" y="13" width="8" height="8" rx="2" fill="#475569"/>
-    <text x="86" y="24" font-size="13" fill="#1a1a1a" font-weight="500">Atlas</text>
+    <text x="86" y="24" font-size="13" fill="#1a1a1a" font-weight="500">Maktab</text>
   </g>
   <g transform="translate(0,350)"><rect x="66" y="13" width="8" height="8" rx="2" fill="#475569"/><text class="lbl" x="86" y="24">Knowledge graph</text></g>
   <text class="faint h11" x="66" y="398">Tools</text>
@@ -74,7 +74,7 @@
   <line class="line" x1="328" y1="48" x2="1120" y2="48"/>
   <rect x="344" y="14" width="20" height="20" rx="4" fill="none" class="line"/>
   <path class="ic" d="M350 20 h8 M350 24 h8 M350 28 h8"/>
-  <text class="ink" x="376" y="30" font-size="13" font-weight="600">Atlas</text>
+  <text class="ink" x="376" y="30" font-size="13" font-weight="600">Maktab</text>
   <rect class="surf" x="724" y="10" width="240" height="28" rx="6"/><rect x="724" y="10" width="240" height="28" rx="6" fill="none" class="line"/>
   <circle class="ic" cx="740" cy="24" r="4"/><path class="ic" d="M743 27 l3 3"/>
   <text class="faint" x="754" y="28" font-size="12">Search…</text>
@@ -83,7 +83,7 @@
   <circle cx="1024" cy="24" r="4" fill="#15803D"/><text class="muted mono" x="1034" y="28" font-size="12">v0.4.2</text>
 
   <!-- ===== MAIN ===== -->
-  <text class="ink" x="352" y="84" font-size="22" font-weight="700">Atlas</text>
+  <text class="ink" x="352" y="84" font-size="22" font-weight="700">Maktab</text>
   <text class="muted" x="352" y="106" font-size="13">Corpus knowledge graph — documents, concepts, and the code graph, clustered.</text>
 
   <!-- toolbar card -->

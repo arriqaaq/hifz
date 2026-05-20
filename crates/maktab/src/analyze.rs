@@ -1,5 +1,5 @@
-//! Corpus stats over the clustered atlas graph: node / edge / cluster counts
-//! for the Atlas page's stat cards. Typed `Insights` (Serialize → JSON).
+//! Corpus stats over the clustered maktab graph: node / edge / cluster counts
+//! for the Maktab page's stat cards. Typed `Insights` (Serialize → JSON).
 //!
 //! The earlier hub-node / surprising-link / isolated-node analytics were
 //! removed (display dropped from the UI; the listings added no value) — only
@@ -33,7 +33,7 @@ pub async fn analyze(store: &Store) -> Result<Insights> {
     // Node count + distinct (non -1) clusters in one scan of the cluster column.
     let mut nr = store
         .db
-        .query("SELECT cluster FROM atlas_node WHERE project=$p")
+        .query("SELECT cluster FROM maktab_node WHERE project=$p")
         .bind(("p", pid.clone()))
         .await?;
     let node_rows: Vec<ClusterRow> = nr.take(0).unwrap_or_default();
@@ -47,7 +47,7 @@ pub async fn analyze(store: &Store) -> Result<Insights> {
 
     let mut er = store
         .db
-        .query("SELECT count() AS c FROM atlas_edge WHERE project=$p GROUP ALL")
+        .query("SELECT count() AS c FROM maktab_edge WHERE project=$p GROUP ALL")
         .bind(("p", pid))
         .await?;
     let edges = er
@@ -74,7 +74,7 @@ mod tests {
         store
             .db
             .query("UPSERT type::record($id) SET project=project:demo, kind='concept', label=$l, cluster=$c, created_at='2026-01-01'")
-            .bind(("id", format!("atlas_node:{n}")))
+            .bind(("id", format!("maktab_node:{n}")))
             .bind(("l", n.to_string()))
             .bind(("c", c))
             .await
@@ -85,9 +85,9 @@ mod tests {
     async fn rel(store: &Store, a: &str, b: &str) {
         store
             .db
-            .query("RELATE $a->atlas_edge->$b SET project=project:demo, relation='related', via='t', score=1.0, created_at='2026-01-01'")
-            .bind(("a", RecordId::new("atlas_node", a.to_string())))
-            .bind(("b", RecordId::new("atlas_node", b.to_string())))
+            .query("RELATE $a->maktab_edge->$b SET project=project:demo, relation='related', via='t', score=1.0, created_at='2026-01-01'")
+            .bind(("a", RecordId::new("maktab_node", a.to_string())))
+            .bind(("b", RecordId::new("maktab_node", b.to_string())))
             .await
             .unwrap();
     }
@@ -95,7 +95,7 @@ mod tests {
     #[tokio::test]
     async fn insights_count_nodes_edges_clusters() {
         let db = kernel::db::connect_mem().await.unwrap();
-        crate::store::init_atlas_schema(&db, 384).await.unwrap();
+        crate::store::init_maktab_schema(&db, 384).await.unwrap();
         let store = Store::new(db, "demo");
         for (n, c) in [("hub", 0), ("x1", 0), ("x2", 0), ("y1", 1), ("orphan", 1)] {
             mk(&store, n, c).await;

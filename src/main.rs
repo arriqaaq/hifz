@@ -478,6 +478,7 @@ async fn async_main(cli: Cli) -> Result<()> {
             let req = hifz::models::CodeIndexReq {
                 project,
                 root: root.to_string_lossy().to_string(),
+                git: None,
                 follow_symlinks: Some(false),
                 max_file_bytes: Some(max_file_bytes),
             };

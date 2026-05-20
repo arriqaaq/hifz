@@ -1,6 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { codeSearch, codeIndex, type CodeSearchResult, type CodeIndexReport } from '$lib/api';
+  import {
+    codeSearch,
+    codeIndex,
+    codeProjects,
+    type CodeSearchResult,
+    type CodeIndexReport,
+  } from '$lib/api';
   import CodeSnippet from '$lib/components/code/CodeSnippet.svelte';
   import LoadingSpinner from '$lib/components/common/LoadingSpinner.svelte';
   import { Copy, Check, FileCode2, ArrowRight } from 'lucide-svelte';
@@ -9,6 +15,7 @@
   const PROJECT_KEY = 'code.project';
 
   let project = $state('');
+  let projects = $state<{ project: string; chunks: number }[]>([]);
   let query = $state('');
   let language = $state('');
   let path = $state('');
@@ -29,11 +36,19 @@
   let report = $state<CodeIndexReport | null>(null);
   let indexError = $state('');
 
-  onMount(() => {
+  onMount(async () => {
     try {
       project = localStorage.getItem(PROJECT_KEY) ?? '';
     } catch {
       /* non-browser / blocked */
+    }
+    try {
+      const res = await codeProjects();
+      projects = res.projects ?? [];
+      // Default to the only / first indexed project if none was remembered.
+      if (!project && projects.length) project = projects[0].project;
+    } catch {
+      projects = [];
     }
   });
 
@@ -76,6 +91,11 @@
     report = null;
     try {
       report = await codeIndex(project.trim(), root.trim());
+      try {
+        projects = (await codeProjects()).projects ?? projects;
+      } catch {
+        /* keep existing list */
+      }
     } catch (err) {
       indexError = err instanceof Error ? err.message : 'Index failed';
     } finally {
@@ -101,14 +121,33 @@
 </p>
 
 <div class="toolbar">
-  <input
-    class="project-input"
-    type="text"
-    placeholder="Project (e.g. hifz)"
-    bind:value={project}
-    onchange={persistProject}
-    aria-label="Project"
-  />
+  {#if projects.length > 0}
+    <select
+      class="project-input"
+      bind:value={project}
+      onchange={() => {
+        persistProject();
+        doSearch();
+      }}
+      aria-label="Project"
+    >
+      {#if !projects.some((p) => p.project === project)}
+        <option value="">Select project…</option>
+      {/if}
+      {#each projects as p}
+        <option value={p.project}>{p.project} · {p.chunks} chunks</option>
+      {/each}
+    </select>
+  {:else}
+    <input
+      class="project-input"
+      type="text"
+      placeholder="Project (e.g. hifz)"
+      bind:value={project}
+      onchange={persistProject}
+      aria-label="Project"
+    />
+  {/if}
   <button class="btn btn--small" class:btn--accent={showIndex} onclick={() => (showIndex = !showIndex)}>
     <FileCode2 size={13} strokeWidth={1.7} /> Index a repo
   </button>

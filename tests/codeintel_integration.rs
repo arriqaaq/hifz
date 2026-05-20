@@ -83,6 +83,7 @@ async fn e4_codeintel_end_to_end() {
     let req = CodeIndexReq {
         project: "demo".into(),
         root: repo.to_string_lossy().to_string(),
+        git: None,
         follow_symlinks: None,
         max_file_bytes: None,
     };
@@ -229,6 +230,7 @@ async fn doc_extraction_rust_python_js() {
     let req = CodeIndexReq {
         project: "docx".into(),
         root: repo.to_string_lossy().to_string(),
+        git: None,
         follow_symlinks: None,
         max_file_bytes: None,
     };

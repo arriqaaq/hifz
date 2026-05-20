@@ -614,6 +614,10 @@ pub async fn code_search(
     json_or_err(state.code_search(body).await)
 }
 
+pub async fn code_projects(State(state): State<AppState>) -> ApiResult {
+    json_or_err(state.code_projects().await)
+}
+
 pub async fn code_link(
     State(state): State<AppState>,
     AppJson(body): AppJson<CodeLinkReq>,

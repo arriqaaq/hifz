@@ -85,6 +85,7 @@ pub async fn serve(state: Hifz, port: u16) -> Result<()> {
     let core_api = core_api
         .route("/code/index", axum::routing::post(api::code_index))
         .route("/code/search", axum::routing::post(api::code_search))
+        .route("/code/projects", axum::routing::get(api::code_projects))
         .route("/code/link", axum::routing::post(api::code_link))
         .route(
             "/code/link/symbol",

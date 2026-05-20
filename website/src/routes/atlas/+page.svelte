@@ -8,6 +8,7 @@
     atlasExtract,
     atlasCluster,
     atlasUpload,
+    codeIndex,
     type AtlasInsights,
     type AtlasStatus,
   } from '$lib/api';
@@ -126,25 +127,59 @@
     }
   }
 
-  const buildAll = () =>
-    kick(
+  // Code is parsed ONCE by hifz core (`/code/index`); Atlas then projects the
+  // corpus graph from core. Run the core index first so the Atlas job reads it
+  // instead of re-walking the repo. Returns false on failure (abort the build).
+  async function coreIndex(): Promise<boolean> {
+    if (source === 'upload') return true; // uploads are docs, not code
+    const path = source === 'path' ? codePath.trim() : '';
+    const git = source === 'git' ? gitUrl.trim() : '';
+    if (!path && !git) return true; // docs-only build, nothing to index
+    buildLog = [...buildLog, '▶ index code (core)…'];
+    try {
+      const r = await codeIndex(project, path, { git: git || undefined });
+      buildLog = [
+        ...buildLog,
+        `  core: ${r.indexed} files · ${r.chunks} chunks · ${r.symbols} symbols`,
+      ];
+      return true;
+    } catch (e) {
+      buildLog = [...buildLog, `✗ core index: ${e instanceof Error ? e.message : String(e)}`];
+      return false;
+    }
+  }
+
+  const buildAll = async () => {
+    if (!project) {
+      buildLog = [...buildLog, '✗ build all: create or select a project first'];
+      return;
+    }
+    if (!(await coreIndex())) return;
+    await kick(
       () =>
         atlasBuildAll(project, {
           path: source === 'path' ? codePath || undefined : undefined,
           git: source === 'git' ? gitUrl || undefined : undefined,
           docs: docsPath || undefined,
         }),
-      'build all',
+      'build all (projects code from core)',
     );
-  const indexCode = () =>
-    kick(
+  };
+  const indexCode = async () => {
+    if (!project) {
+      buildLog = [...buildLog, '✗ index code: create or select a project first'];
+      return;
+    }
+    if (!(await coreIndex())) return;
+    await kick(
       () =>
         atlasCode(project, {
           path: source === 'path' ? codePath || undefined : undefined,
           git: source === 'git' ? gitUrl || undefined : undefined,
         }),
-      'index code',
+      'project code → corpus graph',
     );
+  };
   const ingestDocs = () => kick(() => atlasIngest(project, docsPath), 'ingest docs');
   const doExtract = () => kick(() => atlasExtract(project), 'extract concepts');
   const doCluster = () => kick(() => atlasCluster(project), 'cluster');

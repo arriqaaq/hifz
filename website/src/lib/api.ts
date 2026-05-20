@@ -473,9 +473,13 @@ export function codeSearch(
 export function codeIndex(
   project: string,
   root: string,
-  opts?: { follow_symlinks?: boolean; max_file_bytes?: number },
+  opts?: { git?: string; follow_symlinks?: boolean; max_file_bytes?: number },
 ): Promise<CodeIndexReport> {
   return post(`${CODE}/index`, { project, root, ...opts });
+}
+
+export function codeProjects(): Promise<{ projects: { project: string; chunks: number }[] }> {
+  return get(`${CODE}/projects`);
 }
 
 // --- atlas (corpus knowledge graph) ---

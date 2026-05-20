@@ -75,7 +75,7 @@ hifz_code_index  { "project": "hifz", "root": "/path/to/repo" }
 hifz_code_search { "project": "hifz", "query": "session refresh token", "language": "rust" }
 ```
 
-Code lives in dedicated tables (`code_chunk`, `code_symbol`), so this search is **always code** — scoped by project, with optional language/path filters. Memory→code edges record the original `(path, start, end)` and **re-anchor on re-index**: when a file is re-split, the edge follows the lines it pointed at, or is dropped if those lines were deleted. Symbol links survive chunk re-splitting entirely. Indexing is idempotent (mtime + content hash), honors `.gitignore`, and reconciles deletions. Operator's guide: [`docs/code-indexing.md`](docs/code-indexing.md).
+Code lives in dedicated tables (`code_chunk`, `code_symbol`), so this search is **always code** — scoped by project, with optional language/path filters. A repo is **parsed once**: this index is the single source of truth, and Atlas builds its corpus graph by *projecting* from it (no second parse). Memory→code edges record the original `(path, start, end)` and **re-anchor on re-index**: when a file is re-split, the edge follows the lines it pointed at, or is dropped if those lines were deleted. Symbol links survive chunk re-splitting entirely. Indexing is idempotent (mtime + content hash), honors `.gitignore`, and reconciles deletions. Operator's guide: [`docs/code-indexing.md`](docs/code-indexing.md).
 
 ### Finding code in a mixed corpus (Atlas)
 

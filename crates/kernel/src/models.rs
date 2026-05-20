@@ -417,7 +417,11 @@ pub struct ContextReq {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodeIndexReq {
     pub project: String,
+    #[serde(default)]
     pub root: String,
+    /// Optional git URL — shallow-cloned locally, then indexed (overrides `root`).
+    #[serde(default)]
+    pub git: Option<String>,
     #[serde(default)]
     pub follow_symlinks: Option<bool>,
     #[serde(default)]

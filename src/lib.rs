@@ -815,15 +815,95 @@ impl Hifz {
             max_file_bytes: req.max_file_bytes.unwrap_or(2 * 1024 * 1024),
             ..Default::default()
         };
-        let report = crate::code::index::index_repo(
-            &self.db,
-            &self.embedder,
-            &req.project,
-            std::path::Path::new(&req.root),
-            &opts,
-        )
-        .await?;
+        // Resolve an optional git URL to a local shallow clone (overrides `root`).
+        let cloned = match req.git.as_deref().filter(|s| !s.is_empty()) {
+            Some(url) => Some(Self::clone_repo(url)?),
+            None => None,
+        };
+        let root = cloned
+            .as_deref()
+            .unwrap_or_else(|| std::path::Path::new(&req.root));
+        let report =
+            crate::code::index::index_repo(&self.db, &self.embedder, &req.project, root, &opts)
+                .await?;
         Ok(serde_json::to_value(&report)?)
+    }
+
+    /// Shallow-clone (or fast-forward) `url` into `~/.hifz/code-repos/<slug>`.
+    fn clone_repo(url: &str) -> Result<PathBuf> {
+        let slug: String = url
+            .trim_end_matches(".git")
+            .rsplit('/')
+            .take(2)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect::<Vec<_>>()
+            .join("_")
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .collect();
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let dir = PathBuf::from(home).join(".hifz").join("code-repos").join(slug);
+        if dir.join(".git").is_dir() {
+            let ok = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&dir)
+                .args(["pull", "--ff-only"])
+                .status()?
+                .success();
+            if !ok {
+                anyhow::bail!("git pull failed for {url}");
+            }
+        } else {
+            if let Some(parent) = dir.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            let ok = std::process::Command::new("git")
+                .args(["clone", "--depth", "1", url])
+                .arg(&dir)
+                .status()?
+                .success();
+            if !ok {
+                anyhow::bail!("git clone failed for {url}");
+            }
+        }
+        Ok(dir)
+    }
+
+    /// Distinct projects that have indexed code, with chunk counts — for the
+    /// `/code` page project dropdown.
+    pub async fn code_projects(&self) -> Result<serde_json::Value> {
+        #[derive(Debug, SurrealValue)]
+        struct Row {
+            project: Option<String>,
+            chunks: Option<i64>,
+        }
+        let mut resp = self
+            .db
+            .query("SELECT project, count() AS chunks FROM code_chunk GROUP BY project")
+            .await?;
+        let rows: Vec<Row> = resp.take(0).unwrap_or_default();
+        let mut projects: Vec<serde_json::Value> = rows
+            .into_iter()
+            .filter_map(|r| {
+                r.project
+                    .map(|p| serde_json::json!({ "project": p, "chunks": r.chunks.unwrap_or(0) }))
+            })
+            .collect();
+        projects.sort_by(|a, b| {
+            a["project"]
+                .as_str()
+                .unwrap_or("")
+                .cmp(b["project"].as_str().unwrap_or(""))
+        });
+        Ok(serde_json::json!({ "projects": projects }))
     }
 
     pub async fn code_search(

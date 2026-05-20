@@ -16,7 +16,7 @@ use kernel::code_parse::langmod::module_path;
 use kernel::code_parse::walker::{WalkOpts, walk};
 use kernel::embed::Embedder;
 use sha2::{Digest, Sha256};
-use surrealdb::types::RecordId;
+use surrealdb::types::{RecordId, SurrealValue};
 
 use crate::store::Store;
 
@@ -61,6 +61,31 @@ pub async fn project_code_graph(
         .query("DELETE atlas_node WHERE project=$p AND kind IN ['code_symbol','external','file']")
         .bind(("p", pid.clone()))
         .await;
+
+    // If hifz core has already parsed this project, project the code graph
+    // *from core* (the single source of truth) instead of re-walking the repo.
+    // Falls through to the standalone parse below only when core is empty
+    // (e.g. `atlas serve` with no hifz code index).
+    {
+        #[derive(Debug, SurrealValue)]
+        struct Cnt {
+            c: Option<i64>,
+        }
+        let mut resp = store
+            .db
+            .query("SELECT count() AS c FROM code_symbol WHERE project=$p GROUP ALL")
+            .bind(("p", p.clone()))
+            .await?;
+        let n = resp
+            .take::<Vec<Cnt>>(0)
+            .ok()
+            .and_then(|v| v.into_iter().next())
+            .and_then(|x| x.c)
+            .unwrap_or(0);
+        if n > 0 {
+            return project_from_core(store, embedder, &p, &pid, &now).await;
+        }
+    }
 
     // Walk + per-file FileGraph; track qualified→language + module set.
     let files = walk(root, &WalkOpts::default())?;
@@ -202,6 +227,193 @@ pub async fn project_code_graph(
 
     tracing::info!(
         "atlas code projection: symbols={} files={} ext={} edges={}",
+        report.symbols,
+        report.files,
+        report.externals,
+        report.edges
+    );
+    Ok(report)
+}
+
+/// Project the code graph from hifz core's already-parsed tables
+/// (`code_symbol` / `external_symbol` / `edge`) into `atlas_node`/`atlas_edge`.
+/// No repo walk — core is the single source of truth. Caller has already
+/// wiped this project's `via='code'` atlas rows.
+async fn project_from_core(
+    store: &Store,
+    embedder: &Embedder,
+    p: &str,
+    pid: &RecordId,
+    now: &str,
+) -> Result<CodeProjectReport> {
+    let mut report = CodeProjectReport::default();
+    // core record id → projected atlas_node id, for edge wiring.
+    let mut node_map: HashMap<RecordId, RecordId> = HashMap::new();
+
+    // Symbols.
+    #[derive(Debug, SurrealValue)]
+    struct Sym {
+        id: RecordId,
+        qualified: Option<String>,
+        name: Option<String>,
+        language: Option<String>,
+        signature: Option<String>,
+        path: Option<String>,
+        start_line: Option<i64>,
+        end_line: Option<i64>,
+    }
+    let mut resp = store
+        .db
+        .query(
+            "SELECT id, qualified, name, language, signature, path, start_line, end_line \
+             FROM code_symbol WHERE project=$p",
+        )
+        .bind(("p", p.to_string()))
+        .await?;
+    let syms: Vec<Sym> = resp.take(0).unwrap_or_default();
+    for s in &syms {
+        let Some(q) = s.qualified.clone() else {
+            continue;
+        };
+        let path = s.path.clone().unwrap_or_default();
+        let sref = format!(
+            "{}:{}-{}",
+            path,
+            s.start_line.unwrap_or(0),
+            s.end_line.unwrap_or(0)
+        );
+        let aid = rid(p, "code", &q);
+        let emb = embedder.embed_single(&q).ok();
+        let _ = store
+            .db
+            .query(
+                "UPSERT type::record($id) SET project=$p, kind='code_symbol', label=$l, \
+                 qualified=$q, language=$lang, summary=$sig, path=$path, source_kind='code', \
+                 source_uri=$uri, source_ref=$sref, embedding=$e, cluster=-1, created_at=$now",
+            )
+            .bind(("id", format!("atlas_node:{}", nkey(p, "code", &q))))
+            .bind(("p", pid.clone()))
+            .bind(("l", s.name.clone().unwrap_or_else(|| q.clone())))
+            .bind(("q", q.clone()))
+            .bind(("lang", s.language.clone().unwrap_or_default()))
+            .bind(("sig", s.signature.clone().unwrap_or_default()))
+            .bind(("path", path.clone()))
+            .bind(("uri", format!("file://{path}")))
+            .bind(("sref", sref))
+            .bind(("e", emb))
+            .bind(("now", now.to_string()))
+            .await;
+        node_map.insert(s.id.clone(), aid);
+        report.symbols += 1;
+    }
+
+    // Externals.
+    #[derive(Debug, SurrealValue)]
+    struct Ext {
+        id: RecordId,
+        canonical: Option<String>,
+    }
+    let mut resp = store
+        .db
+        .query("SELECT id, canonical FROM external_symbol WHERE project=$p")
+        .bind(("p", p.to_string()))
+        .await?;
+    let exts: Vec<Ext> = resp.take(0).unwrap_or_default();
+    for e in &exts {
+        let Some(c) = e.canonical.clone() else {
+            continue;
+        };
+        let aid = rid(p, "ext", &c);
+        let _ = store
+            .db
+            .query(
+                "UPSERT type::record($id) SET project=$p, kind='external', label=$l, \
+                 qualified=$l, cluster=-1, created_at=$now",
+            )
+            .bind(("id", format!("atlas_node:{}", nkey(p, "ext", &c))))
+            .bind(("p", pid.clone()))
+            .bind(("l", c.clone()))
+            .bind(("now", now.to_string()))
+            .await;
+        node_map.insert(e.id.clone(), aid);
+        report.externals += 1;
+    }
+
+    // File nodes (so `imports` edges have a real source).
+    #[derive(Debug, SurrealValue)]
+    struct File {
+        id: RecordId,
+        path: Option<String>,
+    }
+    let mut resp = store
+        .db
+        .query("SELECT id, path FROM code_file WHERE project=$p")
+        .bind(("p", p.to_string()))
+        .await?;
+    let files: Vec<File> = resp.take(0).unwrap_or_default();
+    for f in &files {
+        let Some(path) = f.path.clone() else {
+            continue;
+        };
+        let aid = rid(p, "file", &path);
+        let _ = store
+            .db
+            .query(
+                "UPSERT type::record($id) SET project=$p, kind='file', label=$l, \
+                 qualified=$l, path=$l, cluster=-1, created_at=$now",
+            )
+            .bind(("id", format!("atlas_node:{}", nkey(p, "file", &path))))
+            .bind(("p", pid.clone()))
+            .bind(("l", path.clone()))
+            .bind(("now", now.to_string()))
+            .await;
+        node_map.insert(f.id.clone(), aid);
+        report.files += 1;
+    }
+
+    // Edges — translate core endpoints to projected atlas_node ids.
+    #[derive(Debug, SurrealValue)]
+    struct Ed {
+        r#in: RecordId,
+        out: RecordId,
+        relation: Option<String>,
+        resolution: Option<String>,
+        score: Option<f64>,
+    }
+    let mut resp = store
+        .db
+        .query(
+            "SELECT in, out, relation, resolution, score FROM edge \
+             WHERE via='code' AND relation IN ['calls','imports','contains'] \
+             AND (in IN (SELECT VALUE id FROM code_symbol WHERE project=$p) \
+                  OR in IN (SELECT VALUE id FROM code_file WHERE project=$p))",
+        )
+        .bind(("p", p.to_string()))
+        .await?;
+    let eds: Vec<Ed> = resp.take(0).unwrap_or_default();
+    for e in &eds {
+        let (Some(from), Some(to)) = (node_map.get(&e.r#in), node_map.get(&e.out)) else {
+            continue;
+        };
+        let _ = store
+            .db
+            .query(
+                "RELATE $f->atlas_edge->$t SET project=$p, relation=$rel, via='code', \
+                 score=$s, resolution=$res, created_at=$now",
+            )
+            .bind(("f", from.clone()))
+            .bind(("t", to.clone()))
+            .bind(("p", pid.clone()))
+            .bind(("rel", e.relation.clone().unwrap_or_default()))
+            .bind(("s", e.score.unwrap_or(1.0)))
+            .bind(("res", e.resolution.clone().unwrap_or_else(|| "resolved".into())))
+            .bind(("now", now.to_string()))
+            .await;
+        report.edges += 1;
+    }
+
+    tracing::info!(
+        "atlas code projection (from core): symbols={} files={} ext={} edges={}",
         report.symbols,
         report.files,
         report.externals,

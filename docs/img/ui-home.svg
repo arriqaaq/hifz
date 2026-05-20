@@ -1,0 +1,328 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 720" font-family="'Inter', system-ui, -apple-system, sans-serif">
+  <defs>
+    <style>
+      .bg     { fill: #f2f1eb; }
+      .surf   { fill: #f8f8f5; }
+      .alt    { fill: #ecebe4; }
+      .ink    { fill: #1a1a1a; }
+      .muted  { fill: #6a6a63; }
+      .faint  { fill: #9a9a91; }
+      .line   { stroke: #dedcd2; stroke-width: 1; }
+      .strong { stroke: #1a1a1a; }
+      .mono   { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+      .ic     { fill: none; stroke: #6a6a63; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+      .ic-on  { fill: none; stroke: #1a1a1a; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+      .lbl    { font-size: 13px; fill: #3a3a36; }
+      .h11    { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; }
+    </style>
+  </defs>
+
+  <!-- canvas -->
+  <rect class="bg" x="0" y="0" width="1120" height="720"/>
+
+  <!-- ===== RAIL ===== -->
+  <rect class="surf" x="0" y="0" width="48" height="720"/>
+  <line class="line" x1="48" y1="0" x2="48" y2="720"/>
+  <rect class="ink" x="8" y="8" width="32" height="32" rx="6"/>
+  <text x="24" y="31" text-anchor="middle" fill="#ffffff" font-size="16" font-weight="700">h</text>
+
+  <!-- active home pill -->
+  <rect x="8" y="52" width="32" height="32" rx="6" fill="#d9f400"/>
+  <rect class="ink" x="0" y="58" width="2" height="20" rx="1"/>
+  <!-- Home -->
+  <path class="ic-on" d="M17 69 L24 63 L31 69 M19 67 L19 75 L29 75 L29 67"/>
+  <!-- Ask -->
+  <path class="ic" d="M17 99 h14 v8 h-8 l-4 4 v-4 h-2 z"/>
+  <!-- Sessions (layers) -->
+  <path class="ic" d="M24 134 l7 4 -7 4 -7 -4 z M17 142 l7 4 7 -4"/>
+  <!-- Runs (workflow) -->
+  <path class="ic" d="M18 171 h6 v6 h-6 z M24 174 h5 M29 168 h5 v6 h-5 z M29 180 h5 v6 h-5 z M24 177 v6 h5"/>
+  <!-- Observations (activity) -->
+  <path class="ic" d="M17 212 h4 l3 -7 4 14 3 -7 h3"/>
+  <!-- Memories (brain) -->
+  <circle class="ic" cx="24" cy="248" r="6"/>
+  <path class="ic" d="M24 242 v12 M21 245 q3 3 0 6 M27 245 q-3 3 0 6"/>
+  <!-- Graph (network) -->
+  <circle class="ic" cx="18" cy="282" r="2.5"/>
+  <circle class="ic" cx="31" cy="278" r="2.5"/>
+  <circle class="ic" cx="28" cy="290" r="2.5"/>
+  <path class="ic" d="M20 281 L29 279 M20 284 L27 289"/>
+  <!-- Atlas (boxes / cube) -->
+  <path class="ic" d="M24 313 l7 4 v8 l-7 4 -7 -4 v-8 z M24 313 v8 M24 321 l7 -4 M24 321 l-7 -4"/>
+  <!-- Commits -->
+  <circle class="ic" cx="24" cy="356" r="4"/>
+  <path class="ic" d="M24 348 v4 M24 360 v4"/>
+  <!-- Replay (history) -->
+  <path class="ic" d="M18 392 a6 6 0 1 0 2 -4 M18 386 v4 h4"/>
+  <path class="ic" d="M24 389 v4 l3 2"/>
+  <!-- Tokens (coins) -->
+  <ellipse class="ic" cx="24" cy="425" rx="6" ry="2.6"/>
+  <path class="ic" d="M18 425 v4 a6 2.6 0 0 0 12 0 v-4"/>
+  <!-- bottom help -->
+  <circle class="ic" cx="24" cy="688" r="6"/>
+  <path class="ic" d="M22 686 a2 2 0 1 1 2.5 2 q-0.5 0.4 -0.5 1.4 M24 692 v0.4"/>
+
+  <!-- ===== SECONDARY PANEL ===== -->
+  <rect class="surf" x="48" y="0" width="280" height="720"/>
+  <line class="line" x1="328" y1="0" x2="328" y2="720"/>
+  <!-- quick filter -->
+  <rect class="alt" x="58" y="12" width="260" height="30" rx="6"/>
+  <rect x="58" y="12" width="260" height="30" rx="6" fill="none" class="line"/>
+  <circle class="ic" cx="74" cy="27" r="4"/>
+  <path class="ic" d="M77 30 l3 3"/>
+  <text class="faint" x="88" y="31" font-size="12">Quick filter…</text>
+
+  <!-- Workspace -->
+  <text class="faint h11" x="66" y="68">Workspace</text>
+  <g transform="translate(0,74)">
+    <rect x="58" y="6" width="260" height="26" rx="6" fill="none"/>
+    <rect x="66" y="13" width="8" height="8" rx="2" fill="#c2db00"/>
+    <text class="lbl" x="86" y="24">Ask</text>
+  </g>
+  <g transform="translate(0,102)">
+    <rect x="66" y="13" width="8" height="8" rx="2" fill="#6a6a63"/>
+    <text class="lbl" x="86" y="24">Home</text>
+  </g>
+
+  <!-- Entities -->
+  <text class="faint h11" x="66" y="150">Entities</text>
+  <g font-size="13">
+    <g transform="translate(0,156)">
+      <rect x="66" y="13" width="8" height="8" rx="2" fill="#2563EB"/>
+      <text class="lbl" x="86" y="24">Sessions</text>
+      <text class="faint mono" x="312" y="24" text-anchor="end" font-size="11">312</text>
+    </g>
+    <g transform="translate(0,184)">
+      <rect x="66" y="13" width="8" height="8" rx="2" fill="#15803D"/>
+      <text class="lbl" x="86" y="24">Runs</text>
+      <text class="faint mono" x="312" y="24" text-anchor="end" font-size="11">1,204</text>
+    </g>
+    <g transform="translate(0,212)">
+      <rect x="66" y="13" width="8" height="8" rx="2" fill="#B45309"/>
+      <text class="lbl" x="86" y="24">Observations</text>
+      <text class="faint mono" x="312" y="24" text-anchor="end" font-size="11">8,431</text>
+    </g>
+    <g transform="translate(0,240)">
+      <rect x="66" y="13" width="8" height="8" rx="2" fill="#6B3FA0"/>
+      <text class="lbl" x="86" y="24">Memories</text>
+      <text class="faint mono" x="312" y="24" text-anchor="end" font-size="11">347</text>
+    </g>
+    <g transform="translate(0,268)">
+      <rect x="66" y="13" width="8" height="8" rx="2" fill="#C2410C"/>
+      <text class="lbl" x="86" y="24">Commits</text>
+      <text class="faint mono" x="312" y="24" text-anchor="end" font-size="11">529</text>
+    </g>
+  </g>
+
+  <!-- Atlas -->
+  <text class="faint h11" x="66" y="316">Atlas</text>
+  <g transform="translate(0,322)">
+    <rect x="66" y="13" width="8" height="8" rx="2" fill="#475569"/>
+    <text class="lbl" x="86" y="24">Atlas</text>
+  </g>
+  <g transform="translate(0,350)">
+    <rect x="66" y="13" width="8" height="8" rx="2" fill="#475569"/>
+    <text class="lbl" x="86" y="24">Knowledge graph</text>
+  </g>
+
+  <!-- Tools -->
+  <text class="faint h11" x="66" y="398">Tools</text>
+  <g transform="translate(0,404)">
+    <rect x="66" y="13" width="8" height="8" rx="2" fill="#6a6a63"/>
+    <text class="lbl" x="86" y="24">Tokens</text>
+  </g>
+  <g transform="translate(0,432)">
+    <rect x="66" y="13" width="8" height="8" rx="2" fill="#6a6a63"/>
+    <text class="lbl" x="86" y="24">Replay</text>
+  </g>
+  <g transform="translate(0,460)">
+    <text class="muted mono" x="70" y="24" font-size="12">⌘</text>
+    <text class="lbl" x="86" y="24">Command palette</text>
+    <rect class="bg" x="286" y="11" width="32" height="16" rx="4"/>
+    <rect x="286" y="11" width="32" height="16" rx="4" fill="none" class="line"/>
+    <text class="faint mono" x="302" y="23" text-anchor="middle" font-size="10">⌘K</text>
+  </g>
+
+  <!-- ===== HEADER ===== -->
+  <rect class="bg" x="328" y="0" width="792" height="48"/>
+  <line class="line" x1="328" y1="48" x2="1120" y2="48"/>
+  <rect x="344" y="14" width="20" height="20" rx="4" fill="none" class="line"/>
+  <path class="ic" d="M350 20 h8 M350 24 h8 M350 28 h8"/>
+  <text class="ink" x="376" y="30" font-size="13" font-weight="600">Home</text>
+  <!-- search pill -->
+  <rect class="surf" x="724" y="10" width="240" height="28" rx="6"/>
+  <rect x="724" y="10" width="240" height="28" rx="6" fill="none" class="line"/>
+  <circle class="ic" cx="740" cy="24" r="4"/>
+  <path class="ic" d="M743 27 l3 3"/>
+  <text class="faint" x="754" y="28" font-size="12">Search…</text>
+  <rect class="bg" x="928" y="16" width="28" height="16" rx="4"/>
+  <rect x="928" y="16" width="28" height="16" rx="4" fill="none" class="line"/>
+  <text class="faint mono" x="942" y="28" text-anchor="middle" font-size="10">⌘K</text>
+  <!-- health pill -->
+  <circle cx="1024" cy="24" r="4" fill="#15803D"/>
+  <text class="muted mono" x="1034" y="28" font-size="12">v0.4.2</text>
+
+  <!-- ===== MAIN ===== -->
+  <text class="ink" x="344" y="82" font-size="18" font-weight="600">Status</text>
+
+  <!-- status tiles -->
+  <g>
+    <!-- tile 1 -->
+    <rect class="ink" x="346" y="102" width="178" height="78" rx="10"/>
+    <rect class="surf" x="344" y="100" width="178" height="78" rx="10"/>
+    <rect x="344" y="100" width="178" height="78" rx="10" fill="none" class="line"/>
+    <rect class="ink" x="358" y="116" width="12" height="12" rx="3"/>
+    <text class="muted h11" x="378" y="126">Database</text>
+    <text class="ink" x="358" y="152" font-size="22" font-weight="600">healthy</text>
+    <text class="faint mono" x="358" y="170" font-size="11">8,431 observations</text>
+
+    <!-- tile 2 -->
+    <rect class="ink" x="536" y="102" width="178" height="78" rx="10"/>
+    <rect class="surf" x="534" y="100" width="178" height="78" rx="10"/>
+    <rect x="534" y="100" width="178" height="78" rx="10" fill="none" class="line"/>
+    <circle class="ic-on" cx="554" cy="122" r="6"/>
+    <path class="ic-on" d="M548 122 h12 M554 116 q4 6 0 12 q-4 -6 0 -12"/>
+    <text class="muted h11" x="568" y="126">REST API</text>
+    <text class="ink" x="548" y="152" font-size="22" font-weight="600">v0.4.2</text>
+    <text class="faint mono" x="548" y="170" font-size="11">uptime 6d</text>
+
+    <!-- tile 3 -->
+    <rect class="ink" x="726" y="102" width="178" height="78" rx="10"/>
+    <rect class="surf" x="724" y="100" width="178" height="78" rx="10"/>
+    <rect x="724" y="100" width="178" height="78" rx="10" fill="none" class="line"/>
+    <path class="ic-on" d="M742 116 l-5 8 h5 l-3 6"/>
+    <text class="muted h11" x="754" y="126">Hooks</text>
+    <text class="ink" x="738" y="152" font-size="22" font-weight="600">2 active</text>
+    <text class="faint mono" x="738" y="170" font-size="11">312 sessions total</text>
+
+    <!-- tile 4 -->
+    <rect class="ink" x="916" y="102" width="178" height="78" rx="10"/>
+    <rect class="surf" x="914" y="100" width="178" height="78" rx="10"/>
+    <rect x="914" y="100" width="178" height="78" rx="10" fill="none" class="line"/>
+    <path class="ic-on" d="M928 122 l7 4 7 -4 -7 -4 z M928 126 l7 4 7 -4"/>
+    <text class="muted h11" x="950" y="126">Memories</text>
+    <text class="ink" x="928" y="152" font-size="22" font-weight="600">347</text>
+    <text class="faint mono" x="928" y="170" font-size="11">long-term store</text>
+  </g>
+
+  <!-- two-col -->
+  <!-- Recent Sessions card -->
+  <rect class="ink" x="346" y="202" width="440" height="356" rx="10"/>
+  <rect class="surf" x="344" y="200" width="440" height="356" rx="10"/>
+  <rect x="344" y="200" width="440" height="356" rx="10" fill="none" class="strong" stroke-width="1.5"/>
+  <text class="muted h11" x="362" y="226">Recent Sessions</text>
+  <line class="line" x1="362" y1="236" x2="766" y2="236"/>
+  <!-- table head -->
+  <g class="muted mono" font-size="10" letter-spacing="0.12em">
+    <text x="362" y="258">SESSION</text>
+    <text x="500" y="258">PROJECT</text>
+    <text x="630" y="258">STATUS</text>
+    <text x="752" y="258" text-anchor="end">OBS</text>
+  </g>
+  <line class="ink" x1="362" y1="266" x2="766" y2="266" stroke-width="1"/>
+  <!-- rows -->
+  <g font-size="12">
+    <!-- row template: session chip, project badge, status badge, obs -->
+    <g transform="translate(0,0)">
+      <rect x="362" y="278" width="92" height="18" rx="4" fill="rgba(37,99,235,0.10)"/>
+      <rect x="362" y="278" width="92" height="18" rx="4" fill="none" stroke="#2563EB" stroke-width="1"/>
+      <text class="mono" x="370" y="291" fill="#2563EB" font-size="10">ses_4f8a21</text>
+      <rect x="500" y="278" width="76" height="18" rx="9" fill="rgba(14,116,144,0.10)"/>
+      <text class="mono" x="538" y="291" fill="#0E7490" font-size="9" text-anchor="middle" letter-spacing="0.08em">HIFZ</text>
+      <rect x="630" y="278" width="64" height="18" rx="9" fill="rgba(21,128,61,0.10)"/>
+      <text class="mono" x="662" y="291" fill="#15803D" font-size="9" text-anchor="middle" letter-spacing="0.08em">ACTIVE</text>
+      <text class="mono" x="752" y="291" text-anchor="end" fill="#6a6a63">142</text>
+    </g>
+    <line class="line" x1="362" y1="306" x2="766" y2="306"/>
+    <g transform="translate(0,30)">
+      <rect x="362" y="278" width="92" height="18" rx="4" fill="rgba(37,99,235,0.10)"/>
+      <rect x="362" y="278" width="92" height="18" rx="4" fill="none" stroke="#2563EB" stroke-width="1"/>
+      <text class="mono" x="370" y="291" fill="#2563EB" font-size="10">ses_9b1c70</text>
+      <rect x="500" y="278" width="84" height="18" rx="9" fill="rgba(14,116,144,0.10)"/>
+      <text class="mono" x="542" y="291" fill="#0E7490" font-size="9" text-anchor="middle" letter-spacing="0.08em">KITAB</text>
+      <rect x="630" y="278" width="84" height="18" rx="9" fill="rgba(37,99,235,0.10)"/>
+      <text class="mono" x="672" y="291" fill="#2563EB" font-size="9" text-anchor="middle" letter-spacing="0.08em">COMPLETED</text>
+      <text class="mono" x="752" y="291" text-anchor="end" fill="#6a6a63">88</text>
+    </g>
+    <line class="line" x1="362" y1="336" x2="766" y2="336"/>
+    <g transform="translate(0,60)">
+      <rect x="362" y="278" width="92" height="18" rx="4" fill="rgba(37,99,235,0.10)"/>
+      <rect x="362" y="278" width="92" height="18" rx="4" fill="none" stroke="#2563EB" stroke-width="1"/>
+      <text class="mono" x="370" y="291" fill="#2563EB" font-size="10">ses_2d44af</text>
+      <rect x="500" y="278" width="76" height="18" rx="9" fill="rgba(14,116,144,0.10)"/>
+      <text class="mono" x="538" y="291" fill="#0E7490" font-size="9" text-anchor="middle" letter-spacing="0.08em">HIFZ</text>
+      <rect x="630" y="278" width="84" height="18" rx="9" fill="rgba(37,99,235,0.10)"/>
+      <text class="mono" x="672" y="291" fill="#2563EB" font-size="9" text-anchor="middle" letter-spacing="0.08em">COMPLETED</text>
+      <text class="mono" x="752" y="291" text-anchor="end" fill="#6a6a63">204</text>
+    </g>
+    <line class="line" x1="362" y1="366" x2="766" y2="366"/>
+    <g transform="translate(0,90)">
+      <rect x="362" y="278" width="92" height="18" rx="4" fill="rgba(37,99,235,0.10)"/>
+      <rect x="362" y="278" width="92" height="18" rx="4" fill="none" stroke="#2563EB" stroke-width="1"/>
+      <text class="mono" x="370" y="291" fill="#2563EB" font-size="10">ses_71e0c3</text>
+      <rect x="500" y="278" width="76" height="18" rx="9" fill="rgba(14,116,144,0.10)"/>
+      <text class="mono" x="538" y="291" fill="#0E7490" font-size="9" text-anchor="middle" letter-spacing="0.08em">PI</text>
+      <rect x="630" y="278" width="64" height="18" rx="9" fill="rgba(21,128,61,0.10)"/>
+      <text class="mono" x="662" y="291" fill="#15803D" font-size="9" text-anchor="middle" letter-spacing="0.08em">ACTIVE</text>
+      <text class="mono" x="752" y="291" text-anchor="end" fill="#6a6a63">37</text>
+    </g>
+    <line class="line" x1="362" y1="396" x2="766" y2="396"/>
+    <g transform="translate(0,120)">
+      <rect x="362" y="278" width="92" height="18" rx="4" fill="rgba(37,99,235,0.10)"/>
+      <rect x="362" y="278" width="92" height="18" rx="4" fill="none" stroke="#2563EB" stroke-width="1"/>
+      <text class="mono" x="370" y="291" fill="#2563EB" font-size="10">ses_0ac9d2</text>
+      <rect x="500" y="278" width="84" height="18" rx="9" fill="rgba(14,116,144,0.10)"/>
+      <text class="mono" x="542" y="291" fill="#0E7490" font-size="9" text-anchor="middle" letter-spacing="0.08em">KITAB</text>
+      <rect x="630" y="278" width="84" height="18" rx="9" fill="rgba(37,99,235,0.10)"/>
+      <text class="mono" x="672" y="291" fill="#2563EB" font-size="9" text-anchor="middle" letter-spacing="0.08em">COMPLETED</text>
+      <text class="mono" x="752" y="291" text-anchor="end" fill="#6a6a63">156</text>
+    </g>
+    <line class="line" x1="362" y1="426" x2="766" y2="426"/>
+    <g transform="translate(0,150)">
+      <rect x="362" y="278" width="92" height="18" rx="4" fill="rgba(37,99,235,0.10)"/>
+      <rect x="362" y="278" width="92" height="18" rx="4" fill="none" stroke="#2563EB" stroke-width="1"/>
+      <text class="mono" x="370" y="291" fill="#2563EB" font-size="10">ses_55fb18</text>
+      <rect x="500" y="278" width="76" height="18" rx="9" fill="rgba(14,116,144,0.10)"/>
+      <text class="mono" x="538" y="291" fill="#0E7490" font-size="9" text-anchor="middle" letter-spacing="0.08em">HIFZ</text>
+      <rect x="630" y="278" width="84" height="18" rx="9" fill="rgba(37,99,235,0.10)"/>
+      <text class="mono" x="672" y="291" fill="#2563EB" font-size="9" text-anchor="middle" letter-spacing="0.08em">COMPLETED</text>
+      <text class="mono" x="752" y="291" text-anchor="end" fill="#6a6a63">61</text>
+    </g>
+  </g>
+
+  <!-- right column: Top Keywords -->
+  <rect class="ink" x="802" y="202" width="290" height="174" rx="10"/>
+  <rect class="surf" x="800" y="200" width="290" height="174" rx="10"/>
+  <rect x="800" y="200" width="290" height="174" rx="10" fill="none" class="strong" stroke-width="1.5"/>
+  <text class="muted h11" x="818" y="226">Top Keywords</text>
+  <line class="line" x1="818" y1="236" x2="1074" y2="236"/>
+  <g font-size="13">
+    <g transform="translate(0,0)"><text class="lbl" x="818" y="258">surrealdb</text><text class="faint mono" x="1074" y="258" text-anchor="end" font-size="12">214</text></g>
+    <line class="line" x1="818" y1="268" x2="1074" y2="268"/>
+    <g transform="translate(0,24)"><text class="lbl" x="818" y="258">embedding</text><text class="faint mono" x="1074" y="258" text-anchor="end" font-size="12">187</text></g>
+    <line class="line" x1="818" y1="292" x2="1074" y2="292"/>
+    <g transform="translate(0,48)"><text class="lbl" x="818" y="258">mcp</text><text class="faint mono" x="1074" y="258" text-anchor="end" font-size="12">142</text></g>
+    <line class="line" x1="818" y1="316" x2="1074" y2="316"/>
+    <g transform="translate(0,72)"><text class="lbl" x="818" y="258">code-index</text><text class="faint mono" x="1074" y="258" text-anchor="end" font-size="12">118</text></g>
+    <line class="line" x1="818" y1="340" x2="1074" y2="340"/>
+    <g transform="translate(0,96)"><text class="lbl" x="818" y="258">atlas</text><text class="faint mono" x="1074" y="258" text-anchor="end" font-size="12">96</text></g>
+  </g>
+
+  <!-- right column: Recent Commits -->
+  <rect class="ink" x="802" y="392" width="290" height="166" rx="10"/>
+  <rect class="surf" x="800" y="390" width="290" height="166" rx="10"/>
+  <rect x="800" y="390" width="290" height="166" rx="10" fill="none" class="strong" stroke-width="1.5"/>
+  <text class="muted h11" x="818" y="416">Recent Commits</text>
+  <line class="line" x1="818" y1="426" x2="1074" y2="426"/>
+  <g font-size="13">
+    <g transform="translate(0,0)"><text class="mono" x="818" y="448" fill="#C2410C" font-size="12">d063861</text><text class="faint" x="1074" y="448" text-anchor="end" font-size="12">project schema change</text></g>
+    <line class="line" x1="818" y1="458" x2="1074" y2="458"/>
+    <g transform="translate(0,24)"><text class="mono" x="818" y="448" fill="#C2410C" font-size="12">0aaa0eb</text><text class="faint" x="1074" y="448" text-anchor="end" font-size="12">remove truncation</text></g>
+    <line class="line" x1="818" y1="482" x2="1074" y2="482"/>
+    <g transform="translate(0,48)"><text class="mono" x="818" y="448" fill="#C2410C" font-size="12">85fbfad</text><text class="faint" x="1074" y="448" text-anchor="end" font-size="12">atlas fixes</text></g>
+    <line class="line" x1="818" y1="506" x2="1074" y2="506"/>
+    <g transform="translate(0,72)"><text class="mono" x="818" y="448" fill="#C2410C" font-size="12">5958e25</text><text class="faint" x="1074" y="448" text-anchor="end" font-size="12">atlas qna</text></g>
+    <line class="line" x1="818" y1="530" x2="1074" y2="530"/>
+    <g transform="translate(0,96)"><text class="mono" x="818" y="448" fill="#C2410C" font-size="12">7106ed0</text><text class="faint" x="1074" y="448" text-anchor="end" font-size="12">clippy fixes</text></g>
+  </g>
+</svg>

@@ -2,8 +2,9 @@
 
 # hifz
 
-### A persistent memory engine.
-### Hybrid search, knowledge graph, lifecycle-aware. Local-first, written in Rust.
+### Persistent memory for coding agents — local-first, written in Rust.
+
+Hybrid search · typed knowledge graph · code intelligence · corpus Q&A · lifecycle-aware forgetting.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/built%20with-Rust-orange.svg)](https://www.rust-lang.org/)
@@ -13,226 +14,99 @@
 
 </div>
 
----
-
-hifz **stores, links, ranks, and forgets** memories. One Axum process owns an embedded SurrealDB, a fastembed ONNX embedder, the search index, the REST API, an MCP proxy, and a dashboard. Anything that speaks HTTP is a valid client. Nothing leaves your machine.
-
-The product is opinionated: a curated long-term layer separated from ephemeral capture, a typed knowledge graph linking everything, recency- and grounding-aware ranking, and lifecycle rules that mark stale memories as superseded instead of just deleting them.
+<p align="center"><img src="docs/img/ui-home.svg" alt="hifz dashboard" width="100%"></p>
 
 ---
 
-## The mental model — two-layer ontology
+## What is hifz
 
-<p align="center"><img src="docs/img/ontology.svg" alt="hifz two-layer ontology" width="100%"></p>
+hifz gives a coding agent a memory that persists across sessions. One Axum process owns an embedded SurrealDB, a local ONNX embedder, a hybrid search index, a typed knowledge graph, code intelligence, the REST API, an MCP server, and a dashboard. Anything that speaks HTTP is a client. **Nothing leaves your machine** — embeddings run locally and LLM features are opt-in via Ollama.
 
-Capture is dense and short-lived. Core is curated and persistent. Consolidation lifts patterns from one into the other.
+It captures your work as observations, sessions, and runs; distills the durable parts into curated memories; recalls them with hybrid search and 1-hop graph expansion; grounds them in your git history; and links them straight to the lines of code they describe.
 
----
-
-## How hifz remembers — the write path
-
-<p align="center"><img src="docs/img/write-path.svg" alt="hifz write path" width="100%"></p>
-
-Every saved memory is embedded, stored, then linked against existing memories through three independent channels. Any channel that exceeds its threshold creates an `edge`:
-
-| Channel | Compares | Threshold | Edge score |
-|---|---|---|---|
-| **Embedding KNN** | Cosine distance between 384-d vectors via HNSW | distance < 0.25 | `1 - distance` |
-| **Concept Jaccard** | Overlap of `concepts[]` arrays | ≥ 0.30 | Jaccard value |
-| **File Jaccard** | Overlap of `files[]` arrays | ≥ 0.30 | Jaccard value |
-
-Entity extraction (files, concepts, functions, identifiers) is deterministic — no LLM. Evolution is opt-in: when enabled, an LLM reads up to five graph neighbors and may add tags, propose `semantic` edges, or mark older memories superseded.
+| | |
+|---|---|
+| 🧠 **Memory** | Save lessons, decisions, bugs, fixes, plans. Recall by meaning, recency, and grounding. |
+| 🕸 **Knowledge graph** | Every memory, observation, session, run, and commit is a typed node with typed edges. |
+| 🔍 **Code search** | Tree-sitter indexing for 8 languages, hybrid BM25 + vector search, memory↔code links. |
+| 🗺 **Atlas** | Ingest a repo + docs into a clustered corpus graph and ask it questions, with citations. |
+| ⏳ **Lifecycle** | Recency decay, commit-grounding, contradiction detection, append-only versioning. |
 
 ---
 
-## How hifz recalls — the read path
+## Memory
 
-<p align="center"><img src="docs/img/read-path.svg" alt="hifz read path" width="100%"></p>
+Save a lesson, decision, bug, fix, plan, or design once — recall it in any future session. The browser lets you search, filter by category, sort by strength × access, and expand any memory to its full content, tags, and the files it touches.
 
-After fusion, hifz pulls 1-hop neighbors from the link graph (neighbor score = seed × 0.5 × edge weight) so memories that don't match the query directly but are graph-connected to a hit can still surface. Final ordering is a Rust-side score:
+<p align="center"><img src="docs/img/ui-memories.svg" alt="hifz memory browser" width="100%"></p>
 
-```
-score = strength × exp(-age_days / HALF_LIFE) × (1 + ACCESS_COEF × min(access, ACCESS_CAP))
+```bash
+# save (CLI — POSTs straight to the server, no agent needed)
+hifz save --content "JWT refresh tokens live in Redis, not the JWT claims" \
+  --title "Auth refresh design" --category lesson --project hifz --file src/auth/session.rs
+
+# recall (MCP) — hybrid search + 1-hop graph expansion
+hifz_recall { "project": "hifz", "query": "how does refresh work?" }
 ```
 
-Recency decays. Access reinforces. Grounding-derived strength anchors.
+Each memory carries a `strength`, an access count, and a `last_committed_at` watermark. Retrieval ranks by a blend of relevance, recency decay, reinforcement, and grounding — so what you actually shipped surfaces first and abandoned notes fade.
 
 ---
 
-## The knowledge graph
+## Agentic memory & the knowledge graph
 
-Edges are typed and segmented by source so retrieval can weight them differently:
+hifz doesn't store memories as a flat list. Observations (captured tool use), sessions, runs, commits, and curated memories are all **typed nodes** joined by **typed edges** — provenance, conceptual, argumentative, lifecycle, and code-domain. The graph view renders the whole substrate: shapes encode node kind (hexagon = memory, diamond = run, ellipse = observation, rounded rect = session, tag = commit), colors encode type, and edge color/style encodes the relation.
 
-| Group | Edge types |
-|---|---|
-| **Co-occurrence** (deterministic, signal-typed) | `co_occurs_files`, `co_occurs_keywords`, `co_occurs_embedding`, `mentions` |
-| **Provenance** (PROV-O, system-set) | `generated_by`, `informed_by`, `derived_from`, `attributed_to`, `part_of`, `follows` |
-| **Conceptual** (SKOS, LLM-set) | `broader`, `narrower`, `related`, `same_as` |
-| **Argumentative** (IBIS, LLM-set) | `supports`, `contradicts`, `elaborates`, `responds_to` |
-| **Lifecycle** | `supersedes`, `closes` |
-| **Code-domain** | `touches_file`, `commits_for`, `tests` |
-| **`via` channel** | `embedding`, `keyword`, `file`, `entity`, `system`, `cluster`, `llm` |
+<p align="center"><img src="docs/img/ui-graph.svg" alt="hifz knowledge graph" width="100%"></p>
 
-Every edge carries a `reason` field — for deterministic edges it records the channel + score (e.g. `keyword overlap 2 shared (score 1.00): jwt, auth`), for LLM-set edges it records the model's one-sentence rationale.
-
-<p align="center"><img src="docs/img/knowledge-graph.svg" alt="Example knowledge graph with typed edges" width="100%"></p>
-
-Traverse from any seed with `POST /trace` (or `hifz_trace`): forward, backward, or both, with RRF over multi-hop expansions.
-
-Full vocabulary, type-pair constraints, and category tables: [`docs/ontology.md`](docs/ontology.md).
+Recall pulls 1-hop neighbors from this graph, so a memory that doesn't match your query directly but is linked to a hit can still surface. Edges are created deterministically on write (embedding KNN, shared concepts, shared files) and optionally enriched by an LLM. Full vocabulary and type-pair rules: [`docs/ontology.md`](docs/ontology.md).
 
 ---
 
-## Modes
+## Code search & indexing
 
-hifz operates in one of two modes per insert. Both modes are valid; the difference is what the runtime can derive without an external service.
+hifz indexes your repository with tree-sitter (Rust, Python, JavaScript/TypeScript, Go, Java, C, C++), chunks it language-aware, embeds every chunk, and extracts a symbol manifest. Search is hybrid — an identifier-aware BM25 index fused with vector KNN — and memories can be linked to a precise file + line range or to a named symbol.
 
-| | Deterministic mode | LLM-augmented mode |
-|---|---|---|
-| **Trigger** | No Ollama, or `HIFZ_LLM_EVOLVE=false` (default) | Ollama reachable AND `HIFZ_LLM_EVOLVE=true` |
-| **Edges** | `co_occurs_*`, `mentions`, `generated_by`, `informed_by`, `derived_from`, `part_of`, `follows`, `touches_file`, `commits_for`, `closes` / `supersedes` (when explicit) | All deterministic edges PLUS `broader`, `narrower`, `related`, `same_as`, `supports`, `contradicts`, `elaborates`, `responds_to`, `tests` |
-| **`context_summary`** | Null | LLM-generated paragraph |
-| **`tags`** | Default `[category]` | LLM-extended |
-| **`evolution_history`** | Empty | Append-only audit of LLM neighbor rewrites |
-| **Cost** | One embedding call per insert | One embedding + one Ollama call per insert (>80 chars salience floor) |
-| **Quality bound** | Caller's keyword/file discipline + embedding model | Above + LLM judgment quality |
+<p align="center"><img src="docs/img/ui-code-search.svg" alt="hifz code search results" width="100%"></p>
 
-Same code path runs both ways. A row written in one mode reads fine in the other.
-
-Configuration: see [`docs/ontology.md#configuration`](docs/ontology.md#configuration).
-
----
-
-## Forgetting and evolution
-
-| Mechanism | What it does |
-|---|---|
-| **TTL GC** | `forget_after` timestamps expire memories. `POST /forget-gc` runs the sweep. |
-| **Contradiction detection** | Two memories with content Jaccard ≥ 0.9 → older is marked `is_latest = false`. |
-| **Grounding** | When the adapter posts a `commit_made` observation, memories referencing the committed files get `strength += 15%` (clamped to 1.0). |
-| **Uncommitted decay** | A session that edits files but never commits sets `forget_after = now + 60 days` on the related memories. Abandoned work fades. |
-| **Evolution** | When `HIFZ_LLM_EVOLVE=true` and Ollama is reachable, the insert pipeline runs A-MEM-style enrichment: a single LLM call generates `context_summary` / `tags`, proposes typed conceptual / argumentative edges with reasons, and may refine up to ~10 neighbors' metadata (recorded in `evolution_history`). The deterministic path produces co-occurrence + provenance edges either way. See [`docs/ontology.md#mode-matrix`](docs/ontology.md#mode-matrix). |
-
----
-
-## Memory tiers
-
-Three persistent tiers above raw `memory`:
-
-| Tier | Shape | Origin |
-|---|---|---|
-| **`core_memory`** | One per project. Identity, goals, invariants, watchlist. Always prepended to injected context — never drifts on compaction. | Edited directly via `PATCH /core/{project}` or `hifz_core_edit`. |
-| **`semantic_memory`** | Consolidated facts. | Tier 1 consolidation merges session summaries (LLM). |
-| **`procedural_memory`** | Named workflows: trigger condition + steps. | Tier 3 consolidation extracts recurring action sequences (LLM). |
-
-Consolidation is on-demand via `POST /consolidate`:
-
-| Tier | Name | What it does | LLM |
-|---|---|---|:---:|
-| 1 | Semantic | Merges session summaries into `semantic_memory` facts | Yes |
-| 2 | Reflect | Clusters related memories by shared concepts | No |
-| 3 | Procedural | Extracts recurring action sequences as workflows | Yes |
-| 4 | Decay | Exponential decay on `strength` for stale memories | No |
-
-LLM tiers (1 and 3) are silently skipped if Ollama is not configured.
-
----
-
-## Versioning
-
-Memories are append-only. When something supersedes an older version, the older row stays — `is_latest` flips to `false`, and the newer row's ID is appended to the older's `supersedes[]`.
-
-<p align="center"><img src="docs/img/versioning.svg" alt="memory version chain" width="80%"></p>
-
-Every retrieval query filters `WHERE is_latest = true`. The chain is preserved for provenance, traversal, and audit.
-
----
-
-## Plans
-
-Plans are first-class but not a separate table — they're memories with `category='plan'`, `pinned=true`, and `tags=['active']` while in flight. Activation is two side-effects:
-
-1. The plan stays pinned (never decays, always searchable).
-2. Its title is appended to `core_memory.goals` so it rides along on every context injection.
-
-Completion clears the active tag and unpins. Plans participate in linking, search, and graph traversal like any other memory.
-
----
-
-## Surfaces
-
-| Surface | Shape | Use it from |
-|---|---|---|
-| **REST** | 29 endpoints across `/api/v1/*`, split into core memory and an optional agent-pipeline group | Any HTTP client — apps, scripts, agents in any language |
-| **MCP** | 17 tools in 6 groups (Memory, Core, Plans, Trajectories, Graph, Provenance), thin wrapper over REST | Any MCP-speaking agent |
-| **Dashboard** | SvelteKit SPA served by the same Axum process | Browser at `http://localhost:3111` |
-
-<details>
-<summary><b>MCP tools (17)</b></summary>
-
-| Group | Tool | Purpose |
-|---|---|---|
-| Memory | `hifz_save` | Create a memory (category, tags, pinned) |
-| | `hifz_recall` | Search observations + memories with graph expansion |
-| | `hifz_search` | Hybrid BM25 + vector with RRF fusion |
-| | `hifz_delete` | Delete a memory by ID |
-| | `hifz_evolve` | LLM refinement of a memory (opt-in) |
-| Core | `hifz_core_get` | Read project core memory |
-| | `hifz_core_edit` | Edit core memory (set / add / remove) |
-| Plans | `hifz_current_plan` | Active plan for a project |
-| | `hifz_plans` | List plans by status |
-| | `hifz_activate_plan` | Activate a plan, inject into core context |
-| Trajectories | `hifz_sessions` | Recent sessions |
-| | `hifz_runs` | Search task-scoped runs |
-| | `hifz_timeline` | Chronological observations |
-| | `hifz_digest` | Project intelligence (top concepts, files, stats) |
-| | `hifz_export` | Export all memory data |
-| Graph | `hifz_trace` | Walk the knowledge graph from a node |
-| Provenance | `hifz_commits` | List commits |
-
-</details>
-
-<details>
-<summary><b>REST endpoints (29)</b></summary>
-
-**Core memory API**
-
-| Method | Path |
-|---|---|
-| GET | `/health`, `/livez`, `/memories`, `/memories/{id}/links`, `/core/{project}`, `/export` |
-| POST | `/memories`, `/search`, `/search/agentic`, `/context`, `/trace`, `/consolidate`, `/forget-gc`, `/seed/sample`, `/memories/{id}/evolve` |
-| PATCH | `/core/{project}` |
-| DELETE | `/memories/{id}` |
-
-**Agent pipeline API**
-
-| Method | Path |
-|---|---|
-| GET | `/sessions`, `/sessions/{id}`, `/sessions/{id}/tree`, `/events`, `/events/{id}`, `/observations`, `/timeline`, `/runs/count`, `/runs/{id}`, `/commits`, `/commits/{sha}/diff`, `/plans`, `/plans/current`, `/digest` |
-| POST | `/sessions`, `/sessions/end`, `/observe`, `/events`, `/events/batch`, `/runs`, `/plans/activate`, `/plans/{id}/complete`, `/plans/{id}/abandon` |
-
-</details>
-
----
-
-## Storage and local-first
-
-| Mode | Command | Persistence |
-|---|---|---|
-| In-memory | `hifz serve --memory` | Lost on restart |
-| SurrealKV | `hifz serve --db-path ~/.hifz/data` | On disk |
-
-Embeddings use **fastembed AllMiniLM-L6-V2** (384-dim, ONNX, runs locally — no network). LLM features are opt-in via Ollama. Without LLM, hifz uses synthetic compression, deterministic linking, and skips LLM consolidation tiers.
-
-Optional `~/.hifz/.env`:
-
-```env
-OLLAMA_URL=http://localhost:11434
-OLLAMA_MODEL=qwen2.5:7b
-HIFZ_AUTO_COMPRESS=true     # richer observation summaries
-HIFZ_LLM_EVOLVE=true        # post-save LLM refinement
-TOKEN_BUDGET=2000
+```bash
+# index a repo, then search it
+hifz_code_index  { "project": "hifz", "root": "/path/to/repo" }
+hifz_code_search { "project": "hifz", "query": "session refresh token", "language": "rust" }
 ```
+
+Memory→code edges record the original `(path, start, end)` and **re-anchor on re-index**: when a file is re-split, the edge follows the lines it pointed at, or is dropped if those lines were deleted. Symbol links survive chunk re-splitting entirely. Indexing is idempotent (mtime + content hash), honors `.gitignore`, and reconciles deletions. Operator's guide: [`docs/code-indexing.md`](docs/code-indexing.md).
+
+---
+
+## Atlas — corpus knowledge graph & cited Q&A
+
+Atlas rides the same substrate to turn a codebase plus its docs into a clustered, queryable corpus graph. Point it at a repo path, a git URL, or upload files; then **build** runs a pipeline — ingest docs → project the code graph → extract concepts → cluster → insights.
+
+<p align="center"><img src="docs/img/ui-atlas.svg" alt="Atlas builder" width="100%"></p>
+
+Ask the corpus a question and get an answer grounded in **citations** — every claim links back to a source document, code symbol, or concept, with the openable URI and the matching passages.
+
+<p align="center"><img src="docs/img/ui-ask.svg" alt="Atlas corpus Q&A with citations" width="100%"></p>
+
+```bash
+atlas code   /path/to/repo      # project the code graph
+atlas ingest /path/to/docs      # PDFs, markdown, txt
+atlas extract                   # concept extraction (LLM)
+atlas cluster                   # modularity clustering
+atlas query  "how does recall rank results?"
+```
+
+Atlas is feature-gated — build with `--features atlas` to mount its routes under `/api/v1/atlas`.
+
+---
+
+## Plans, sessions, replay & commit-grounding
+
+- **Plans** are first-class memories (`category='plan'`). Activating one pins it and injects its title into the project's core context, so it rides along on every recall. Completing it clears the active tag but keeps it searchable as history.
+- **Sessions & runs** capture the trajectory of work — observations grouped into task-scoped runs — without you doing anything; the Claude Code adapter posts them via hooks.
+- **Replay** reconstructs the causal chain of a session as a transcript.
+- **Commit-grounding** is the spine: when a commit lands, memories and code touching the committed files are strengthened and exempted from decay. Work that shipped persists; work that was abandoned fades. See [`plan-commit-grounding.md`](plan-commit-grounding.md).
 
 ---
 
@@ -245,7 +119,7 @@ cargo build --release
 ./target/release/hifz serve --db-path ~/.hifz/data
 ```
 
-Save and search:
+Save and search over HTTP:
 
 ```bash
 curl -X POST http://localhost:3111/api/v1/memories \
@@ -261,9 +135,51 @@ Open [http://localhost:3111](http://localhost:3111) for the dashboard.
 
 ---
 
-## Run hifz as a background service (macOS)
+## Claude Code integration
 
-The Claude Code plugin silently drops observations when the server is down. To keep it always running — started at login/boot, restarted on crash, surviving reboot/logout — install it as a launchd LaunchAgent:
+The plugin is a **client** of a running hifz server, so order matters:
+
+**1. Build the binary** — `cargo build --release` (→ `target/release/hifz`).
+
+**2. Register the MCP server** in `.mcp.json` at the project root. The `command` path must point at the binary you built (`debug` vs `release` must match):
+
+```json
+{
+  "mcpServers": {
+    "hifz": { "command": "/absolute/path/to/target/release/hifz", "args": ["mcp"] }
+  }
+}
+```
+
+**3. Start the server.** On macOS, install it as an always-on service so the plugin never silently drops observations:
+
+```bash
+make install-service     # cargo build --release + load launchd agent
+# ad-hoc alternative:
+./target/release/hifz serve --db-path ~/.hifz/data
+```
+
+**4. Install the plugin** (hooks + skills):
+
+```bash
+claude plugin marketplace add /path/to/hifz/adapters/claude-code
+claude plugin install hifz@hifz
+claude plugin list                       # verify: hifz@hifz → enabled
+```
+
+**5. Restart Claude Code.** Hooks, skills, and the MCP server load at startup. After restart, `/mcp` lists `hifz`.
+
+The adapter ships four skills — `/recall`, `/remember`, `/forget`, `/session-history` — plus lifecycle hooks that auto-capture tool use, prompts, and session/run boundaries. Optional auto-inject memory at session start, in `.claude/settings.local.json`:
+
+```json
+{ "env": { "HIFZ_INJECT_CONTEXT": "true" } }
+```
+
+For non–Claude Code clients: anything that can `POST /api/v1/memories` and `POST /api/v1/search` is a first-class memory client; add `POST /api/v1/agent/observe` to populate the capture layer. See [AGENTS.md](AGENTS.md).
+
+---
+
+## Run hifz as a background service (macOS)
 
 ```bash
 make install-service     # cargo build --release, then load com.hifz.server
@@ -280,97 +196,160 @@ Logs: `~/.hifz/logs/server.{out,err}.log`. DB: `~/.hifz/data`, port `3111`.
 
 ---
 
-## Dashboard
+## Surfaces
 
-A SvelteKit SPA lives in `website/` and is served by the same Axum process. It is a read-mostly client of the REST API.
+| Surface | Shape | Use it from |
+|---|---|---|
+| **REST** | `/api/v1/*` — core memory, agent pipeline, code intelligence, and (optional) Atlas groups | Any HTTP client, any language |
+| **MCP** | Tools across Memory, Code, Core, Plans, Trajectories, Graph, and (optional) Atlas groups | Any MCP-speaking agent |
+| **Dashboard** | SvelteKit SPA served by the same Axum process | Browser at `http://localhost:3111` |
+
+<details>
+<summary><b>MCP tools</b></summary>
+
+| Group | Tool | Purpose |
+|---|---|---|
+| Memory | `hifz_save` | Create a memory (category, tags, files, pinned) |
+| | `hifz_recall` | Search memories + observations with graph expansion |
+| | `hifz_search` | Hybrid BM25 + vector with RRF fusion |
+| | `hifz_delete` | Delete a memory by ID |
+| | `hifz_evolve` | LLM refinement of a memory (opt-in) |
+| Code | `hifz_code_index` | Index a repository (tree-sitter, 8 languages) |
+| | `hifz_code_search` | Hybrid code search, optional language/path filters |
+| | `hifz_link_code` | Link a memory to a file + line range |
+| | `hifz_link_symbol` | Link a memory to a named symbol |
+| Core | `hifz_core_get` / `hifz_core_edit` | Read / edit project core memory |
+| Plans | `hifz_current_plan` / `hifz_plans` / `hifz_activate_plan` / `hifz_complete_plan` | Plan lifecycle |
+| Trajectories | `hifz_sessions` / `hifz_runs` / `hifz_timeline` / `hifz_digest` / `hifz_export` | Sessions, runs, timeline, project intel, export |
+| Graph | `hifz_trace` | Walk the knowledge graph from a node |
+| Atlas *(feature-gated)* | `atlas_ingest` / `atlas_code` / `atlas_extract` / `atlas_cluster` / `atlas_insights` / `atlas_query` | Build and query the corpus graph |
+
+</details>
+
+<details>
+<summary><b>Dashboard routes</b></summary>
 
 | Route | Shows |
 |---|---|
 | `/` | Health, digest, recent sessions, recent commits |
-| `/memories` | Search, filter, delete |
-| `/observations` | Captured timeline |
-| `/sessions`, `/sessions/[id]` | Sessions list and detail tree |
-| `/runs`, `/runs/[id]` | Task-scoped trajectories |
-| `/commits`, `/commits/[sha]` | Git log with diff viewer |
-| `/graph` | Knowledge graph visualization |
+| `/ask` | Corpus Q&A and search, with citations |
+| `/memories` | Search, filter, expand, delete |
+| `/graph` | Interactive knowledge graph |
+| `/atlas` | Build & inspect the corpus graph |
+| `/sessions`, `/runs`, `/observations` | Captured trajectory |
+| `/commits` | Git log with diff viewer |
+| `/replay` | Causal session replay |
+| `/tokens` | Per-project token usage |
 
-<!-- screenshot: docs/img/dashboard.png -->
+</details>
 
 ---
 
-## Integrations
+## Architecture
 
-### HTTP — any language
+A curated long-term layer sits above a dense, short-lived capture layer; consolidation lifts patterns from one into the other.
 
-Anything that can `POST /api/v1/memories` and `POST /api/v1/search` is a first-class client. See the surface tables above and [ARCHITECTURE.md](ARCHITECTURE.md) for details.
+<p align="center"><img src="docs/img/ontology.svg" alt="hifz two-layer ontology" width="100%"></p>
 
-### Build your own adapter
+**Write path.** Every saved memory is embedded, stored, then linked against existing memories through three independent channels. Any channel over its threshold creates an `edge`:
 
-Two patterns:
-- **Memory client** — call `/memories`, `/search`, `/trace`, `/core/{project}` to make hifz a knowledge backend for an app, IDE, CLI, or another agent.
-- **Capture client** — additionally `POST /observe` (or `/events`, `/events/batch`) on lifecycle events to populate the agent capture layer. The Claude Code adapter does this.
+<p align="center"><img src="docs/img/write-path.svg" alt="hifz write path" width="100%"></p>
 
-### Claude Code (reference adapter)
+| Channel | Compares | Threshold | Edge score |
+|---|---|---|---|
+| **Embedding KNN** | Cosine distance between 384-d vectors via HNSW | distance < 0.25 | `1 - distance` |
+| **Concept Jaccard** | Overlap of `concepts[]` arrays | ≥ 0.30 | Jaccard value |
+| **File Jaccard** | Overlap of `files[]` arrays | ≥ 0.30 | Jaccard value |
 
-The plugin is a **client** of a running hifz server, so the order matters:
+Entity extraction (files, concepts, functions, identifiers) is deterministic. Evolution is opt-in: when enabled, an LLM reads up to five graph neighbors and may add tags, propose conceptual edges, or mark older memories superseded.
 
-**1. Build the binary.** Nothing works until the binary exists:
+**Read path.** Hybrid retrieval (BM25 + HNSW) fused with reciprocal rank fusion, expanded one hop over the graph (neighbor score = seed × 0.5 × edge weight), then ordered by a Rust-side score:
 
-```bash
-cargo build --release      # → target/release/hifz
-# or: cargo build          # → target/debug/hifz (faster build, slower runtime)
-```
-
-**2. Register the MCP server.** `.mcp.json` at the project root. The `command` path must point at the binary you built in step 1 (`debug` vs `release` must match):
-
-```json
-{
-  "mcpServers": {
-    "hifz": {
-      "command": "/absolute/path/to/target/release/hifz",
-      "args": ["mcp"]
-    }
-  }
-}
-```
-
-**3. Start the server.** On macOS, install it as an always-on service so the plugin never silently drops observations:
-
-```bash
-make install-service     # cargo build --release + load launchd agent
-# ad-hoc/testing alternative:
-./target/release/hifz serve --db-path ~/.hifz/data
-```
-
-See [Run hifz as a background service (macOS)](#run-hifz-as-a-background-service-macos).
-
-**4. Install the plugin** (hooks + skills). Two ways — they do the same thing:
+<p align="center"><img src="docs/img/read-path.svg" alt="hifz read path" width="100%"></p>
 
 ```
-# Interactive slash command, inside a Claude Code session:
-/plugin marketplace add /path/to/hifz/adapters/claude-code
-/plugin install hifz@hifz
+score = strength × exp(-age_days / HALF_LIFE) × (1 + ACCESS_COEF × min(access, ACCESS_CAP))
 ```
 
-```bash
-# Shell subcommand — use this when /plugin is unavailable
-# (e.g. the VSCode/IDE extension, or when slash commands are disabled):
-claude plugin marketplace add /path/to/hifz/adapters/claude-code
-claude plugin install hifz@hifz
-claude plugin list                       # verify: hifz@hifz → enabled
+**Typed knowledge graph.** Edges are typed and segmented by source so retrieval can weight them differently:
+
+| Group | Edge types |
+|---|---|
+| **Co-occurrence** | `co_occurs_files`, `co_occurs_keywords`, `co_occurs_embedding`, `mentions` |
+| **Provenance** | `generated_by`, `informed_by`, `derived_from`, `attributed_to`, `part_of`, `follows` |
+| **Conceptual** | `broader`, `narrower`, `related`, `same_as` |
+| **Argumentative** | `supports`, `contradicts`, `elaborates`, `responds_to` |
+| **Lifecycle** | `supersedes`, `closes` |
+| **Code-domain** | `touches_file`, `commits_for`, `tests`, `references`, `references_symbol` |
+
+Every edge carries a `reason` field. Traverse from any seed with `POST /trace` (or `hifz_trace`).
+
+<p align="center"><img src="docs/img/knowledge-graph.svg" alt="Example knowledge graph with typed edges" width="100%"></p>
+
+**Versioning.** Memories are append-only. When something supersedes an older version, the older row stays — `is_latest` flips to `false` and the new ID is appended to `supersedes[]`. Every retrieval filters `WHERE is_latest = true`; the chain is kept for provenance and audit.
+
+<p align="center"><img src="docs/img/versioning.svg" alt="memory version chain" width="80%"></p>
+
+Full architecture, module index, and the observation pipeline: [ARCHITECTURE.md](ARCHITECTURE.md).
+
+---
+
+## Modes
+
+hifz operates in one of two modes per insert. Both are valid; the difference is what the runtime can derive without an external service.
+
+| | Deterministic (default) | LLM-augmented |
+|---|---|---|
+| **Trigger** | No Ollama, or `HIFZ_LLM_EVOLVE=false` | Ollama reachable AND `HIFZ_LLM_EVOLVE=true` |
+| **Edges** | Co-occurrence, provenance, code-domain | The above PLUS conceptual + argumentative edges |
+| **`context_summary` / `tags`** | Null / default | LLM-generated |
+| **Cost** | One embedding call per insert | One embedding + one Ollama call per insert |
+
+Same code path runs both ways. A row written in one mode reads fine in the other.
+
+---
+
+## Forgetting & evolution
+
+| Mechanism | What it does |
+|---|---|
+| **TTL GC** | `forget_after` timestamps expire memories. `POST /forget-gc` runs the sweep. |
+| **Contradiction detection** | Two memories with content Jaccard ≥ 0.9 → older is marked `is_latest = false`. |
+| **Commit-grounding** | A `commit_made` observation strengthens memories touching the committed files and exempts them from decay. |
+| **Uncommitted decay** | A session that edits files but never commits sets `forget_after = now + 60 days` on related memories. |
+| **Evolution** | With LLM enabled, the insert pipeline generates `context_summary` / `tags`, proposes typed edges with reasons, and may refine neighbors (recorded in `evolution_history`). |
+
+---
+
+## Memory tiers
+
+Three persistent tiers above raw `memory`:
+
+| Tier | Shape | Origin |
+|---|---|---|
+| **`core_memory`** | One per project — identity, goals, invariants, watchlist. Always prepended to injected context. | Edited via `PATCH /core/{project}` or `hifz_core_edit`. |
+| **`semantic_memory`** | Consolidated facts. | Tier-1 consolidation merges session summaries (LLM). |
+| **`procedural_memory`** | Named workflows (trigger + steps). | Tier-3 consolidation extracts recurring sequences (LLM). |
+
+Consolidation is on-demand via `POST /consolidate` (Semantic · Reflect · Procedural · Decay). LLM tiers are skipped silently when Ollama is unavailable.
+
+---
+
+## Storage & local-first
+
+| Mode | Command | Persistence |
+|---|---|---|
+| In-memory | `hifz serve --memory` | Lost on restart |
+| SurrealKV | `hifz serve --db-path ~/.hifz/data` | On disk |
+
+Embeddings use **fastembed AllMiniLM-L6-V2** (384-dim ONNX, runs locally — no network). LLM features are opt-in via Ollama. Optional `~/.hifz/.env`:
+
+```env
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=qwen2.5:7b
+HIFZ_AUTO_COMPRESS=true     # richer observation summaries
+HIFZ_LLM_EVOLVE=true        # post-save LLM refinement
 ```
-
-Installing a plugin is a free, local config operation — it never consumes API credits. (A "credit balance too low" error is an unrelated account-billing issue for running Claude itself, not a charge for the plugin.)
-
-**5. Restart Claude Code.** Plugin hooks/skills and the MCP server load at startup. After restart, `/mcp` lists `hifz` and the skills below are available.
-
-**Optional** — auto-inject memory at session start, in `.claude/settings.local.json`:
-
-```json
-{ "env": { "HIFZ_INJECT_CONTEXT": "true" } }
-```
-
-The adapter ships four skills — `/recall`, `/remember`, `/forget`, `/session-history` — and lifecycle hooks that auto-capture tool use, prompts, and session/run boundaries to `/observe`.
 
 ---
 
@@ -381,7 +360,6 @@ The adapter ships four skills — `/recall`, `/remember`, `/forget`, `/session-h
 cargo run --bin longmemeval-bench -- bm25
 cargo run --bin longmemeval-bench -- hybrid
 cargo run --release --bin memory-bench -- full
-cargo run --release --bin memory-bench -- base
 ```
 
 ---
@@ -389,13 +367,11 @@ cargo run --release --bin memory-bench -- base
 <details>
 <summary><b>Troubleshooting</b></summary>
 
-**Server not responding.** `curl http://localhost:3111/api/v1/health`. If it fails, the server isn't running — start it with `make install-service` (persistent, macOS) or `./target/release/hifz serve --db-path ~/.hifz/data` (ad-hoc). If the service is installed but down, `make service-status` and check `~/.hifz/logs/server.err.log`.
+**Server not responding.** `curl http://localhost:3111/api/v1/health`. If it fails, start it with `make install-service` (persistent, macOS) or `./target/release/hifz serve --db-path ~/.hifz/data`. If the service is installed but down, run `make service-status` and check `~/.hifz/logs/server.err.log`.
 
-**MCP not in Claude Code's `/mcp`.** Restart Claude Code so it picks up `.mcp.json`. Confirm the `command` path in `.mcp.json` matches the binary you actually built (`target/debug/hifz` vs `target/release/hifz`).
+**MCP not in Claude Code's `/mcp`.** Restart Claude Code so it picks up `.mcp.json`. Confirm the `command` path matches the binary you built (`target/debug/hifz` vs `target/release/hifz`).
 
-**`/plugin` says "not available in this environment".** The interactive slash command is unavailable in the VSCode/IDE extension and when slash commands are disabled. Use the shell subcommand instead: `claude plugin marketplace add /path/to/hifz/adapters/claude-code` then `claude plugin install hifz@hifz`. Verify with `claude plugin list`.
-
-**Adapter not auto-capturing.** Check `grep -A2 enabledPlugins ~/.claude/settings.json` — should include `"hifz@hifz": true`. Reinstall via `/plugin install hifz@hifz` (or `claude plugin install hifz@hifz`) if missing.
+**`/plugin` says "not available".** Use the shell subcommand: `claude plugin marketplace add /path/to/hifz/adapters/claude-code` then `claude plugin install hifz@hifz`. Verify with `claude plugin list`.
 
 **Context not injected.** Ensure `HIFZ_INJECT_CONTEXT=true` in `.claude/settings.local.json`.
 
@@ -404,21 +380,17 @@ cargo run --release --bin memory-bench -- base
 echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' | /path/to/hifz mcp
 ```
 
-**Test a hook:**
-```bash
-echo '{"session_id":"test","cwd":"/tmp","tool_name":"Read","tool_input":{"file_path":"src/main.rs"}}' \
-  | node adapters/claude-code/scripts/post-tool-use.mjs
-```
-
 </details>
 
 ---
 
 ## Docs
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) — full architecture, ontology, write/read pipelines, consolidation, module index.
+- [ARCHITECTURE.md](ARCHITECTURE.md) — full architecture, write/read pipelines, consolidation, module index.
+- [AGENTS.md](AGENTS.md) — building your own adapter / agent integration.
+- [docs/ontology.md](docs/ontology.md) — categories, edge vocabulary, type-pair rules, mode matrix.
+- [docs/code-indexing.md](docs/code-indexing.md) — code intelligence operator's guide.
 - [docs/architecture/memory.md](docs/architecture/memory.md) — memory model deep dive.
-- [docs/research/memory-architecture.md](docs/research/memory-architecture.md) — prior art (A-MEM, Mem0, MemGPT, MIRIX) and design tradeoffs.
 
 ## License
 

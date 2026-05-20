@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 560" font-family="'Inter', system-ui, -apple-system, sans-serif">
+  <defs>
+    <style>
+      .bg     { fill: #f2f1eb; }
+      .surf   { fill: #f8f8f5; }
+      .alt    { fill: #ecebe4; }
+      .ink    { fill: #1a1a1a; }
+      .muted  { fill: #6a6a63; }
+      .faint  { fill: #9a9a91; }
+      .sec    { fill: #3a3a36; }
+      .line   { stroke: #dedcd2; stroke-width: 1; }
+      .strong { stroke: #1a1a1a; }
+      .mono   { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+      .ic     { fill: none; stroke: #6a6a63; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+      .h11    { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; }
+      .kw     { fill: #9b59b6; }
+      .fn     { fill: #2563EB; }
+      .str    { fill: #15803D; }
+      .cmt    { fill: #9a9a91; }
+      .cd     { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; fill: #3a3a36; }
+    </style>
+    <marker id="cs-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#3b82f6"/></marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="920" height="560"/>
+
+  <!-- caption strip -->
+  <text class="muted h11" x="24" y="30">Code search</text>
+  <text class="faint mono" x="120" y="30" font-size="11">hifz_code_search · MCP · REST · CLI</text>
+
+  <!-- search bar -->
+  <rect class="ink" x="26" y="44" width="870" height="44" rx="10"/>
+  <rect class="surf" x="24" y="42" width="870" height="44" rx="10"/>
+  <rect x="24" y="42" width="870" height="44" rx="10" fill="none" class="strong" stroke-width="1.5"/>
+  <circle class="ic" cx="48" cy="64" r="5"/><path class="ic" d="M52 68 l4 4"/>
+  <text class="ink mono" x="66" y="68" font-size="13">session refresh token</text>
+  <rect x="700" y="54" width="74" height="20" rx="10" fill="rgba(180,83,9,0.10)"/>
+  <rect x="700" y="54" width="74" height="20" rx="10" fill="none" stroke="#B45309" stroke-width="1"/>
+  <text class="mono" x="737" y="68" text-anchor="middle" fill="#B45309" font-size="9.5" letter-spacing="0.08em">LANG: RUST</text>
+  <text class="faint mono" x="868" y="68" text-anchor="end" font-size="11">3 hits</text>
+
+  <!-- hit 1 -->
+  <rect class="ink" x="26" y="104" width="870" height="124" rx="10"/>
+  <rect class="surf" x="24" y="102" width="870" height="124" rx="10"/>
+  <rect x="24" y="102" width="870" height="124" rx="10" fill="none" class="strong" stroke-width="1.5"/>
+  <text class="mono" x="42" y="126" fill="#1a1a1a" font-size="13" font-weight="700">src/auth/session.rs</text>
+  <rect x="208" y="114" width="48" height="18" rx="9" fill="rgba(180,83,9,0.10)"/><text class="mono" x="232" y="127" text-anchor="middle" fill="#B45309" font-size="9" letter-spacing="0.08em">RUST</text>
+  <rect class="alt" x="264" y="114" width="68" height="18" rx="9"/><text class="mono" x="298" y="127" text-anchor="middle" fill="#6a6a63" font-size="10">L42–L71</text>
+  <text class="faint mono" x="876" y="127" text-anchor="end" font-size="11">0.912</text>
+  <rect class="alt" x="42" y="142" width="836" height="72"/>
+  <rect x="42" y="142" width="836" height="72" fill="none" class="line"/>
+  <g class="cd">
+    <text x="56" y="162"><tspan class="kw">pub fn</tspan> <tspan class="fn">refresh</tspan>(&amp;self, tok: &amp;RefreshToken) -&gt; Result&lt;Session&gt; {</text>
+    <text x="56" y="180">    <tspan class="kw">let</tspan> key = <tspan class="fn">format!</tspan>(<tspan class="str">"session:{}"</tspan>, tok.subject);</text>
+    <text x="56" y="198">    <tspan class="kw">let</tspan> raw = self.redis.<tspan class="fn">get</tspan>(&amp;key).<tspan class="kw">await</tspan>?;  <tspan class="cmt">// refresh state lives here</tspan></text>
+  </g>
+
+  <!-- hit 2 -->
+  <rect class="ink" x="26" y="242" width="870" height="104" rx="10"/>
+  <rect class="surf" x="24" y="240" width="870" height="104" rx="10"/>
+  <rect x="24" y="240" width="870" height="104" rx="10" fill="none" class="strong" stroke-width="1.5"/>
+  <text class="mono" x="42" y="264" fill="#1a1a1a" font-size="13" font-weight="700">src/auth/jwt.rs</text>
+  <rect x="170" y="252" width="48" height="18" rx="9" fill="rgba(180,83,9,0.10)"/><text class="mono" x="194" y="265" text-anchor="middle" fill="#B45309" font-size="9" letter-spacing="0.08em">RUST</text>
+  <rect class="alt" x="226" y="252" width="76" height="18" rx="9"/><text class="mono" x="264" y="265" text-anchor="middle" fill="#6a6a63" font-size="10">L88–L104</text>
+  <text class="faint mono" x="876" y="265" text-anchor="end" font-size="11">0.864</text>
+  <rect class="alt" x="42" y="280" width="836" height="52"/>
+  <rect x="42" y="280" width="836" height="52" fill="none" class="line"/>
+  <g class="cd">
+    <text x="56" y="300"><tspan class="kw">fn</tspan> <tspan class="fn">verify_claims</tspan>(token: &amp;str) -&gt; Result&lt;Claims&gt; {</text>
+    <text x="56" y="318">    <tspan class="cmt">// access tokens stay stateless &amp; short-lived</tspan></text>
+  </g>
+
+  <!-- hit 3 -->
+  <rect class="ink" x="26" y="360" width="870" height="88" rx="10"/>
+  <rect class="surf" x="24" y="358" width="870" height="88" rx="10"/>
+  <rect x="24" y="358" width="870" height="88" rx="10" fill="none" class="strong" stroke-width="1.5"/>
+  <text class="mono" x="42" y="382" fill="#1a1a1a" font-size="13" font-weight="700">src/web/routes.rs</text>
+  <rect x="186" y="370" width="48" height="18" rx="9" fill="rgba(180,83,9,0.10)"/><text class="mono" x="210" y="383" text-anchor="middle" fill="#B45309" font-size="9" letter-spacing="0.08em">RUST</text>
+  <rect class="alt" x="242" y="370" width="84" height="18" rx="9"/><text class="mono" x="284" y="383" text-anchor="middle" fill="#6a6a63" font-size="10">L210–L228</text>
+  <text class="faint mono" x="876" y="383" text-anchor="end" font-size="11">0.795</text>
+  <rect class="alt" x="42" y="398" width="836" height="36"/>
+  <rect x="42" y="398" width="836" height="36" fill="none" class="line"/>
+  <g class="cd">
+    <text x="56" y="420">    .<tspan class="fn">route</tspan>(<tspan class="str">"/auth/refresh"</tspan>, <tspan class="fn">post</tspan>(refresh_handler))</text>
+  </g>
+
+  <!-- memory -> code link row -->
+  <g>
+    <path d="M104 494 l14 -16 44 0 14 16 -14 16 -44 0 z" fill="#6B3FA0" stroke="#1a1a1a" stroke-width="1.5"/>
+    <text x="140" y="498" text-anchor="middle" fill="#f2f1eb" font-size="9" font-weight="700">memory</text>
+    <text class="sec" x="186" y="498" font-size="12">JWT refresh in Redis</text>
+    <path d="M340 494 L470 494" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#cs-arrow)"/>
+    <text class="mono" x="405" y="488" text-anchor="middle" fill="#3b82f6" font-size="9">references</text>
+    <rect x="480" y="482" width="200" height="24" rx="6" fill="rgba(14,116,144,0.10)"/>
+    <rect x="480" y="482" width="200" height="24" rx="6" fill="none" stroke="#0E7490" stroke-width="1"/>
+    <text class="mono" x="494" y="498" fill="#0E7490" font-size="11">src/auth/session.rs:42-71</text>
+    <text class="faint" x="700" y="498" font-size="11">hifz_link_code · re-anchors on re-index</text>
+  </g>
+</svg>

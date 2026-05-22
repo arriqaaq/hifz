@@ -4,9 +4,14 @@ use crate::mcp::McpState;
 use crate::mcp::http::RequestBuilderExt;
 
 /// Tools advertised to MCP clients — a deliberately small "model-intent" core
-/// (recall/save/search/delete, sessions, the plan lifecycle, code grounding).
+/// (save/search/delete, sessions, the plan lifecycle, code grounding). Trimmed
+/// for a coding workflow: `hifz_recall` (exact duplicate of `hifz_search` — same
+/// `/search/session` endpoint), `hifz_link_code`, `hifz_link_symbol` (memory↔code
+/// linking — unused by coding agents in practice) and `hifz_plans` (list;
+/// `hifz_current_plan` covers the common need) are no longer advertised — they
+/// remain fully dispatchable, see below.
 ///
-/// The other ~17 tools (analytics/admin/graph/context-injection) stay fully
+/// The other ~20 tools (analytics/admin/graph/context-injection) stay fully
 /// functional: dispatch (`call_tool`) and `validate_required` keep using the
 /// FULL `tool_defs()`, and everything is reachable via the REST API /
 /// dashboard. They are simply not *advertised*, so the advertised schema stays
@@ -17,19 +22,16 @@ use crate::mcp::http::RequestBuilderExt;
 /// reproducible with a single tool. The serialization-proof save path is the
 /// `hifz save` CLI (`Command::Save`) → `POST /api/v1/memories`.
 const CORE_TOOLS: &[&str] = &[
-    "hifz_recall",
     "hifz_save",
     "hifz_search",
     "hifz_delete",
     "hifz_sessions",
     "hifz_current_plan",
-    "hifz_plans",
     "hifz_activate_plan",
     "hifz_complete_plan",
     "hifz_code_index",
     "hifz_code_search",
-    "hifz_link_code",
-    "hifz_link_symbol",
+    "hifz_code_semantic",
 ];
 
 /// List the advertised MCP tools (the `CORE_TOOLS` allowlist). Maktab tools are
@@ -100,7 +102,7 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
             }
             state
                 .client
-                .post(format!("{}/api/v1/search/session", state.base_url))
+                .post(format!("{}/api/v1/agent/search", state.base_url))
                 .json(&body)
                 .send_decode()
                 .await?
@@ -473,9 +475,20 @@ pub async fn call_tool(state: &McpState, params: &serde_json::Value) -> Result<s
         }
 
         "hifz_code_search" => {
+            // Lean symbol lookup (agent route) — flat array, no chunk bodies.
             state
                 .client
-                .post(format!("{}/api/v1/code/search", state.base_url))
+                .post(format!("{}/api/v1/agent/code/symbols", state.base_url))
+                .json(&args)
+                .send_decode()
+                .await?
+        }
+
+        "hifz_code_semantic" => {
+            // Lean chunk/snippet search (agent route) for conceptual queries.
+            state
+                .client
+                .post(format!("{}/api/v1/agent/code/semantic", state.base_url))
                 .json(&args)
                 .send_decode()
                 .await?
@@ -818,7 +831,8 @@ fn tool_defs() -> Vec<serde_json::Value> {
         }),
         // Code dimension.
         serde_json::json!({"name": "hifz_code_index", "description": "Index a repo: chunk + embed source files for semantic code search (idempotent).", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "root": {"type": "string", "description": "Absolute path to repo root"}, "follow_symlinks": {"type": "boolean", "default": false}, "max_file_bytes": {"type": "integer", "default": 2097152}}, "required": ["project", "root"]}}),
-        serde_json::json!({"name": "hifz_code_search", "description": "Hybrid (vector + BM25) search over indexed code chunks. Returns paths with line ranges and snippets.", "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}, "project": {"type": "string"}, "language": {"type": "string", "description": "Filter by language: rust|python|typescript|javascript|go|java|c|cpp"}, "path": {"type": "string", "description": "Substring filter against code_chunk.path"}, "limit": {"type": "integer", "default": 10}, "group_by_file": {"type": "boolean", "default": false}}, "required": ["query"]}}),
+        serde_json::json!({"name": "hifz_code_search", "description": "Find code symbols (functions/structs/enums/traits/methods/...) by name. Returns a flat array of {name, qualified, kind, path, line} — no bodies, no ids. Use this to locate a definition you can name; Read path:line for the code. For conceptual queries where you don't know the name, use hifz_code_semantic.", "inputSchema": {"type": "object", "properties": {"query": {"type": "string", "description": "Symbol name or qualified path (substring of qualified also matches)"}, "project": {"type": "string"}, "kind": {"type": "string", "description": "Optional kind filter: function|struct|enum|trait|method|class|interface|const|module|type|macro"}, "limit": {"type": "integer", "default": 10}}, "required": ["query"]}}),
+        serde_json::json!({"name": "hifz_code_semantic", "description": "Semantic (vector + BM25) search over code for conceptual queries where you DON'T know the symbol name (e.g. 'map byte offset to line'). Returns ranked path:line pointers with a short matched snippet (overlapping same-file chunks deduped) — Read path:line for the full body. To find a function by name, prefer hifz_code_search.", "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}, "project": {"type": "string"}, "language": {"type": "string", "description": "Filter by language: rust|python|typescript|javascript|go|java|c|cpp"}, "path": {"type": "string", "description": "Substring filter against the file path"}, "limit": {"type": "integer", "default": 5}}, "required": ["query"]}}),
         serde_json::json!({"name": "hifz_link_code", "description": "Link a memory to a precise code location. Creates Memory --references--> CodeChunk edges for every chunk overlapping the line range.", "inputSchema": {"type": "object", "properties": {"memory_id": {"type": "string"}, "file": {"type": "string", "description": "Repo-relative POSIX path"}, "start_line": {"type": "integer", "minimum": 1}, "end_line": {"type": "integer", "minimum": 1, "description": "Defaults to start_line"}, "project": {"type": "string"}, "reason": {"type": "string"}}, "required": ["memory_id", "file", "start_line"]}}),
         serde_json::json!({"name": "hifz_link_symbol", "description": "Link a memory to a named code symbol (function/struct/class/...). Creates Memory --references_symbol--> CodeSymbol edge(s).", "inputSchema": {"type": "object", "properties": {"memory_id": {"type": "string"}, "name": {"type": "string", "description": "Symbol name (or qualified module::name)"}, "kind": {"type": "string", "description": "Optional kind filter: function|struct|enum|trait|method|class|interface|const|module|namespace|type|macro"}, "file": {"type": "string", "description": "Optional path to disambiguate"}, "project": {"type": "string"}, "reason": {"type": "string"}}, "required": ["memory_id", "name"]}}),
         serde_json::json!({"name": "hifz_code_gc", "description": "Reconcile code-index against the filesystem: drop chunks/symbols/edges for deleted files; optionally decay cold chunks. Run after large refactors or when stale entries linger.", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "root": {"type": "string"}, "dry_run": {"type": "boolean", "default": false}, "force_decay": {"type": "boolean", "default": false}}, "required": ["project", "root"]}}),
@@ -909,17 +923,30 @@ mod tests {
         );
         // feature-independent core members are all present
         for must in [
-            "hifz_recall",
             "hifz_save",
             "hifz_search",
             "hifz_delete",
             "hifz_sessions",
             "hifz_current_plan",
-            "hifz_plans",
             "hifz_activate_plan",
             "hifz_complete_plan",
+            "hifz_code_index",
+            "hifz_code_search",
+            "hifz_code_semantic",
         ] {
             assert!(names.iter().any(|n| n == must), "missing core tool: {must}");
+        }
+        // Trimmed from the advertised set but still dispatchable (see CORE_TOOLS).
+        for hidden in [
+            "hifz_recall",
+            "hifz_plans",
+            "hifz_link_code",
+            "hifz_link_symbol",
+        ] {
+            assert!(
+                !names.iter().any(|n| n == hidden),
+                "{hidden} should no longer be advertised"
+            );
         }
     }
 

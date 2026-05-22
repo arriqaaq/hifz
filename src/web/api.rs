@@ -9,7 +9,9 @@ use axum::response::Json;
 use serde::Deserialize;
 use surrealdb::types::SurrealValue;
 
-use crate::models::{CodeGcReq, CodeIndexReq, CodeLinkReq, CodeLinkSymReq, CodeSearchReq};
+use crate::models::{
+    CodeGcReq, CodeIndexReq, CodeLinkReq, CodeLinkSymReq, CodeSearchReq, CodeSymbolReq,
+};
 use crate::models::{
     CommitsReq, ContextReq, CoreEditReq, ExportReq, HookPayload, MemoriesReq, ObservationsReq,
     PlanActivateReq, PlansListReq, RememberReq, RunsReq, SearchReq, SessionStartReq, TimelineReq,
@@ -111,6 +113,15 @@ pub async fn search(State(state): State<AppState>, AppJson(body): AppJson<Search
     json_or_err(state.search(body).await)
 }
 
+/// Agent/MCP-only lean search. Full content, metadata noise stripped (no
+/// session_id/timestamp/importance/is_neighbor, clean ids). Backs `hifz_search`.
+pub async fn agent_search(
+    State(state): State<AppState>,
+    AppJson(body): AppJson<SearchReq>,
+) -> ApiResult {
+    json_or_err(state.agent_search(body).await)
+}
+
 pub async fn search_session(
     State(state): State<AppState>,
     AppJson(body): AppJson<SearchReq>,
@@ -128,31 +139,8 @@ pub async fn search_session(
             Err(e) => return Err(ApiError::from(e)),
         };
 
-    if let Some(ref sid) = body.session_id
-        && let Ok(Some(run_id)) = crate::run::find_open(&state.db, sid).await
-    {
-        let mem_hits: Vec<(surrealdb::types::RecordId, f64)> = results
-            .iter()
-            .filter(|sr| sr.obs_type.starts_with("memory:"))
-            .filter_map(|sr| Some((sr.id.clone()?, sr.score.unwrap_or(0.0))))
-            .collect();
-        if !mem_hits.is_empty() {
-            let mem_ids: Vec<_> = mem_hits.iter().map(|(id, _)| id.clone()).collect();
-            let _ = crate::run::append_recalled(&state.db, &run_id, &mem_ids).await;
-            for (mid, score) in &mem_hits {
-                let reason = format!("recalled by search rank {score:.3}");
-                let _ = crate::link::upsert_edge(
-                    &state.db,
-                    mid,
-                    &run_id,
-                    "informed_by",
-                    "system",
-                    *score,
-                    Some(&reason),
-                )
-                .await;
-            }
-        }
+    if let Some(ref sid) = body.session_id {
+        crate::run::link_recalled_for_session(&state.db, sid, &results).await;
     }
 
     let count = results.len();
@@ -616,6 +604,24 @@ pub async fn code_search(
 
 pub async fn code_projects(State(state): State<AppState>) -> ApiResult {
     json_or_err(state.code_projects().await)
+}
+
+/// Agent/MCP-only lean symbol lookup. Returns `{name, qualified, kind, path,
+/// line}` — no chunk bodies, no record ids. Backs `hifz_code_search`.
+pub async fn agent_code_symbols(
+    State(state): State<AppState>,
+    AppJson(body): AppJson<CodeSymbolReq>,
+) -> ApiResult {
+    json_or_err(state.code_symbols(body).await)
+}
+
+/// Agent/MCP-only lean semantic search. Same hybrid retrieval as
+/// `/code/search` but truncated, id-free bodies. Backs `hifz_code_semantic`.
+pub async fn agent_code_semantic(
+    State(state): State<AppState>,
+    AppJson(body): AppJson<CodeSearchReq>,
+) -> ApiResult {
+    json_or_err(state.code_semantic(body).await)
 }
 
 pub async fn code_link(

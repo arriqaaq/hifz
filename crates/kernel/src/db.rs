@@ -317,6 +317,9 @@ DEFINE FIELD IF NOT EXISTS chunk_span         ON code_symbol TYPE option<array<r
 DEFINE INDEX IF NOT EXISTS code_symbol_lookup ON TABLE code_symbol FIELDS project, qualified UNIQUE;
 DEFINE INDEX IF NOT EXISTS code_symbol_name   ON TABLE code_symbol FIELDS project, name;
 DEFINE INDEX IF NOT EXISTS code_symbol_kind   ON TABLE code_symbol FIELDS project, kind;
+-- Enclosing-symbol resolution for semantic search: filter by (project, path)
+-- then line-range scan. Mirrors `code_chunk_lines`.
+DEFINE INDEX IF NOT EXISTS code_symbol_path   ON TABLE code_symbol FIELDS project, path;
 DEFINE INDEX IF NOT EXISTS code_symbol_vec    ON TABLE code_symbol
   FIELDS embedding HNSW DIMENSION 384 DIST COSINE;
 

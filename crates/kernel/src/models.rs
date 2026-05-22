@@ -171,6 +171,19 @@ pub struct SearchResult {
     pub is_neighbor: Option<bool>,
 }
 
+/// Lean memory hit for the agent `search` endpoint (`hifz_search`). Keeps the
+/// full `content` (the recalled value — never truncated) but drops the metadata
+/// noise an agent doesn't reason over (`session_id`, `timestamp`, `importance`,
+/// `is_neighbor`). `id` is the canonical `memory:<key>` string.
+#[derive(Debug, Clone, Serialize)]
+pub struct MemoryHit {
+    pub id: String,
+    pub title: String,
+    pub kind: String,
+    pub content: String,
+    pub score: f64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, SurrealValue)]
 pub struct RrfResult {
     pub id: Option<surrealdb::types::RecordId>,
@@ -443,6 +456,20 @@ pub struct CodeSearchReq {
     pub limit: Option<usize>,
     #[serde(default)]
     pub group_by_file: Option<bool>,
+}
+
+/// Lean symbol lookup (agent `code/symbols` endpoint / `hifz_code_search`).
+/// Lexical match on `code_symbol.name`/`qualified` — no chunk bodies.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodeSymbolReq {
+    pub query: String,
+    #[serde(default)]
+    pub project: Option<String>,
+    /// Optional kind filter: function|struct|enum|trait|method|class|... .
+    #[serde(default)]
+    pub kind: Option<String>,
+    #[serde(default)]
+    pub limit: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -144,6 +144,18 @@ pub async fn serve(state: Hifz, port: u16) -> Result<()> {
         .route(
             "/usage/project/{project}",
             axum::routing::get(api::usage_project),
+        )
+        // Lean memory search for agents/MCP (full content, no metadata noise;
+        // UI keeps /search + /search/session).
+        .route("/search", axum::routing::post(api::agent_search))
+        // Lean code search for agents/MCP (token-cheap; UI keeps /code/search).
+        .route(
+            "/code/symbols",
+            axum::routing::post(api::agent_code_symbols),
+        )
+        .route(
+            "/code/semantic",
+            axum::routing::post(api::agent_code_semantic),
         );
 
     // maktab router carries its own state (→ `Router<()>` after `with_state`);

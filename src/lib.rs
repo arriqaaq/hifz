@@ -881,6 +881,36 @@ impl Hifz {
         Ok(serde_json::json!({"results": results, "count": count}))
     }
 
+    /// Lean agent-facing search — same hybrid retrieval as `search_session`, but
+    /// projects to `MemoryHit` (full content, no metadata noise / RecordId debug)
+    /// for the `hifz_search` MCP tool. The UI keeps `/search` + `/search/session`.
+    pub async fn agent_search(&self, req: crate::models::SearchReq) -> Result<serde_json::Value> {
+        let limit = req.limit.unwrap_or(10);
+        let project = req.project.as_deref();
+        let results =
+            crate::search::search_hybrid(&self.db, &self.embedder, &req.query, limit, project)
+                .await?;
+
+        // Preserve the recall-provenance side effect of `/search/session`: link
+        // recalled memories to the session's open run. Lean output, same grounding.
+        if let Some(ref sid) = req.session_id {
+            crate::run::link_recalled_for_session(&self.db, sid, &results).await;
+        }
+
+        let count = results.len();
+        let lean: Vec<crate::models::MemoryHit> = results
+            .into_iter()
+            .map(|r| crate::models::MemoryHit {
+                id: r.id.as_ref().map(crate::rid_to_string).unwrap_or_default(),
+                title: r.title,
+                kind: r.obs_type,
+                content: r.narrative,
+                score: r.score.unwrap_or(0.0),
+            })
+            .collect();
+        Ok(serde_json::json!({ "results": lean, "count": count }))
+    }
+
     // Code dimension
 
     pub async fn code_index(&self, req: crate::models::CodeIndexReq) -> Result<serde_json::Value> {
@@ -1004,6 +1034,46 @@ impl Hifz {
         };
         let results =
             crate::code::search::search_code(&self.db, &self.embedder, &req.query, &opts).await?;
+        let count = results.len();
+        Ok(serde_json::json!({ "results": results, "count": count }))
+    }
+
+    /// Lean symbol lookup over `code_symbol` — backs the agent `code/symbols`
+    /// endpoint (`hifz_code_search`). Returns a flat, id-free, body-free array.
+    pub async fn code_symbols(
+        &self,
+        req: crate::models::CodeSymbolReq,
+    ) -> Result<serde_json::Value> {
+        let project = req.project.as_deref().unwrap_or("global");
+        let results = crate::code::search::search_symbols(
+            &self.db,
+            project,
+            &req.query,
+            req.limit.unwrap_or(10),
+            req.kind.as_deref(),
+        )
+        .await?;
+        let count = results.len();
+        Ok(serde_json::json!({ "results": results, "count": count }))
+    }
+
+    /// Lean semantic chunk search — backs the agent `code/semantic` endpoint
+    /// (`hifz_code_semantic`). Same hybrid search as `code_search` but projects
+    /// to the truncated, id-free `CodeChunkLean` shape for token-cheap agents.
+    pub async fn code_semantic(
+        &self,
+        req: crate::models::CodeSearchReq,
+    ) -> Result<serde_json::Value> {
+        let opts = crate::code::search::CodeSearchOpts {
+            limit: req.limit.unwrap_or(5),
+            project: req.project,
+            language: req.language,
+            path: req.path,
+            group_by_file: false,
+        };
+        let results =
+            crate::code::search::search_semantic(&self.db, &self.embedder, &req.query, &opts)
+                .await?;
         let count = results.len();
         Ok(serde_json::json!({ "results": results, "count": count }))
     }

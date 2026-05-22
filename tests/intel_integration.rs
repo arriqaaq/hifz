@@ -198,6 +198,79 @@ async fn e4_intel_end_to_end() {
     let _ = std::fs::remove_dir_all(&repo);
 }
 
+/// Lean symbol lookup (`code_symbols` → `hifz_code_search`): returns a flat
+/// array of {name, qualified, kind, path, line}, exact-name first, no bodies,
+/// no record ids.
+#[tokio::test]
+async fn code_symbols_lean_lookup() {
+    let h = Hifz::open_memory().await.expect("open in-memory hifz");
+    let repo = tmp_repo("syms");
+    std::fs::write(
+        repo.join("src/lib.rs"),
+        "pub fn helper() {}\n\
+         pub struct Helper;\n\
+         impl Helper { pub fn helper(&self) {} }\n",
+    )
+    .unwrap();
+    h.code_index(CodeIndexReq {
+        project: "demo".into(),
+        root: repo.to_string_lossy().to_string(),
+        git: None,
+        follow_symlinks: None,
+        max_file_bytes: None,
+    })
+    .await
+    .expect("index");
+
+    let out = h
+        .code_symbols(hifz::models::CodeSymbolReq {
+            query: "helper".into(),
+            project: Some("demo".into()),
+            kind: None,
+            limit: Some(10),
+        })
+        .await
+        .expect("code_symbols");
+
+    let results = out["results"].as_array().expect("results array");
+    assert!(out["count"].as_u64().unwrap() >= 2, "found helper symbols");
+
+    // Lean shape: no record-id leakage, no chunk body.
+    let raw = serde_json::to_string(&out).unwrap();
+    assert!(!raw.contains("RecordId {"), "no debug record-id noise");
+    let first = &results[0];
+    for f in ["name", "qualified", "kind", "path", "line"] {
+        assert!(first.get(f).is_some(), "missing field {f}");
+    }
+    assert!(first.get("snippet").is_none(), "must not carry a body");
+    assert!(first.get("id").is_none(), "must not carry a record id");
+
+    // Both the free fn and the method are named "helper" (the capitalized
+    // struct doesn't match the case-sensitive query) — exact name comes first.
+    assert_eq!(first["name"].as_str().unwrap(), "helper");
+
+    // kind filter narrows to functions only.
+    let fns = h
+        .code_symbols(hifz::models::CodeSymbolReq {
+            query: "helper".into(),
+            project: Some("demo".into()),
+            kind: Some("function".into()),
+            limit: Some(10),
+        })
+        .await
+        .expect("code_symbols fn-only");
+    assert!(
+        fns["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|r| r["kind"].as_str().unwrap() == "function"),
+        "kind filter applied"
+    );
+
+    let _ = std::fs::remove_dir_all(&repo);
+}
+
 #[derive(Debug, SurrealValue)]
 struct DocRow {
     doc: Option<String>,

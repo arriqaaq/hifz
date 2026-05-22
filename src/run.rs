@@ -350,6 +350,43 @@ pub async fn append_recalled(
     Ok(())
 }
 
+/// Link memories recalled by a search to the session's open run (if any):
+/// appends to the run's recall trail and creates `memory --informed_by--> run`
+/// edges. Best-effort (errors ignored). Shared by the `/search/session` handler
+/// and the lean `agent_search` so the two can't drift.
+pub async fn link_recalled_for_session(
+    db: &Surreal<Db>,
+    session_id: &str,
+    results: &[crate::models::SearchResult],
+) {
+    let Ok(Some(run_id)) = find_open(db, session_id).await else {
+        return;
+    };
+    let mem_hits: Vec<(RecordId, f64)> = results
+        .iter()
+        .filter(|sr| sr.obs_type.starts_with("memory:"))
+        .filter_map(|sr| Some((sr.id.clone()?, sr.score.unwrap_or(0.0))))
+        .collect();
+    if mem_hits.is_empty() {
+        return;
+    }
+    let mem_ids: Vec<RecordId> = mem_hits.iter().map(|(id, _)| id.clone()).collect();
+    let _ = append_recalled(db, &run_id, &mem_ids).await;
+    for (mid, score) in &mem_hits {
+        let reason = format!("recalled by search rank {score:.3}");
+        let _ = crate::link::upsert_edge(
+            db,
+            mid,
+            &run_id,
+            "informed_by",
+            "system",
+            *score,
+            Some(&reason),
+        )
+        .await;
+    }
+}
+
 /// Run data for context injection.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, SurrealValue)]
 pub struct RunWithLesson {

@@ -350,7 +350,7 @@ Embeddings use **fastembed AllMiniLM-L6-V2** (384-dim ONNX, runs locally — no 
 
 ```env
 OLLAMA_URL=http://localhost:11434
-OLLAMA_MODEL=qwen2.5:7b
+OLLAMA_MODEL=qwen3:4b
 HIFZ_AUTO_COMPRESS=true     # richer observation summaries
 HIFZ_LLM_EVOLVE=true        # post-save LLM refinement
 ```

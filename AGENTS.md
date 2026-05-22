@@ -219,7 +219,7 @@ Config is loaded from `~/.hifz/.env` (file) and process environment (fallback).
 | `HIFZ_CODE_WATCH` | false | Enable the live code re-indexing watcher |
 | `HIFZ_CODE_WATCH_ROOTS` | (none) | Watcher roots, `project=/path,...` |
 | `OLLAMA_URL` | (none) | Ollama endpoint |
-| `OLLAMA_MODEL` | qwen2.5:7b | LLM model |
+| `OLLAMA_MODEL` | qwen3:4b | LLM model |
 | `CONSOLIDATION_ENABLED` | true | 4-tier consolidation |
 | `TOKEN_BUDGET` | 2000 | Context injection token limit |
 | `MAX_OBS_PER_SESSION` | 500 | Max observations per session |

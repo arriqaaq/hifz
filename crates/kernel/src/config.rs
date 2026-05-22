@@ -25,7 +25,7 @@ impl Default for Config {
             rest_port: 3111,
             viewer_port: 3113,
             ollama_url: None,
-            ollama_model: "qwen2.5:7b".to_string(),
+            ollama_model: "qwen3:4b".to_string(),
             auto_compress: false,
             consolidation_enabled: true,
             token_budget: 2000,

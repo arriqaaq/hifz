@@ -22,9 +22,9 @@ DOMAIN="gui/$(id -u)"
 # LLM backend for the daemon (maktab "Ask" RAG + compression/consolidation).
 # Env-overridable; defaults to a local Ollama. The model must be pulled
 # (`ollama pull <model>`) or completions fail and maktab degrades to
-# sources-only. `qwen3:8b` is the locally-available default.
+# sources-only. `qwen3:4b` is the locally-available default.
 OLLAMA_URL="${OLLAMA_URL:-http://127.0.0.1:11434}"
-OLLAMA_MODEL="${OLLAMA_MODEL:-qwen3:8b}"
+OLLAMA_MODEL="${OLLAMA_MODEL:-qwen3:4b}"
 
 # 1. Release binary is required — no fallback.
 if [ ! -x "$BIN" ]; then

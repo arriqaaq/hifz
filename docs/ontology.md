@@ -185,7 +185,7 @@ rows written in one mode read fine in the other.
 | Env var | Default | Effect |
 |---|---|---|
 | `OLLAMA_URL` | unset | When set, hifz attempts to reach Ollama at this URL. If unreachable, mode degrades to deterministic. |
-| `OLLAMA_MODEL` | `qwen2.5:7b` | Model used for enrichment + evolve. |
+| `OLLAMA_MODEL` | `qwen3:4b` | Model used for enrichment + evolve. |
 | `HIFZ_LLM_EVOLVE` | `false` | Enables LLM enrichment + bounded neighbor evolution at insert time. Controls the `enable_llm` flag passed to `enrich::save_enriched`. |
 | `HIFZ_WARMUP_TOP_N` | `15` | Top-N entries in the warmup digest. |
 

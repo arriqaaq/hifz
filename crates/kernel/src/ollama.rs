@@ -37,7 +37,7 @@ impl OllamaClient {
         Self {
             client: reqwest::Client::new(),
             base_url: base_url.unwrap_or_else(|| "http://localhost:11434".to_string()),
-            model: model.unwrap_or_else(|| "qwen2.5:7b".to_string()),
+            model: model.unwrap_or_else(|| "qwen3:4b".to_string()),
         }
     }
 

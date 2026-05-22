@@ -35,7 +35,7 @@ enum Command {
         #[arg(long, env = "OLLAMA_URL")]
         ollama_url: Option<String>,
         /// Ollama model name
-        #[arg(long, env = "OLLAMA_MODEL", default_value = "qwen2.5:7b")]
+        #[arg(long, env = "OLLAMA_MODEL", default_value = "qwen3:4b")]
         ollama_model: String,
     },
     /// Run MCP server over stdio (proxies to REST server)
@@ -189,7 +189,7 @@ async fn async_main(cli: Cli) -> Result<()> {
         db_path: "db_data".to_string(),
         memory: false,
         ollama_url: None,
-        ollama_model: "qwen2.5:7b".to_string(),
+        ollama_model: "qwen3:4b".to_string(),
     }) {
         Command::Serve {
             port,

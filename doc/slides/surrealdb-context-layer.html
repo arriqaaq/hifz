@@ -429,16 +429,9 @@ pre.code-block.xs { font-size: 18.5px; line-height: 1.55; padding: 26px 30px; }
   0%, 20%, 100% { opacity: 0; }
   6%, 14%       { opacity: 1; }
 }
-.sweep-base { animation: sweep-base 12s ease-in-out infinite; }
-.sweep-base.s1 { animation-delay: 0s; }
-.sweep-base.s2 { animation-delay: 2.4s; }
-.sweep-base.s3 { animation-delay: 4.8s; }
-.sweep-base.s4 { animation-delay: 7.2s; }
-.sweep-base.s5 { animation-delay: 9.6s; }
-@keyframes sweep-base {
-  0%, 20%, 100% { transform: translateY(0); }
-  6%, 14%       { transform: translateY(-6px); }
-}
+/* .sweep-base: intentionally static — transform animations on SVG groups
+   ghost/flicker text in live browsers; the .sweep opacity highlight
+   carries the effect on its own. */
 
 /* -- tables ------------------------------------------------------------ */
 table.tbl {
@@ -495,18 +488,47 @@ table.tbl td .op {
   justify-self: start;
 }
 
-/* -- svg animation helpers (site idiom) --------------------------------- */
-.ont-pulse, .ont-edge, .ont-flow { transform-box: fill-box; transform-origin: center; }
+/* -- svg animation helpers (site idiom) ---------------------------------
+   NOTE: never animate transforms (scale/translate) on SVG groups — live
+   browsers ghost/flicker text under compositing. Paint properties only:
+   opacity, stroke-width, stroke-dashoffset. */
 .ont-pulse { animation: ont-pulse 2.4s ease-in-out infinite; }
-.ont-glow  { animation: ont-glow 3.2s ease-in-out infinite; transform-origin: center; }
+.ont-glow  { animation: ont-glow 3.2s ease-in-out infinite; }
 .ont-flow  { stroke-dasharray: 6 6; animation: ont-flow 1.6s linear infinite; }
 .ont-edge  { stroke-dasharray: 100; stroke-dashoffset: 100; animation: ont-edge-draw 4s ease-in-out infinite alternate; }
 .ont-edge.delay-1 { animation-delay: 0.6s; }
 .ont-edge.delay-2 { animation-delay: 1.2s; }
-@keyframes ont-pulse     { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+@keyframes ont-pulse     { 0%, 100% { stroke-width: 1.8; } 50% { stroke-width: 3.4; } }
 @keyframes ont-glow      { 0%, 100% { opacity: 0.30; } 50% { opacity: 0.65; } }
 @keyframes ont-flow      { to { stroke-dashoffset: -24; } }
 @keyframes ont-edge-draw { 0% { stroke-dashoffset: 100; } 50%, 100% { stroke-dashoffset: 0; } }
+
+/* -- act 5: plugin-loop stage pulse (stroke highlight, no transforms) --- */
+.loop-stage { animation: loop-stage 8s ease-in-out infinite; }
+.loop-stage.l1 { animation-delay: 0s; }
+.loop-stage.l2 { animation-delay: 2s; }
+.loop-stage.l3 { animation-delay: 4s; }
+.loop-stage.l4 { animation-delay: 6s; }
+@keyframes loop-stage {
+  0%, 26%, 100% { stroke-width: 1.8; }
+  8%, 18%       { stroke-width: 4; }
+}
+
+/* -- act 5: pipeline breadcrumb strip ----------------------------------- */
+.crumbs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-family: var(--font-mono);
+  font-size: 17px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+.crumbs span { padding: 6px 18px; border: 1.5px solid rgba(26,26,26,0.22); border-radius: 999px; }
+.crumbs span.on { background: var(--neon); border-color: var(--fg); color: var(--fg); font-weight: 700; }
+.crumbs span.sep { border: none; padding: 0; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -1938,9 +1960,11 @@ table.tbl td .op {
   </aside>
 </section>
 <!-- ================================================================
-     ACT 5 — HIFZ: ONE ISSUE, END TO END (v4, 13 slides)
-     Map + three moves (2 slides each) + consolidation +
-     code + maktab (same recipe, one slide each) + blueprint.
+     ACT 5 — BUILD A CONTEXT LAYER (v5, 14 slides)
+     Curriculum: plugin loop → hifz architecture → pipeline map →
+     7 component slides (capture, chunk, embed, vector, hybrid,
+     graph, graphrag) → one-issue recap → consolidation → blueprint.
+     hifz is the worked example, not the subject.
      Cast (fixed): project shop-api · session:s1 ·
      issue "CI auth tests are flaky — they pass locally" ·
      plan memory:plan_fix_refresh · commit 9f2c1a (src/auth.rs) ·
@@ -1950,18 +1974,90 @@ table.tbl td .op {
 <!-- 34 · Divider -->
 <section class="layout-divider">
   <div class="act-num">05</div>
-  <div class="eyebrow"><span class="dot"></span>Act five · hifz</div>
-  <h2 class="title">One issue, end to end.</h2>
-  <p class="lede">Solving an issue takes a session of commands, a plan, then code. hifz stores that trail. Three moves: store the work, link it to the code, get it back.</p>
+  <div class="eyebrow"><span class="dot"></span>Act five · build a context layer</div>
+  <h2 class="title">Build a context layer.</h2>
+  <p class="lede">Seven components, one database. hifz is the worked example — by the end of this act, you can build your own.</p>
   <aside class="notes">
-    Act five is one story. A real issue comes in, it takes a long session of commands to understand, it becomes a plan, the plan becomes code — and the code is the ground truth. hifz stores everything that led to it, on SurrealDB, using exactly the operators from act two. Three moves: store the work, link it to the code, get it back. If you follow these three moves, you can build your own context store.
+    Act five is the build. A context layer sounds like a big system, but it decomposes into seven small components — capture, chunking, embeddings, vector search, text search, graph links, and graph-expanded retrieval — and every one of them is a table or an index on the database from act two. I'll use hifz, my memory plugin for Claude Code, as the worked example throughout: not to explain hifz, but so every component comes with a real query you can copy. First: where a plugin like this sits relative to the agent.
   </aside>
 </section>
 
-<!-- 35 · One process -->
+<!-- 35 · The plugin loop -->
 <section class="layout-default">
-  <div class="eyebrow"><span class="dot"></span>05 · hifz</div>
-  <h2 class="title">One process. Nothing leaves your machine.</h2>
+  <div class="eyebrow"><span class="dot"></span>05 · The shape of every memory plugin</div>
+  <h2 class="title">How a memory plugin plugs into an agent.</h2>
+  <div class="slide-content">
+    <figure class="figure" style="padding:40px 60px">
+      <svg viewBox="0 0 1560 520" xmlns="http://www.w3.org/2000/svg" fill="none">
+        <!-- agent (left, spans both lanes) -->
+        <g>
+          <rect x="40" y="90" width="300" height="330" rx="16" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="2"/>
+          <text x="190" y="135" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="15" fill="#657220" letter-spacing="1.5">THE AGENT</text>
+          <text x="190" y="175" text-anchor="middle" font-family="Inter, sans-serif" font-size="24" font-weight="800" fill="#1a1a1a">Claude Code</text>
+          <text x="190" y="215" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14" fill="#657220">Read · Bash · Edit</text>
+          <text x="190" y="340" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" fill="#9a6a2a">context window:</text>
+          <text x="190" y="362" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" fill="#9a6a2a">big, but it forgets</text>
+        </g>
+        <!-- store (right, spans both lanes) -->
+        <g>
+          <rect x="1220" y="90" width="300" height="330" rx="16" fill="#d9f400" fill-opacity="0.2" stroke="#1a1a1a" stroke-width="2"/>
+          <text x="1370" y="135" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="15" fill="#657220" letter-spacing="1.5">THE STORE</text>
+          <text x="1370" y="175" text-anchor="middle" font-family="Inter, sans-serif" font-size="24" font-weight="800" fill="#1a1a1a">SurrealDB</text>
+          <text x="1370" y="215" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#657220">rows · vectors · words · links</text>
+          <text x="1370" y="340" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" fill="#465016">small, but it remembers</text>
+        </g>
+
+        <!-- write lane (top, left → right) -->
+        <text x="780" y="80" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14" fill="#657220" letter-spacing="2">WHEN THE AGENT WORKS</text>
+        <line class="ont-flow" x1="340" y1="150" x2="500" y2="150" stroke="#1a1a1a" stroke-width="2"/>
+        <polygon points="494,142 508,150 494,158" fill="#1a1a1a"/>
+        <g class="loop-stage l1">
+          <rect x="510" y="110" width="280" height="86" rx="12" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.8"/>
+          <text x="650" y="145" text-anchor="middle" font-family="Inter, sans-serif" font-size="20" font-weight="800" fill="#1a1a1a">① events fire hooks</text>
+          <text x="650" y="175" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12.5" fill="#657220">PostToolUse · PreCompact · Stop</text>
+        </g>
+        <line class="ont-flow" x1="790" y1="150" x2="850" y2="150" stroke="#1a1a1a" stroke-width="2"/>
+        <polygon points="844,142 858,150 844,158" fill="#1a1a1a"/>
+        <g class="loop-stage l2">
+          <rect x="860" y="110" width="280" height="86" rx="12" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.8"/>
+          <text x="1000" y="145" text-anchor="middle" font-family="Inter, sans-serif" font-size="20" font-weight="800" fill="#1a1a1a">② capture &amp; store</text>
+          <text x="1000" y="175" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12.5" fill="#657220">shrink → embed → one row each</text>
+        </g>
+        <line class="ont-flow" x1="1140" y1="150" x2="1210" y2="150" stroke="#1a1a1a" stroke-width="2"/>
+        <polygon points="1204,142 1218,150 1204,158" fill="#1a1a1a"/>
+
+        <!-- read lane (bottom, right → left) -->
+        <text x="780" y="470" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14" fill="#657220" letter-spacing="2">WHEN A SESSION STARTS, AND ON EVERY PROMPT</text>
+        <line class="ont-flow" x1="1220" y1="370" x2="1150" y2="370" stroke="#1a1a1a" stroke-width="2"/>
+        <polygon points="1156,362 1142,370 1156,378" fill="#1a1a1a"/>
+        <g class="loop-stage l3">
+          <rect x="860" y="327" width="280" height="86" rx="12" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.8"/>
+          <text x="1000" y="362" text-anchor="middle" font-family="Inter, sans-serif" font-size="20" font-weight="800" fill="#1a1a1a">③ recall</text>
+          <text x="1000" y="392" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12.5" fill="#657220">search the store, rank, pick top-k</text>
+        </g>
+        <line class="ont-flow" x1="850" y1="370" x2="800" y2="370" stroke="#1a1a1a" stroke-width="2"/>
+        <polygon points="806,362 792,370 806,378" fill="#1a1a1a"/>
+        <g class="loop-stage l4">
+          <rect x="510" y="327" width="280" height="86" rx="12" fill="#d9f400" fill-opacity="0.35" stroke="#1a1a1a" stroke-width="1.8"/>
+          <text x="650" y="362" text-anchor="middle" font-family="Inter, sans-serif" font-size="20" font-weight="800" fill="#1a1a1a">④ inject</text>
+          <text x="650" y="392" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12.5" fill="#657220">stdout briefing · additionalContext</text>
+        </g>
+        <line class="ont-flow" x1="500" y1="370" x2="350" y2="370" stroke="#1a1a1a" stroke-width="2"/>
+        <polygon points="356,362 342,370 356,378" fill="#1a1a1a"/>
+
+        <text x="780" y="510" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14.5" fill="#657220" letter-spacing="1.5">EVERY MEMORY PLUGIN IS THIS LOOP — THE REST OF THE ACT BUILDS THE MIDDLE</text>
+      </svg>
+    </figure>
+  </div>
+  <aside class="notes">
+    Before any component: the shape. Every memory plugin — hifz, or the one you build — is this loop. Top lane, while the agent works: the agent's actions fire hook events, the plugin captures each one and stores it. Bottom lane, when a new session starts or a prompt arrives: the plugin searches the store and injects the results — in Claude Code, a SessionStart hook's stdout is prepended, and a UserPromptSubmit hook returns matches in an additionalContext field. There's also a deliberate path — MCP tools the agent calls to save or search on demand — but the loop is the spine. Everything that follows is what goes inside the two middle boxes.
+  </aside>
+</section>
+
+<!-- 36 · hifz architecture -->
+<section class="layout-default">
+  <div class="eyebrow"><span class="dot"></span>05 · The worked example</div>
+  <h2 class="title">hifz: the example we'll dissect.</h2>
   <div class="slide-content">
     <figure class="figure" style="padding:40px 60px">
       <svg viewBox="0 0 1560 500" xmlns="http://www.w3.org/2000/svg" fill="none">
@@ -2018,14 +2114,391 @@ table.tbl td .op {
     </figure>
   </div>
   <aside class="notes">
-    The system in one picture. Claude Code talks to hifz three ways: hooks fire automatically on every event, MCP tools let the model save and search deliberately, and there's a CLI. hifz itself is one Rust binary: REST API, MCP server, dashboard, a local embedding model, and SurrealDB embedded via surrealkv from act three. The deployment is a directory. No API keys, no cloud — embeddings run in-process, so nothing about your work leaves the machine.
+    Here's the loop made concrete — hifz. One Rust binary: a REST API the hooks post to, an MCP server for the deliberate path, a dashboard, a local embedding model, and SurrealDB embedded in-process via surrealkv from act three. The deployment is a directory; no API keys, no cloud, no sidecars. Every component you're about to see — capture, chunking, embeddings, the two searches, the graph — lives inside this one box as either a table or an index. Now let's open it up.
   </aside>
 </section>
 
-<!-- 36 · The map: the story on one picture -->
+<!-- 37 · The pipeline map -->
 <section class="layout-default">
-  <div class="eyebrow"><span class="dot"></span>05 · The story</div>
-  <h2 class="title">The trail behind one fix.</h2>
+  <div class="eyebrow"><span class="dot"></span>05 · The architecture of a context layer</div>
+  <h2 class="title">The pipeline: a write path and a read path.</h2>
+  <div class="slide-content">
+    <figure class="figure" style="padding:44px 60px">
+      <svg viewBox="0 0 1560 500" xmlns="http://www.w3.org/2000/svg" fill="none">
+        <!-- write lane -->
+        <text x="40" y="50" font-family="JetBrains Mono, monospace" font-size="15" fill="#657220" letter-spacing="2">WRITE PATH — WHEN THE AGENT WORKS</text>
+        <g font-family="Inter, sans-serif" text-anchor="middle">
+          <rect x="40" y="80" width="320" height="110" rx="13" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.8"/>
+          <text x="200" y="125" font-size="22" font-weight="800" fill="#1a1a1a">capture</text>
+          <text x="200" y="158" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#657220">events → rows</text>
+          <rect x="430" y="80" width="320" height="110" rx="13" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.8"/>
+          <text x="590" y="125" font-size="22" font-weight="800" fill="#1a1a1a">chunk</text>
+          <text x="590" y="158" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#657220">big things → pieces</text>
+          <rect x="820" y="80" width="320" height="110" rx="13" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.8"/>
+          <text x="980" y="125" font-size="22" font-weight="800" fill="#1a1a1a">embed</text>
+          <text x="980" y="158" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#657220">meaning → numbers</text>
+          <rect x="1210" y="80" width="320" height="110" rx="13" fill="#d9f400" fill-opacity="0.3" stroke="#1a1a1a" stroke-width="1.8"/>
+          <text x="1370" y="125" font-size="22" font-weight="800" fill="#1a1a1a">store + link</text>
+          <text x="1370" y="158" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#657220">rows, indexes, edges</text>
+        </g>
+        <line class="ont-flow" x1="360" y1="135" x2="428" y2="135" stroke="#1a1a1a" stroke-width="2"/><polygon points="422,127 436,135 422,143" fill="#1a1a1a"/>
+        <line class="ont-flow" x1="750" y1="135" x2="818" y2="135" stroke="#1a1a1a" stroke-width="2"/><polygon points="812,127 826,135 812,143" fill="#1a1a1a"/>
+        <line class="ont-flow" x1="1140" y1="135" x2="1208" y2="135" stroke="#1a1a1a" stroke-width="2"/><polygon points="1202,127 1216,135 1202,143" fill="#1a1a1a"/>
+
+        <!-- connector store→read -->
+        <path class="ont-flow" d="M 1370 190 L 1370 250 L 380 250 L 380 305" stroke="#1a1a1a" stroke-width="1.8" fill="none"/>
+        <polygon points="372,300 380,314 388,300" fill="#1a1a1a"/>
+        <text x="785" y="240" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" fill="#9a6a2a" letter-spacing="1">…LATER, A QUESTION ARRIVES…</text>
+
+        <!-- read lane -->
+        <text x="40" y="298" font-family="JetBrains Mono, monospace" font-size="15" fill="#657220" letter-spacing="2">READ PATH — WHEN THE AGENT ASKS</text>
+        <g font-family="Inter, sans-serif" text-anchor="middle">
+          <rect x="40" y="315" width="420" height="110" rx="13" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.8"/>
+          <text x="250" y="360" font-size="22" font-weight="800" fill="#1a1a1a">search</text>
+          <text x="250" y="393" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#657220">by meaning (vector) + by words (text)</text>
+          <rect x="540" y="315" width="420" height="110" rx="13" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.8"/>
+          <text x="750" y="360" font-size="22" font-weight="800" fill="#1a1a1a">expand</text>
+          <text x="750" y="393" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#657220">follow the graph to linked context</text>
+          <rect x="1040" y="315" width="490" height="110" rx="13" fill="#d9f400" fill-opacity="0.3" stroke="#1a1a1a" stroke-width="1.8"/>
+          <text x="1285" y="360" font-size="22" font-weight="800" fill="#1a1a1a">inject</text>
+          <text x="1285" y="393" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#657220">top-k into the agent's context window</text>
+        </g>
+        <line class="ont-flow" x1="460" y1="370" x2="538" y2="370" stroke="#1a1a1a" stroke-width="2"/><polygon points="532,362 546,370 532,378" fill="#1a1a1a"/>
+        <line class="ont-flow" x1="960" y1="370" x2="1038" y2="370" stroke="#1a1a1a" stroke-width="2"/><polygon points="1032,362 1046,370 1032,378" fill="#1a1a1a"/>
+
+        <text x="785" y="482" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14.5" fill="#657220" letter-spacing="1.5">SEVEN STAGES · ONE DATABASE — ONE SLIDE EACH, WITH THE QUERY</text>
+      </svg>
+    </figure>
+  </div>
+  <aside class="notes">
+    This is the whole architecture — memorise this slide and the rest of the act is just zooming in. Write path, while the agent works: capture events as rows, chunk anything too big to retrieve whole, embed everything, store it with its indexes and links. Read path, when a question arrives: search by meaning and by exact words at once, expand through the graph to whatever the hits are linked to, inject the top results into the context window. Seven stages. Each one is now one slide, one plain-language idea, and one query — and the strip at the top of each slide shows where we are.
+  </aside>
+</section>
+
+<!-- 38 · Component 1: capture -->
+<section class="layout-default">
+  <span class="model-badge">document</span>
+  <div class="eyebrow"><span class="dot"></span>05 · Write path</div>
+  <h2 class="title">Capture: every event becomes a row.</h2>
+  <div class="slide-content" style="gap:26px">
+    <div class="crumbs">
+      <span class="on">capture</span><span class="sep">→</span><span>chunk</span><span class="sep">→</span><span>embed</span><span class="sep">→</span><span>store + link</span><span class="sep">·&nbsp;·&nbsp;·</span><span>search</span><span class="sep">→</span><span>expand</span><span class="sep">→</span><span>inject</span>
+    </div>
+    <div class="grid cols-2 cols-1-1-align">
+      <div>
+        <p class="lede" style="margin-bottom:26px">Agents emit events — every tool call, file edit, test run. A hook turns each one into a row.</p>
+        <ul class="list" style="font-size:26px">
+          <li>One row per event; long output shrunk to a title and facts</li>
+          <li>When the agent's context <strong>compacts</strong>, the summary is stored too — <strong>the log outlives the window</strong></li>
+        </ul>
+      </div>
+      <div>
+        <pre class="code-block"><span class="c-comment">-- what the hook stores for one command</span>
+<span class="c-kw">CREATE</span> observation <span class="c-kw">SET</span>
+  session_id = session:s1,
+  obs_type   = <span class="c-str">'command_run'</span>,
+  title      = <span class="c-str">'cargo test auth — 4 failures'</span>,
+  files      = [<span class="c-str">'tests/auth.rs'</span>],
+  <span class="c-hi">embedding  = $vec</span>;</pre>
+        <p class="code-caption">a plain document row — no schema migration to start capturing a new event type</p>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    Component one: capture. The agent emits events constantly — hifz listens with hooks, and each event becomes one observation row: session, type, a short title, the files touched. That's the entire ingredient list: a document table. One detail that matters more than it looks: when the agent's own context window compacts mid-session, the compaction summary is captured as a row too — so the plugin's log remembers what the window forgot. And notice the row already carries an embedding field; that's the next two slides.
+  </aside>
+</section>
+
+<!-- 39 · Component 2: chunking -->
+<section class="layout-default">
+  <span class="model-badge">document + record links</span>
+  <div class="eyebrow"><span class="dot"></span>05 · Write path</div>
+  <h2 class="title">Chunking: big things become retrievable pieces.</h2>
+  <div class="slide-content" style="gap:26px">
+    <div class="crumbs">
+      <span>capture</span><span class="sep">→</span><span class="on">chunk</span><span class="sep">→</span><span>embed</span><span class="sep">→</span><span>store + link</span><span class="sep">·&nbsp;·&nbsp;·</span><span>search</span><span class="sep">→</span><span>expand</span><span class="sep">→</span><span>inject</span>
+    </div>
+    <div class="grid cols-2 cols-1-1-align">
+      <figure class="figure flat" style="background:var(--page)">
+        <svg viewBox="0 0 640 360" xmlns="http://www.w3.org/2000/svg" fill="none">
+          <!-- source file -->
+          <g>
+            <rect x="30" y="80" width="180" height="200" rx="12" fill="#fff7ed" stroke="#1a1a1a" stroke-width="1.6"/>
+            <text x="120" y="115" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" fill="#9a6a2a" letter-spacing="1">THE WHOLE FILE</text>
+            <text x="120" y="150" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="15" font-weight="700" fill="#1a1a1a">src/auth.rs</text>
+            <g stroke="#1a1a1a" stroke-width="1" opacity="0.35">
+              <line x1="55" y1="180" x2="185" y2="180"/><line x1="55" y1="200" x2="185" y2="200"/>
+              <line x1="55" y1="220" x2="165" y2="220"/><line x1="55" y1="240" x2="185" y2="240"/>
+            </g>
+            <text x="120" y="310" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12" fill="#9a6a2a">too big to retrieve whole</text>
+          </g>
+          <line class="ont-flow" x1="210" y1="180" x2="290" y2="180" stroke="#1a1a1a" stroke-width="2"/>
+          <polygon points="284,172 298,180 284,188" fill="#1a1a1a"/>
+          <!-- chunks -->
+          <g font-family="JetBrains Mono, monospace" font-size="13">
+            <rect x="300" y="70" width="310" height="52" rx="10" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.4"/>
+            <text x="325" y="102" fill="#1a1a1a">fn login · L20-96</text>
+            <rect x="300" y="140" width="310" height="52" rx="10" fill="#d9f400" fill-opacity="0.45" stroke="#1a1a1a" stroke-width="1.6"/>
+            <text x="325" y="172" fill="#1a1a1a">fn refresh_token · L142-198</text>
+            <rect x="300" y="210" width="310" height="52" rx="10" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.4"/>
+            <text x="325" y="242" fill="#1a1a1a">fn logout · L204-238</text>
+          </g>
+          <text x="455" y="300" text-anchor="middle" font-family="Inter, sans-serif" font-size="16.5" fill="#1a1a1a" opacity="0.78">every chunk points back to its source file</text>
+          <text x="455" y="326" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12.5" fill="#657220">code: one chunk = one function · docs: ~500 tokens</text>
+        </svg>
+      </figure>
+      <div>
+        <pre class="code-block sm"><span class="c-comment">-- code: tree-sitter splits on function
+-- boundaries (8 languages)</span>
+<span class="c-kw">CREATE</span> code_chunk <span class="c-kw">SET</span>
+  path       = <span class="c-str">'src/auth.rs'</span>,
+  start_line = 142,
+  end_line   = 198,
+  symbols    = [<span class="c-str">'refresh_token'</span>],
+  embedding  = $vec;</pre>
+        <p class="code-caption">documents get ~500-token chunks the same way — that's how maktab ingests PDFs and markdown</p>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    Component two: chunking. You can't retrieve a whole file or a whole PDF — the useful unit is smaller. So split: code splits on function boundaries using tree-sitter, eight languages; documents split into roughly five-hundred-token chunks — that's exactly how maktab, the document side of hifz, ingests PDFs and markdown. Each chunk is its own row — here, refresh_token at src/auth.rs lines 142 to 198 — and a record link points back to the source, so a hit can always show where it came from. Rule of thumb: chunk to the size you'd want pasted into the context window.
+  </aside>
+</section>
+
+<!-- 40 · Component 3: embeddings -->
+<section class="layout-default">
+  <span class="model-badge">vector</span>
+  <div class="eyebrow"><span class="dot"></span>05 · Write path</div>
+  <h2 class="title">Embeddings: meaning becomes coordinates.</h2>
+  <div class="slide-content" style="gap:26px">
+    <div class="crumbs">
+      <span>capture</span><span class="sep">→</span><span>chunk</span><span class="sep">→</span><span class="on">embed</span><span class="sep">→</span><span>store + link</span><span class="sep">·&nbsp;·&nbsp;·</span><span>search</span><span class="sep">→</span><span>expand</span><span class="sep">→</span><span>inject</span>
+    </div>
+    <div class="grid cols-2 cols-1-1-align">
+      <figure class="figure flat" style="background:var(--page)">
+        <svg viewBox="0 0 640 360" xmlns="http://www.w3.org/2000/svg" fill="none">
+          <text x="30" y="34" font-family="JetBrains Mono, monospace" font-size="13" fill="#657220" letter-spacing="1.5">NEARBY = SIMILAR MEANING</text>
+          <rect x="30" y="50" width="580" height="280" rx="12" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.5"/>
+          <!-- cluster -->
+          <g>
+            <circle cx="200" cy="150" r="9" fill="#d9f400" stroke="#1a1a1a" stroke-width="1.6" class="ont-pulse"/>
+            <text x="222" y="141" font-family="JetBrains Mono, monospace" font-size="13" fill="#1a1a1a">"cargo test auth — 4 failures"</text>
+            <circle cx="240" cy="210" r="9" fill="#d9f400" stroke="#1a1a1a" stroke-width="1.6" class="ont-pulse"/>
+            <text x="262" y="216" font-family="JetBrains Mono, monospace" font-size="13" fill="#1a1a1a">"CI auth tests are flaky"</text>
+            <circle cx="160" cy="230" r="9" fill="#d9f400" stroke="#1a1a1a" stroke-width="1.6" class="ont-pulse"/>
+            <text x="120" y="262" font-family="JetBrains Mono, monospace" font-size="13" fill="#1a1a1a">"token refresh race"</text>
+          </g>
+          <!-- far dot -->
+          <circle cx="520" cy="110" r="8" fill="#fff7ed" stroke="#1a1a1a" stroke-width="1.4"/>
+          <text x="540" y="94" text-anchor="end" font-family="JetBrains Mono, monospace" font-size="13" fill="#9a6a2a">"fix css padding"</text>
+          <text x="320" y="312" text-anchor="middle" font-family="Inter, sans-serif" font-size="16" fill="#1a1a1a" opacity="0.75">three texts about the same bug land together — no keyword in common</text>
+        </svg>
+      </figure>
+      <div>
+        <p class="lede" style="margin-bottom:22px">A model turns text into <strong>384 numbers</strong>. Texts that mean similar things land near each other.</p>
+        <pre class="code-block sm"><span class="c-comment">-- the row carries its vector…</span>
+  embedding = $vec
+  <span class="c-comment">-- computed in-process (local ONNX model)</span>
+
+<span class="c-comment">-- …and one index makes it searchable</span>
+<span class="c-kw">DEFINE INDEX</span> obs_vec <span class="c-kw">ON</span> observation
+  <span class="c-kw">FIELDS</span> embedding
+  <span class="c-hi">HNSW DIMENSION 384 DIST COSINE</span>;</pre>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    Component three: embeddings — the only machine-learning ingredient, and you don't train anything. An embedding model maps text to a point in space; texts that mean similar things land near each other, even with no keyword overlap — "cargo test auth" and "CI auth tests are flaky" share no useful word, but they're neighbours. hifz runs a small local ONNX model, MiniLM, 384 dimensions, in-process — no API, no per-token bill. On the database side it's just a field plus one HNSW index definition. That index is what the next slide queries.
+  </aside>
+</section>
+
+<!-- 41 · Component 4: vector search / RAG -->
+<section class="layout-default">
+  <span class="model-badge">vector</span>
+  <div class="eyebrow"><span class="dot"></span>05 · Read path</div>
+  <h2 class="title">Vector search: recall by meaning — this is RAG.</h2>
+  <div class="slide-content" style="gap:26px">
+    <div class="crumbs">
+      <span>capture</span><span class="sep">→</span><span>chunk</span><span class="sep">→</span><span>embed</span><span class="sep">→</span><span>store + link</span><span class="sep">·&nbsp;·&nbsp;·</span><span class="on">search</span><span class="sep">→</span><span>expand</span><span class="sep">→</span><span>inject</span>
+    </div>
+    <div class="grid cols-2 cols-1-1-align">
+      <div>
+        <pre class="code-block"><span class="c-comment">-- embed the question, find the nearest rows</span>
+<span class="c-kw">SELECT</span> title <span class="c-kw">FROM</span> observation
+<span class="c-kw">WHERE</span> embedding <span class="c-hi">&lt;|5,40|&gt;</span> $question;
+        <span class="c-comment">-- 5 nearest · search effort 40</span></pre>
+        <p class="code-caption">one operator against the HNSW index from the last slide</p>
+      </div>
+      <div class="card tint-neon">
+        <div class="k">The reveal</div>
+        <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:14px 0 18px">
+          <span class="pill" style="font-size:18px; padding:7px 18px">chunk</span><span style="font-family:var(--font-mono); font-weight:700">+</span>
+          <span class="pill" style="font-size:18px; padding:7px 18px">embed</span><span style="font-family:var(--font-mono); font-weight:700">+</span>
+          <span class="pill" style="font-size:18px; padding:7px 18px">search</span><span style="font-family:var(--font-mono); font-weight:700">+</span>
+          <span class="pill" style="font-size:18px; padding:7px 18px">inject</span>
+          <span style="font-family:var(--font-mono); font-weight:700; font-size:22px">= RAG</span>
+        </div>
+        <p>Retrieval-augmented generation is these four stages — and you already have all four. No framework required.</p>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    Component four, and we cross to the read path. Embed the question with the same model, then one operator — five nearest rows, search effort forty — against the index we just defined. Now the reveal for anyone new to this: RAG, the acronym you keep hearing, is nothing more than the four stages you've now seen — chunk, embed, search, inject the results into the prompt. You already have all four; a context layer's read path is RAG pointed at your own history. What RAG alone gets wrong, the next two slides fix.
+  </aside>
+</section>
+
+<!-- 42 · Component 5: full-text + hybrid -->
+<section class="layout-default">
+  <span class="model-badge">search</span>
+  <div class="eyebrow"><span class="dot"></span>05 · Read path</div>
+  <h2 class="title">Hybrid: meaning and exact words.</h2>
+  <div class="slide-content" style="gap:26px">
+    <div class="crumbs">
+      <span>capture</span><span class="sep">→</span><span>chunk</span><span class="sep">→</span><span>embed</span><span class="sep">→</span><span>store + link</span><span class="sep">·&nbsp;·&nbsp;·</span><span class="on">search</span><span class="sep">→</span><span>expand</span><span class="sep">→</span><span>inject</span>
+    </div>
+    <div class="grid cols-2 cols-1-1-align">
+      <pre class="code-block sm"><span class="c-comment">-- run both, fuse the rankings</span>
+<span class="c-fn">search::rrf</span>([
+  (<span class="c-kw">SELECT</span> id <span class="c-kw">FROM</span> memory
+   <span class="c-kw">WHERE</span> embedding <span class="c-hi">&lt;|20,80|&gt;</span> $question),
+                        <span class="c-comment">-- by meaning</span>
+  (<span class="c-kw">SELECT</span> id <span class="c-kw">FROM</span> memory
+   <span class="c-kw">WHERE</span> content <span class="c-hi">@1@</span> <span class="c-str">'token refresh'</span>)
+                        <span class="c-comment">-- by exact words</span>
+], 10);</pre>
+      <div>
+        <p class="lede" style="margin-bottom:24px">Each search has a blind spot. Run both; merge the two rankings.</p>
+        <ul class="mono-list" style="font-size:22px">
+          <li><span class="m">vector finds</span> "auth timing issue" <span class="m">— but misses the literal</span> 9f2c1a</li>
+          <li><span class="m">text (BM25) finds</span> refresh_token <span class="m">— but misses paraphrases</span></li>
+          <li><strong>search::rrf</strong> <span class="m">fuses both lists by rank — one query, no re-ranking service</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    Component five: the second search. Vectors are great at meaning and bad at literals — ask for commit 9f2c1a or a function name and cosine similarity shrugs. A BM25 full-text index is the opposite: exact words, no paraphrase. So a context layer runs both branches — the vector operator and the match operator from act two — and search::rrf fuses the two rankings by reciprocal rank. That's a whole "hybrid search service" as one database function. One more blind spot remains: search only knows similarity, not relationships. Graph, next.
+  </aside>
+</section>
+
+<!-- 43 · Component 6: graph -->
+<section class="layout-default">
+  <span class="model-badge">graph</span>
+  <div class="eyebrow"><span class="dot"></span>05 · Write path, revisited</div>
+  <h2 class="title">Graph: link facts to their source.</h2>
+  <div class="slide-content" style="gap:26px">
+    <div class="crumbs">
+      <span>capture</span><span class="sep">→</span><span>chunk</span><span class="sep">→</span><span>embed</span><span class="sep">→</span><span class="on">store + link</span><span class="sep">·&nbsp;·&nbsp;·</span><span>search</span><span class="sep">→</span><span>expand</span><span class="sep">→</span><span>inject</span>
+    </div>
+    <div class="grid cols-2 cols-1-1-align">
+      <pre class="code-block sm"><span class="c-comment">-- a lesson learned while fixing the issue</span>
+<span class="c-kw">CREATE</span> memory:auth_race <span class="c-kw">SET</span>
+  title = <span class="c-str">'Token refresh race caused
+           flaky CI auth tests'</span>;
+
+<span class="c-comment">-- link it to the code it explains,
+-- and to the work that produced it</span>
+<span class="c-kw">RELATE</span> memory:auth_race<span class="c-hi">-&gt;references-&gt;</span>code_chunk;
+                              <span class="c-comment">-- src/auth.rs:142</span>
+<span class="c-kw">RELATE</span> memory:auth_race<span class="c-hi">-&gt;generated_by-&gt;</span>run;</pre>
+      <figure class="figure flat" style="background:var(--page)">
+        <svg viewBox="0 0 620 360" xmlns="http://www.w3.org/2000/svg" fill="none">
+          <text x="30" y="34" font-family="JetBrains Mono, monospace" font-size="13" fill="#657220" letter-spacing="1.5">THE WORK BECOMES A TRAIL</text>
+          <g font-family="JetBrains Mono, monospace" font-size="13.5" fill="#1a1a1a" text-anchor="middle">
+            <rect x="40"  y="70"  width="150" height="52" rx="10" fill="#fff7ed" stroke="#1a1a1a" stroke-width="1.4"/>
+            <text x="115" y="102">issue</text>
+            <rect x="240" y="70"  width="150" height="52" rx="10" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.4"/>
+            <text x="315" y="102">plan</text>
+            <rect x="440" y="70"  width="150" height="52" rx="10" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.4"/>
+            <text x="515" y="102">commit</text>
+            <rect x="240" y="220" width="150" height="52" rx="10" fill="#d9f400" fill-opacity="0.4" stroke="#1a1a1a" stroke-width="1.6"/>
+            <text x="315" y="252">auth.rs:142</text>
+            <rect x="440" y="220" width="150" height="52" rx="10" fill="#d9f400" stroke="#1a1a1a" stroke-width="1.6"/>
+            <text x="515" y="252">lesson</text>
+          </g>
+          <g stroke="#1a1a1a" stroke-width="1.5">
+            <line class="ont-edge" x1="190" y1="96" x2="240" y2="96"/>
+            <line class="ont-edge delay-1" x1="390" y1="96" x2="440" y2="96"/>
+            <line class="ont-edge delay-2" x1="515" y1="122" x2="410" y2="222"/>
+            <line class="ont-edge" x1="515" y1="122" x2="515" y2="220"/>
+            <line class="ont-edge delay-1" x1="440" y1="246" x2="390" y2="246"/>
+          </g>
+          <text x="30" y="330" font-family="Inter, sans-serif" font-size="16.5" fill="#1a1a1a" opacity="0.78">Similarity says "these sound alike."</text>
+          <text x="30" y="354" font-family="Inter, sans-serif" font-size="16.5" fill="#1a1a1a" opacity="0.78">Links say "this explains that." Both matter.</text>
+        </svg>
+      </figure>
+    </div>
+  </div>
+  <aside class="notes">
+    Component six takes us briefly back to the write path: links. Search can only say "these sound alike" — it can't know that a lesson explains a specific function, or that a plan led to a specific commit. So when something worth keeping is saved, hifz RELATEs it: this lesson references that code chunk, this memory was generated by that run. Two RELATE statements and the week's work becomes a connected trail — issue, plan, commit, code, lesson. In hifz, the commit is the anchor: memories linked to shipped code are kept and strengthened; work that never shipped fades. Why store links at all? Because of what they let you do at read time — next slide.
+  </aside>
+</section>
+
+<!-- 44 · Component 7: graphrag -->
+<section class="layout-default">
+  <span class="model-badge">vector + search + graph</span>
+  <div class="eyebrow"><span class="dot"></span>05 · Read path</div>
+  <h2 class="title">GraphRAG: search finds seeds, the graph finds context.</h2>
+  <div class="slide-content" style="gap:26px">
+    <div class="crumbs">
+      <span>capture</span><span class="sep">→</span><span>chunk</span><span class="sep">→</span><span>embed</span><span class="sep">→</span><span>store + link</span><span class="sep">·&nbsp;·&nbsp;·</span><span>search</span><span class="sep">→</span><span class="on">expand</span><span class="sep">→</span><span>inject</span>
+    </div>
+    <div class="grid cols-2 cols-1-1-align">
+      <div>
+        <p class="lede" style="margin-bottom:24px">Hybrid search returns entry points. One hop pulls in everything they're connected to.</p>
+        <pre class="code-block sm"><span class="c-comment">-- "Why is token refresh written this way?"
+-- $found = the hybrid-search winners</span>
+<span class="c-kw">SELECT</span> <span class="c-hi">-&gt;references-&gt;code_chunk</span>,
+       <span class="c-hi">&lt;-generated_by&lt;-run</span>
+<span class="c-kw">FROM</span> $found;</pre>
+        <p class="code-caption">answer: the lesson + the plan + src/auth.rs:142 — sources attached. Pointed at documents, this same recipe is maktab: cited answers from your PDFs.</p>
+      </div>
+      <figure class="figure flat" style="background:var(--page)">
+        <svg viewBox="0 0 640 400" xmlns="http://www.w3.org/2000/svg" fill="none">
+          <!-- question -->
+          <rect x="170" y="20" width="300" height="46" rx="10" fill="#fff7ed" stroke="#1a1a1a" stroke-width="1.5"/>
+          <text x="320" y="49" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#1a1a1a">"why is refresh written this way?"</text>
+          <line class="ont-flow" x1="320" y1="66" x2="320" y2="110" stroke="#1a1a1a" stroke-width="1.8"/>
+          <polygon points="312,104 320,118 328,104" fill="#1a1a1a"/>
+          <!-- seeds -->
+          <text x="320" y="145" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12" fill="#657220" letter-spacing="1">SEARCH FINDS THE SEEDS</text>
+          <g class="ont-pulse">
+            <rect x="115" y="160" width="190" height="50" rx="10" fill="#d9f400" stroke="#1a1a1a" stroke-width="1.6"/>
+            <text x="210" y="191" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#1a1a1a">lesson</text>
+          </g>
+          <g class="ont-pulse">
+            <rect x="335" y="160" width="190" height="50" rx="10" fill="#d9f400" stroke="#1a1a1a" stroke-width="1.6"/>
+            <text x="430" y="191" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#1a1a1a">plan</text>
+          </g>
+          <!-- expansion -->
+          <g stroke="#1a1a1a" stroke-width="1.5">
+            <line class="ont-edge" x1="180" y1="210" x2="130" y2="270"/>
+            <line class="ont-edge delay-1" x1="240" y1="210" x2="290" y2="270"/>
+            <line class="ont-edge delay-2" x1="460" y1="210" x2="500" y2="270"/>
+          </g>
+          <text x="320" y="255" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12" fill="#657220" letter-spacing="1">ONE HOP EXPANDS THEM</text>
+          <g font-family="JetBrains Mono, monospace" font-size="13" fill="#1a1a1a" text-anchor="middle">
+            <rect x="40"  y="275" width="180" height="46" rx="10" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.4"/>
+            <text x="130" y="304">auth.rs:142</text>
+            <rect x="240" y="275" width="160" height="46" rx="10" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.4"/>
+            <text x="320" y="304">the run</text>
+            <rect x="420" y="275" width="180" height="46" rx="10" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.4"/>
+            <text x="510" y="304">commit 9f2c1a</text>
+          </g>
+          <text x="320" y="372" text-anchor="middle" font-family="Inter, sans-serif" font-size="17" font-weight="700" fill="#1a1a1a">the answer arrives with its sources</text>
+        </svg>
+      </figure>
+    </div>
+  </div>
+  <aside class="notes">
+    Component seven, the last one: GraphRAG — which is just search plus the links from the previous slide. The hybrid query finds the entry points: the lesson and the plan. Then one graph hop — the arrow syntax from act two — expands them: forward along references to the code lines, backward along generated_by to the run and its commit. So the question "why is token refresh written this way" comes back as the lesson, the plan, and src/auth.rs 142 — an answer with its sources attached, not a lucky paragraph. And pointed at documents instead of work history, this identical recipe is maktab: ask a question over your PDFs, get an answer with file and line citations.
+  </aside>
+</section>
+
+<!-- 45 · Recap: one issue end to end -->
+<section class="layout-default">
+  <div class="eyebrow"><span class="dot"></span>05 · All together</div>
+  <h2 class="title">One issue, end to end.</h2>
   <div class="slide-content">
     <figure class="figure" style="padding:44px 60px">
       <svg viewBox="0 0 1560 520" xmlns="http://www.w3.org/2000/svg" fill="none">
@@ -2108,285 +2581,24 @@ table.tbl td .op {
           <line x1="1300" y1="274" x2="1330" y2="330" stroke="#1a1a1a" stroke-width="1.4"/>
         </g>
 
-        <!-- move brackets -->
+        <!-- component brackets -->
         <g font-family="JetBrains Mono, monospace" font-size="15" font-weight="700" fill="#1a1a1a">
           <path d="M 210 460 L 210 478 L 470 478 L 470 460" stroke="#1a1a1a" stroke-width="1.6" fill="none"/>
-          <text x="340" y="508" text-anchor="middle">MOVE 1 · STORE THE WORK</text>
+          <text x="340" y="508" text-anchor="middle">CAPTURE + CHUNK + EMBED</text>
           <path d="M 500 460 L 500 478 L 1030 478 L 1030 460" stroke="#1a1a1a" stroke-width="1.6" fill="none"/>
-          <text x="765" y="508" text-anchor="middle">MOVE 2 · LINK IT TO THE CODE</text>
+          <text x="765" y="508" text-anchor="middle">STORE + LINK (GRAPH)</text>
           <path d="M 1180 460 L 1180 478 L 1480 478 L 1480 460" stroke="#1a1a1a" stroke-width="1.6" fill="none"/>
-          <text x="1330" y="508" text-anchor="middle">MOVE 3 · GET IT BACK</text>
+          <text x="1330" y="508" text-anchor="middle">SEARCH + EXPAND + INJECT</text>
         </g>
       </svg>
     </figure>
   </div>
   <aside class="notes">
-    Here's the whole story on one picture — the next slides just zoom in. An issue arrives: CI auth tests are flaky. A long session of commands follows — and somewhere in the middle, Claude's context compacts; the window forgets, but the log hifz keeps does not. The investigation becomes a plan, the plan becomes commit 9f2c1a touching src/auth.rs, and the lesson is saved. Weeks later a new session asks why token refresh is written this way — and the lesson, the plan, and the exact lines come back. Three moves: store the work, link it to the code, get it back — two slides each.
+    All seven components on one real week. An issue arrives; a long session of commands is captured as observations — and when the context window compacts mid-session, the log survives. The plan is saved, the fix ships as commit 9f2c1a, and the lesson is linked to the code and the run. Weeks later a new session asks why token refresh is written this way — search finds the lesson, the graph expands to the plan and the exact lines, and the answer is injected before the agent writes a token. Every bracket under the timeline is a component you now have the query for.
   </aside>
 </section>
 
-<!-- 37 · Move 1a · store the work -->
-<section class="layout-default">
-  <span class="model-badge">document</span>
-  <div class="eyebrow"><span class="dot"></span>05 · Move 1 of 3</div>
-  <h2 class="title">Store the work.</h2>
-  <div class="slide-content" style="gap:34px">
-    <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap">
-      <span class="pill">hook fires</span>
-      <span style="font-family:var(--font-mono); font-size:24px; font-weight:700">→</span>
-      <span class="pill">shrunk to title + facts</span>
-      <span style="font-family:var(--font-mono); font-size:24px; font-weight:700">→</span>
-      <span class="pill">embedded locally</span>
-      <span style="font-family:var(--font-mono); font-size:24px; font-weight:700">→</span>
-      <span class="pill lime">stored — one row</span>
-    </div>
-    <div class="grid cols-2 cols-1-1-align">
-      <div>
-        <p class="lede" style="margin-bottom:26px">Every command the agent runs fires a hook. Each hook stores one row.</p>
-        <ul class="list" style="font-size:26px">
-          <li>Read, Bash, Edit — each becomes an <strong>observation</strong></li>
-          <li>Long output is shrunk to a title and facts before it's embedded</li>
-        </ul>
-      </div>
-      <div>
-        <pre class="code-block"><span class="c-comment">-- what the hook stores for one command</span>
-<span class="c-kw">CREATE</span> observation <span class="c-kw">SET</span>
-  session_id = session:s1,
-  obs_type   = <span class="c-str">'command_run'</span>,
-  title      = <span class="c-str">'cargo test auth — 4 failures'</span>,
-  files      = [<span class="c-str">'tests/auth.rs'</span>],
-  <span class="c-hi">embedding  = $vec</span>;  <span class="c-comment">-- embedded locally</span></pre>
-        <p class="code-caption">one row per command · searchable by meaning and by words, instantly</p>
-      </div>
-    </div>
-  </div>
-  <aside class="notes">
-    Move one: store the work. Claude Code fires a hook on every event; each hook posts to hifz, which shrinks the output to a title and facts, embeds it locally, and stores one observation row — that's the strip at the top, and it's the entire write path. The row you see is observation o1: cargo test auth, four failures, tests/auth.rs. Because the vector index and the text index are indexes on this same table, the row is searchable both ways the moment it lands. One row per command, for the whole session.
-  </aside>
-</section>
-
-<!-- 38 · Move 1b · compaction -->
-<section class="layout-default">
-  <span class="model-badge">document + record links</span>
-  <div class="eyebrow"><span class="dot"></span>05 · Move 1 of 3</div>
-  <h2 class="title">The window forgets. The log doesn't.</h2>
-  <div class="slide-content" style="gap:28px">
-    <p class="lede" style="margin-bottom:0">Mid-session, Claude's context compacts. PreCompact/PostCompact hooks store the summary as one more row — <span class="inline-code">ord</span> and <span class="inline-code">parent_obs_id</span> keep the causal chain.</p>
-    <div class="grid cols-2 cols-1-1-align">
-      <figure class="figure flat" style="background:var(--page)">
-        <svg viewBox="0 0 640 400" xmlns="http://www.w3.org/2000/svg" fill="none">
-          <!-- context window -->
-          <g>
-            <text x="30" y="34" font-family="JetBrains Mono, monospace" font-size="13" fill="#657220" letter-spacing="1.5">CONTEXT WINDOW</text>
-            <rect x="30" y="50" width="260" height="280" rx="12" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.5"/>
-            <g font-family="JetBrains Mono, monospace" font-size="12" text-anchor="middle">
-              <rect x="55" y="75"  width="210" height="30" rx="7" fill="#fff7ed" stroke="#1a1a1a" stroke-width="1" stroke-dasharray="4 3" opacity="0.22"/>
-              <text x="160" y="95" fill="#1a1a1a" opacity="0.22">turn 1 … dropped</text>
-              <rect x="55" y="113" width="210" height="30" rx="7" fill="#fff7ed" stroke="#1a1a1a" stroke-width="1" stroke-dasharray="4 3" opacity="0.35"/>
-              <text x="160" y="133" fill="#1a1a1a" opacity="0.35">turn 2 … dropped</text>
-              <rect x="55" y="151" width="210" height="30" rx="7" fill="#fff7ed" stroke="#1a1a1a" stroke-width="1" stroke-dasharray="4 3" opacity="0.5"/>
-              <text x="160" y="171" fill="#1a1a1a" opacity="0.5">turn 3 … dropped</text>
-              <rect x="55" y="196" width="210" height="34" rx="7" fill="#f2f1eb" stroke="#1a1a1a" stroke-width="1.3"/>
-              <text x="160" y="218" fill="#1a1a1a">a short summary</text>
-              <rect x="55" y="238" width="210" height="30" rx="7" fill="#fff7ed" stroke="#1a1a1a" stroke-width="1.1"/>
-              <text x="160" y="258" fill="#1a1a1a">recent turns</text>
-            </g>
-            <text x="160" y="315" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12.5" fill="#9a6a2a" letter-spacing="1">COMPACTION</text>
-            <text x="160" y="370" text-anchor="middle" font-family="Inter, sans-serif" font-size="17" font-weight="700" fill="#1a1a1a">the window forgets</text>
-          </g>
-          <!-- observation log -->
-          <g>
-            <text x="350" y="34" font-family="JetBrains Mono, monospace" font-size="13" fill="#657220" letter-spacing="1.5">OBSERVATION LOG · HIFZ</text>
-            <rect x="350" y="50" width="260" height="280" rx="12" fill="#d9f400" fill-opacity="0.15" stroke="#1a1a1a" stroke-width="1.6"/>
-            <line x1="385" y1="80" x2="385" y2="305" stroke="#1a1a1a" stroke-width="1.4"/>
-            <g font-family="JetBrains Mono, monospace" font-size="13" fill="#1a1a1a">
-              <circle cx="385" cy="90"  r="5" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.3"/><text x="405" y="95">o1 · cargo test auth</text>
-              <circle cx="385" cy="130" r="5" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.3"/><text x="405" y="135">o2 · read src/auth.rs</text>
-              <circle cx="385" cy="170" r="5" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.3"/><text x="405" y="175">o3 … o46</text>
-              <circle cx="385" cy="230" r="7" fill="#d9f400" stroke="#1a1a1a" stroke-width="1.6"/><text x="405" y="228">o47 · post_compact</text>
-              <text x="405" y="248" font-size="11.5" fill="#657220">the summary, kept forever</text>
-              <circle cx="385" cy="290" r="5" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.3"/><text x="405" y="295">o48 · …</text>
-            </g>
-            <text x="480" y="370" text-anchor="middle" font-family="Inter, sans-serif" font-size="17" font-weight="700" fill="#1a1a1a">the log keeps every step</text>
-          </g>
-        </svg>
-      </figure>
-      <div>
-        <pre class="code-block sm"><span class="c-comment">-- the compaction summary is just another row</span>
-<span class="c-kw">CREATE</span> observation <span class="c-kw">SET</span>
-  session_id    = session:s1,
-  obs_type      = <span class="c-str">'post_compact'</span>,
-  title         = <span class="c-str">'summary: suspect token refresh
-                   timing under CI load'</span>,
-  <span class="c-hi">parent_obs_id = observation:o46</span>;
-                  <span class="c-comment">-- the chain continues</span></pre>
-        <p class="code-caption">a record link, not a join table — <span class="inline-code">parent_obs_id</span> points straight at the previous row</p>
-      </div>
-    </div>
-  </div>
-  <aside class="notes">
-    This is why the capture layer exists. Forty-odd commands in, Claude's context window compacts — older turns are replaced by a short summary and the window moves on. hifz hears about it through the PreCompact and PostCompact hooks and stores the summary as observation o47: suspect token refresh timing under CI load. It's just another row, but parent_obs_id — a record link from act two — points at o46, so the causal order survives. The window forgets; the log doesn't.
-  </aside>
-</section>
-
-<!-- 39 · Move 2a · the plan -->
-<section class="layout-default">
-  <span class="model-badge">document</span>
-  <div class="eyebrow"><span class="dot"></span>05 · Move 2 of 3</div>
-  <h2 class="title">The plan is saved — and follows you.</h2>
-  <div class="slide-content" style="gap:28px">
-    <p class="lede" style="margin-bottom:0">The investigation ends in a plan. Saved and marked active, it is injected into every future session's briefing until it's done.</p>
-    <div class="grid cols-2 cols-1-1-align">
-      <pre class="code-block"><span class="c-comment">-- the plan becomes a memory, marked active</span>
-<span class="c-kw">CREATE</span> memory:plan_fix_refresh <span class="c-kw">SET</span>
-  category  = <span class="c-str">'plan'</span>,
-  title     = <span class="c-str">'Plan: refresh tokens before
-               the expiry window'</span>,
-  <span class="c-hi">status    = 'active'</span>,
-  embedding = $vec;</pre>
-      <div class="card tint-neon">
-        <div class="k">Every session, from now on</div>
-        <pre class="code-block xs" style="margin-top:6px"><span class="c-comment"># in the warmup briefing:</span>
-
-## Active plan
-· refresh tokens before
-  the expiry window</pre>
-        <p style="margin-top:18px">The agent that executes the plan tomorrow doesn't have to be the one that wrote it today.</p>
-      </div>
-    </div>
-  </div>
-  <aside class="notes">
-    Move two begins where the investigation ends: a plan. It's saved as a memory with category plan and status active — one CREATE, nothing new. But active status changes its behaviour: from now on, every session's warmup briefing carries it, until it's marked done. That matters because the session that wrote the plan and the session that executes it are often not the same session — the plan is the hand-off. Next: the execution, and linking what shipped.
-  </aside>
-</section>
-
-<!-- 40 · Move 2b · link it to the code -->
-<section class="layout-default">
-  <span class="model-badge">graph</span>
-  <div class="eyebrow"><span class="dot"></span>05 · Move 2 of 3</div>
-  <h2 class="title">Link it to the code.</h2>
-  <div class="slide-content" style="gap:26px">
-    <div class="grid cols-2 cols-1-1-align">
-      <pre class="code-block sm"><span class="c-comment">-- the lesson, saved after commit 9f2c1a</span>
-<span class="c-kw">CREATE</span> memory:auth_race <span class="c-kw">SET</span>
-  title   = <span class="c-str">'Token refresh race caused
-             flaky CI auth tests'</span>,
-  content = <span class="c-str">'CI machines are slower; tokens
-             expired mid-request. Fix: refresh
-             before the expiry window.'</span>,
-  files   = [<span class="c-str">'src/auth.rs'</span>];
-
-<span class="c-comment">-- linked to the code, and to the work</span>
-<span class="c-kw">RELATE</span> memory:auth_race<span class="c-hi">-&gt;references-&gt;</span>code_chunk;
-                              <span class="c-comment">-- src/auth.rs:142</span>
-<span class="c-kw">RELATE</span> memory:auth_race<span class="c-hi">-&gt;generated_by-&gt;</span>run;</pre>
-      <figure class="figure flat" style="background:var(--page)">
-        <svg viewBox="0 0 620 360" xmlns="http://www.w3.org/2000/svg" fill="none">
-          <text x="30" y="34" font-family="JetBrains Mono, monospace" font-size="13" fill="#657220" letter-spacing="1.5">THE TRAIL IS NOW A GRAPH</text>
-          <g font-family="JetBrains Mono, monospace" font-size="13.5" fill="#1a1a1a" text-anchor="middle">
-            <rect x="40"  y="70"  width="150" height="52" rx="10" fill="#fff7ed" stroke="#1a1a1a" stroke-width="1.4"/>
-            <text x="115" y="102">issue</text>
-            <rect x="240" y="70"  width="150" height="52" rx="10" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.4"/>
-            <text x="315" y="102">plan</text>
-            <rect x="440" y="70"  width="150" height="52" rx="10" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.4"/>
-            <text x="515" y="102">commit</text>
-            <rect x="240" y="220" width="150" height="52" rx="10" fill="#d9f400" fill-opacity="0.4" stroke="#1a1a1a" stroke-width="1.6"/>
-            <text x="315" y="252">auth.rs:142</text>
-            <rect x="440" y="220" width="150" height="52" rx="10" fill="#d9f400" stroke="#1a1a1a" stroke-width="1.6"/>
-            <text x="515" y="252">lesson</text>
-          </g>
-          <g stroke="#1a1a1a" stroke-width="1.5">
-            <line class="ont-edge" x1="190" y1="96" x2="240" y2="96"/>
-            <line class="ont-edge delay-1" x1="390" y1="96" x2="440" y2="96"/>
-            <line class="ont-edge delay-2" x1="515" y1="122" x2="410" y2="222"/>
-            <line class="ont-edge" x1="515" y1="122" x2="515" y2="220"/>
-            <line class="ont-edge delay-1" x1="440" y1="246" x2="390" y2="246"/>
-          </g>
-          <text x="30" y="330" font-family="Inter, sans-serif" font-size="16.5" fill="#1a1a1a" opacity="0.78">Committed work is kept and strengthened.</text>
-          <text x="30" y="354" font-family="Inter, sans-serif" font-size="16.5" fill="#1a1a1a" opacity="0.78">Work that never ships fades away in 60 days.</text>
-        </svg>
-      </figure>
-    </div>
-  </div>
-  <aside class="notes">
-    The plan is executed, and commit 9f2c1a lands — code is the ground truth. The hook detects the commit, the lesson is saved as memory auth_race, and RELATE — the graph operator from act two — connects it to the code chunk it describes and to the run that produced it. Now the trail is a graph: issue, plan, commit, code, lesson, all connected. And the commit does one more thing: it separates real work from noise — memories about committed files are kept and strengthened, while work that never shipped fades out after sixty days.
-  </aside>
-</section>
-
-<!-- 41 · Move 3a · the briefing -->
-<section class="layout-default">
-  <div class="eyebrow"><span class="dot"></span>05 · Move 3 of 3</div>
-  <h2 class="title">Weeks later, the new session starts briefed.</h2>
-  <div class="slide-content" style="gap:28px">
-    <p class="lede" style="margin-bottom:0">Two hooks, zero prompt engineering — the briefing arrives before the first token.</p>
-    <div class="grid cols-2">
-      <div class="card">
-        <div class="k">1 · At session start — SessionStart hook</div>
-        <pre class="code-block xs" style="margin-top:6px"><span class="c-comment"># the hook fetches a briefing…</span>
-<span class="c-kw">GET</span> /sessions/{id}/warmup?top_n=15
-
-## Active plan  · refresh before expiry
-## Lessons      · token refresh race
-## Recent work  · shop-api · auth
-
-<span class="c-comment"># …and prints it. Claude Code prepends
-# whatever the hook prints to stdout.</span></pre>
-      </div>
-      <div class="card">
-        <div class="k">2 · On every prompt — UserPromptSubmit hook</div>
-        <pre class="code-block xs" style="margin-top:6px"><span class="c-comment"># memories matching the prompt ride along:</span>
-{ <span class="c-str">"hookSpecificOutput"</span>: {
-    <span class="c-str">"hookEventName"</span>: <span class="c-str">"UserPromptSubmit"</span>,
-    <span class="c-hi"><span class="c-str">"additionalContext"</span></span>: <span class="c-str">"relevant:
-      · Token refresh race caused
-        flaky CI auth tests
-      · Plan: refresh tokens before
-        the expiry window"</span> } }</pre>
-      </div>
-    </div>
-  </div>
-  <aside class="notes">
-    Move three: get it back — and the first half is plumbing worth seeing, because this is the whole Claude Code integration. At session start, a hook fetches a fifteen-memory briefing — the active plan, recent lessons, recent work on shop-api — and prints it; Claude Code prepends whatever a SessionStart hook prints. Then on every prompt, the UserPromptSubmit hook runs a search on the prompt text and returns matches in the additionalContext field. Two small scripts; no prompt engineering, no framework. The new session knows about the auth fix before its first token.
-  </aside>
-</section>
-
-<!-- 42 · Move 3b · the question -->
-<section class="layout-default">
-  <span class="model-badge">vector + search + graph</span>
-  <div class="eyebrow"><span class="dot"></span>05 · Move 3 of 3</div>
-  <h2 class="title">The question comes back with the code.</h2>
-  <div class="slide-content" style="gap:26px">
-    <div class="grid cols-2 cols-1-1-align">
-      <pre class="code-block sm"><span class="c-comment">-- "Why is token refresh written this way?"</span>
-<span class="c-fn">search::rrf</span>([
-  (<span class="c-kw">SELECT</span> id <span class="c-kw">FROM</span> memory
-   <span class="c-kw">WHERE</span> embedding <span class="c-hi">&lt;|20,80|&gt;</span> $question),
-                        <span class="c-comment">-- by meaning</span>
-  (<span class="c-kw">SELECT</span> id <span class="c-kw">FROM</span> memory
-   <span class="c-kw">WHERE</span> content <span class="c-hi">@1@</span> <span class="c-str">'token refresh'</span>)
-                        <span class="c-comment">-- by exact words</span>
-], 10);
-
-<span class="c-comment">-- one graph hop from the winners:</span>
-<span class="c-kw">SELECT</span> <span class="c-hi">-&gt;references-&gt;code_chunk</span>,
-       <span class="c-hi">&lt;-generated_by&lt;-run</span> <span class="c-kw">FROM</span> $found;</pre>
-      <div class="card tint-neon">
-        <div class="k">What comes back</div>
-        <ul class="mono-list" style="font-size:22px; margin-top:10px">
-          <li>the lesson — <span class="m">"Token refresh race caused flaky CI auth tests"</span></li>
-          <li>the plan — <span class="m">"refresh tokens before the expiry window"</span></li>
-          <li>the code — <span class="m">src/auth.rs:142-198 · refresh_token</span></li>
-        </ul>
-        <p style="margin-top:20px">Not just an answer — the decision, and the lines it produced. Newer and more-used memories rank higher.</p>
-      </div>
-    </div>
-  </div>
-  <aside class="notes">
-    The second half of move three: the agent asks why token refresh is written this way. One query — the hybrid form from act two: a vector branch for meaning, a keyword branch for the exact words "token refresh", merged by reciprocal rank fusion. Then one graph hop from the winners, following references to the code chunk and generated_by back to the run. What comes back is the lesson, the plan behind it, and src/auth.rs lines 142 to 198 — the decision and the ground truth together. Ranking favors newer and more-used memories, so recall stays current.
-  </aside>
-</section>
-
-<!-- 43 · Consolidation -->
+<!-- 46 · Consolidation -->
 <section class="layout-default">
   <div class="eyebrow"><span class="dot"></span>05 · Background</div>
   <h2 class="title">Left alone, it tidies up.</h2>
@@ -2427,126 +2639,22 @@ table.tbl td .op {
     </figure>
   </div>
   <aside class="notes">
-    One background job keeps the store from silting up. In: a week of raw observations. Four passes: similar observations get merged into one fact by a local LLM; related memories get linked by keyword overlap — plain math; workflows that keep repeating become step-by-step procedures; and facts nobody uses fade — strength times zero-point-nine per pass, deleted below a threshold. Out: fewer, stronger rows. No fine-tuning, no training loop, no GPU. Each pass is idempotent, so it can run on a schedule.
+    One last piece a context layer needs: maintenance, or it silts up. hifz runs one background job with four passes. Similar observations get merged into one fact by a local LLM; related memories get linked by keyword overlap — plain math; workflows that keep repeating become step-by-step procedures; and facts nobody uses fade — strength times zero-point-nine per pass, deleted below a threshold. In: a week of raw observations. Out: fewer, stronger rows. No fine-tuning, no GPU; each pass is idempotent and runs on a schedule.
   </aside>
 </section>
 
-<!-- 44 · Same recipe · code -->
-<section class="layout-default">
-  <span class="model-badge">vector + search</span>
-  <div class="eyebrow"><span class="dot"></span>05 · The same recipe · code</div>
-  <h2 class="title">The codebase is indexed too.</h2>
-  <div class="slide-content" style="gap:28px">
-    <p class="lede" style="margin-bottom:0">Code is the ground truth — so the same three moves apply to the repository itself.</p>
-    <div class="grid cols-2 cols-1-1-align">
-      <div style="display:flex; flex-direction:column; gap:30px">
-        <div style="display:flex; gap:24px; align-items:flex-start">
-          <span class="pill lime" style="font-size:18px; padding:7px 20px; flex-shrink:0">store</span>
-          <p style="font-size:25px; line-height:1.5">tree-sitter splits <strong>8 languages</strong> on function boundaries; each chunk is embedded and text-indexed</p>
-        </div>
-        <div style="display:flex; gap:24px; align-items:flex-start">
-          <span class="pill lime" style="font-size:18px; padding:7px 20px; flex-shrink:0">link</span>
-          <p style="font-size:25px; line-height:1.5">lesson → code <span class="inline-code">references</span> edges re-anchor as lines move</p>
-        </div>
-        <div style="display:flex; gap:24px; align-items:flex-start">
-          <span class="pill lime" style="font-size:18px; padding:7px 20px; flex-shrink:0">get back</span>
-          <p style="font-size:25px; line-height:1.5">the same hybrid query, filtered <span class="inline-code">language = 'rust'</span></p>
-        </div>
-      </div>
-      <div>
-        <pre class="code-block"><span class="c-comment">-- one chunk = one function</span>
-<span class="c-kw">CREATE</span> code_chunk <span class="c-kw">SET</span>
-  path       = <span class="c-str">'src/auth.rs'</span>,
-  start_line = 142,
-  end_line   = 198,
-  symbols    = [<span class="c-str">'refresh_token'</span>],
-  <span class="c-hi">embedding  = $vec</span>;</pre>
-        <p class="code-caption">a file watcher re-indexes on save — the index follows the code</p>
-      </div>
-    </div>
-  </div>
-  <aside class="notes">
-    The three moves generalise, first to the code itself — since code is the output of every plan, hifz indexes the repository. Store: tree-sitter splits eight languages on function boundaries, and every chunk gets the same row shape you've been seeing — here, src/auth.rs lines 142 to 198, symbol refresh_token, plus an embedding. Link: the references edges from move two point at these chunks, and they re-anchor when lines move. Get back: the same hybrid query, filtered to language rust. A file watcher re-indexes on save, so the index never drifts from the code.
-  </aside>
-</section>
-
-<!-- 45 · Same recipe · maktab -->
-<section class="layout-default">
-  <span class="model-badge">graph + vector</span>
-  <div class="eyebrow"><span class="dot"></span>05 · The same recipe · documents</div>
-  <h2 class="title">maktab: your documents, same recipe.</h2>
-  <div class="slide-content" style="gap:30px">
-    <p class="lede" style="margin-bottom:0">Point the same engine at PDFs, markdown and repos — a personal knowledge base, another schema on the same database.</p>
-    <figure class="figure flat" style="background:var(--page); padding:26px 40px">
-      <svg viewBox="0 0 1560 240" xmlns="http://www.w3.org/2000/svg" fill="none">
-        <!-- input -->
-        <g>
-          <rect x="30" y="55" width="290" height="130" rx="14" fill="#fff7ed" stroke="#1a1a1a" stroke-width="1.6"/>
-          <text x="175" y="100" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" fill="#9a6a2a" letter-spacing="1.5">YOUR DOCUMENTS</text>
-          <text x="175" y="135" text-anchor="middle" font-family="Inter, sans-serif" font-size="20" font-weight="700" fill="#1a1a1a">PDFs · markdown · repos</text>
-        </g>
-        <line class="ont-flow" x1="320" y1="120" x2="390" y2="120" stroke="#1a1a1a" stroke-width="2"/>
-        <polygon points="384,112 398,120 384,128" fill="#1a1a1a"/>
-        <!-- store -->
-        <g>
-          <rect x="400" y="55" width="330" height="130" rx="14" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.6"/>
-          <rect x="430" y="80" width="110" height="34" rx="17" fill="#d9f400" stroke="#1a1a1a" stroke-width="1.4"/>
-          <text x="485" y="103" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14" font-weight="700" fill="#1a1a1a" letter-spacing="1">STORE</text>
-          <text x="430" y="145" font-family="Inter, sans-serif" font-size="19" fill="#1a1a1a">500-token chunks,</text>
-          <text x="430" y="170" font-family="Inter, sans-serif" font-size="19" fill="#1a1a1a">embedded</text>
-        </g>
-        <line class="ont-flow" x1="730" y1="120" x2="790" y2="120" stroke="#1a1a1a" stroke-width="2"/>
-        <polygon points="784,112 798,120 784,128" fill="#1a1a1a"/>
-        <!-- link -->
-        <g>
-          <rect x="800" y="55" width="330" height="130" rx="14" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.6"/>
-          <rect x="830" y="80" width="100" height="34" rx="17" fill="#d9f400" stroke="#1a1a1a" stroke-width="1.4"/>
-          <text x="880" y="103" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14" font-weight="700" fill="#1a1a1a" letter-spacing="1">LINK</text>
-          <text x="830" y="145" font-family="Inter, sans-serif" font-size="19" fill="#1a1a1a">a concept graph,</text>
-          <text x="830" y="170" font-family="Inter, sans-serif" font-size="19" fill="#1a1a1a">clustered by topic</text>
-        </g>
-        <line class="ont-flow" x1="1130" y1="120" x2="1190" y2="120" stroke="#1a1a1a" stroke-width="2"/>
-        <polygon points="1184,112 1198,120 1184,128" fill="#1a1a1a"/>
-        <!-- get back -->
-        <g>
-          <rect x="1200" y="55" width="330" height="130" rx="14" fill="#d9f400" fill-opacity="0.25" stroke="#1a1a1a" stroke-width="1.6"/>
-          <rect x="1230" y="80" width="160" height="34" rx="17" fill="#d9f400" stroke="#1a1a1a" stroke-width="1.4"/>
-          <text x="1310" y="103" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14" font-weight="700" fill="#1a1a1a" letter-spacing="1">GET BACK</text>
-          <text x="1230" y="145" font-family="Inter, sans-serif" font-size="19" fill="#1a1a1a">ask a question,</text>
-          <text x="1230" y="170" font-family="Inter, sans-serif" font-size="19" fill="#1a1a1a">get a cited answer</text>
-        </g>
-      </svg>
-    </figure>
-    <div class="grid cols-2 cols-1-1-align">
-      <pre class="code-block sm"><span class="c-comment"># ask the knowledge base</span>
-<span class="c-str">"how does token refresh work?"</span>
-
-→ <span class="c-str">"tokens are refreshed before the
-   expiry window…"</span>
-  source: <span class="c-hi">docs/auth.md · L42-58</span></pre>
-      <ul class="list" style="font-size:26px">
-        <li>Answers carry their sources — file and line ranges</li>
-        <li>Same embedder, same indexes — <strong>zero new services</strong></li>
-      </ul>
-    </div>
-  </div>
-  <aside class="notes">
-    And second, to documents. maktab points the same engine at PDFs, markdown, and whole repos. Store: five-hundred-token chunks, embedded with the same local model. Link: chunks connect into a concept graph, clustered by topic. Get back: ask "how does token refresh work?" and the answer arrives with its source — docs/auth.md, lines 42 to 58 — so you can verify it. A personal knowledge base as a second system on the same database: another schema, zero new services.
-  </aside>
-</section>
-
-<!-- 46 · Blueprint + count -->
+<!-- 47 · Blueprint + count -->
 <section class="layout-default">
   <div class="eyebrow"><span class="dot"></span>05 · The blueprint</div>
   <h2 class="title">Build yours from this table.</h2>
   <div class="slide-content">
     <table class="tbl" style="font-size:22px">
-      <tr><th style="width:34%">Your context store needs…</th><th style="width:26%">Model</th><th>Construct</th></tr>
-      <tr><td>a log of events</td><td class="dim">documents</td><td class="hi">CREATE observation SET …</td></tr>
-      <tr><td>order and causality</td><td class="dim">record links</td><td class="hi">parent_obs_id · dot access</td></tr>
-      <tr><td>the trail to the code</td><td class="dim">graph</td><td class="hi">RELATE a-&gt;references-&gt;b</td></tr>
+      <tr><th style="width:34%">Component</th><th style="width:26%">Model</th><th>Construct</th></tr>
+      <tr><td>capture — events as rows</td><td class="dim">documents</td><td class="hi">CREATE observation SET …</td></tr>
+      <tr><td>chunking — pieces + their source</td><td class="dim">documents + record links</td><td class="hi">CREATE code_chunk · parent link</td></tr>
       <tr><td>recall by meaning</td><td class="dim">vector</td><td class="hi">HNSW · &lt;|k,ef|&gt;</td></tr>
-      <tr><td>recall by exact words</td><td class="dim">full-text</td><td class="hi">BM25 · @1@</td></tr>
+      <tr><td>recall by exact words</td><td class="dim">full-text</td><td class="hi">BM25 · @1@ · search::rrf</td></tr>
+      <tr><td>relationships — GraphRAG</td><td class="dim">graph</td><td class="hi">RELATE · -&gt;references-&gt;</td></tr>
       <tr><td>consistency across all of it</td><td class="dim">transactions</td><td class="hi">BEGIN · COMMIT</td></tr>
     </table>
     <div style="display:flex; align-items:center; gap:40px;">
@@ -2554,7 +2662,7 @@ table.tbl td .op {
     </div>
   </div>
   <aside class="notes">
-    The takeaway of act five, as a blueprint. Each thing a context store needs sits in the left column; the model and the exact construct sit on the right — and every construct is one you saw in act two with a runnable example. This is why the talk is a database talk: build the table on the left, and the context layer follows. The count at the bottom is the whole operational story — no extra services, one process, twelve tables, two queries per recall.
+    The act as a blueprint. Left column: the seven components you just saw, collapsed to six rows. Middle: which SurrealDB model carries each one. Right: the exact construct — and every construct appeared in act two with a runnable doc example before you saw it in production here. This is why the talk is a database talk: build this table and the context layer follows. The count at the bottom is the whole operational story — no extra services, one process, twelve tables, two queries per recall.
   </aside>
 </section>
 <!-- ================================================================

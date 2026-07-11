@@ -61,11 +61,12 @@ done
 launchctl bootstrap "$DOMAIN" "$PLIST_DST"
 launchctl kickstart -k "$DOMAIN/$LABEL"
 
-# 5. Deterministic verify: poll /livez once/sec, bounded. .fastembed_cache is
-#    already populated on this machine -> warm start ~1-2s, so 15s is a real
-#    bound, not a hopeful one.
+# 5. Deterministic verify: poll /livez once/sec, bounded. Cold start is
+#    dominated by opening the SurrealKV store at $DB_PATH, which can take
+#    ~25s on a large/cold DB (fastembed cache load is secondary). 60s is a
+#    real bound covering a cold open, not a hopeful one.
 i=0
-while [ "$i" -lt 15 ]; do
+while [ "$i" -lt 60 ]; do
     if curl -fsS --max-time 2 "http://127.0.0.1:$PORT/api/v1/livez" 2>/dev/null | grep -q ok; then
         echo "hifz server up on :$PORT (launchd: $LABEL)"
         exit 0
@@ -74,5 +75,5 @@ while [ "$i" -lt 15 ]; do
     sleep 1
 done
 
-echo "ERROR: server did not answer /api/v1/livez in 15s — see $LOG_DIR/server.err.log" >&2
+echo "ERROR: server did not answer /api/v1/livez in 60s — see $LOG_DIR/server.err.log" >&2
 exit 1

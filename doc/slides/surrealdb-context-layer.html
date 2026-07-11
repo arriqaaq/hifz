@@ -797,8 +797,9 @@ body:not(.anim-ready) .sweep { opacity: 0; }
 <!-- 2 · Hook -->
 <section class="layout-default">
   <div class="eyebrow"><span class="dot"></span>The premise</div>
-  <h2 class="title">Agents don't have a memory problem.<br/>They have a <span class="mark">database</span> problem.</h2>
+  <h2 class="title">"Agents fail because of context, not models."<br/>And context is a <span class="mark">database</span> problem.</h2>
   <div class="slide-content">
+    <p class="lede" style="margin-top:-18px; font-family:var(--font-mono); font-size:21px; opacity:0.65">— the first line, surrealdb.com</p>
     <p class="lede">Ask any agent-memory builder what they run in production: five boxes, before a single memory is stored.</p>
     <div class="grid cols-4" style="grid-template-columns: repeat(5, 1fr);">
       <div class="card ghost"><div class="k">Similarity</div><h3>Vector store</h3><p>embeddings, KNN</p></div>
@@ -810,7 +811,7 @@ body:not(.anim-ready) .sweep { opacity: 0; }
     <p class="lede" style="margin-bottom:0">Five systems, five query languages, five consistency domains — for one agent's memory.</p>
   </div>
   <aside class="notes">
-    The standard stack: a vector database for similarity, a graph database for relationships, a search engine for keywords, a cache for session state — and then the fifth box, which nobody plans for: the glue. The sync pipelines that copy data between the other four, the retry logic, the eventual-consistency bugs where your graph knows something your vector store doesn't. Each box is also a separate operational surface: separate backups, separate auth, separate failure modes. My argument today is that this sprawl is not inherent to the problem — it's an artifact of using single-model databases for a multi-model workload.
+    The opening line isn't mine — it's the first sentence on surrealdb.com today: agents fail because of context, not models. My addition is the second line: context is a database problem. The standard stack: a vector database for similarity, a graph database for relationships, a search engine for keywords, a cache for session state — and then the fifth box, which nobody plans for: the glue. The sync pipelines that copy data between the other four, the retry logic, the eventual-consistency bugs where your graph knows something your vector store doesn't. My argument today is that this sprawl is not inherent to the problem — it's an artifact of using single-model databases for a multi-model workload.
   </aside>
 </section>
 
@@ -917,44 +918,51 @@ body:not(.anim-ready) .sweep { opacity: 0; }
   </aside>
 </section>
 
-<!-- 7 · Status quo: sprawl vs one engine -->
+<!-- 7 · The context wall -->
 <section class="layout-default">
   <div class="eyebrow"><span class="dot"></span>01 · The database</div>
-  <h2 class="title">What it replaces.</h2>
+  <h2 class="title">The context wall.</h2>
   <div class="slide-content">
     <figure class="figure" style="padding:40px 60px">
       <svg viewBox="0 0 1560 480" xmlns="http://www.w3.org/2000/svg" fill="none">
-        <!-- LEFT: sprawl -->
-        <text x="20" y="30" font-family="JetBrains Mono, monospace" font-size="20" fill="#657220" letter-spacing="2">POLYGLOT PERSISTENCE</text>
-        <g font-family="Inter, sans-serif" font-size="22" font-weight="700" fill="#1a1a1a">
-          <rect x="20"  y="60"  width="200" height="80" rx="12" fill="#f2f1eb" stroke="#1a1a1a" stroke-width="1.6"/>
-          <text x="120" y="107" text-anchor="middle">Pinecone</text>
-          <rect x="260" y="60"  width="200" height="80" rx="12" fill="#f2f1eb" stroke="#1a1a1a" stroke-width="1.6"/>
-          <text x="360" y="107" text-anchor="middle">Neo4j</text>
-          <rect x="20"  y="290" width="200" height="80" rx="12" fill="#f2f1eb" stroke="#1a1a1a" stroke-width="1.6"/>
-          <text x="120" y="337" text-anchor="middle">Elastic</text>
-          <rect x="260" y="290" width="200" height="80" rx="12" fill="#f2f1eb" stroke="#1a1a1a" stroke-width="1.6"/>
-          <text x="360" y="337" text-anchor="middle">Redis</text>
-          <rect x="140" y="175" width="200" height="80" rx="12" fill="#f2f1eb" stroke="#1a1a1a" stroke-width="1.6"/>
-          <text x="240" y="222" text-anchor="middle">Postgres</text>
+        <!-- LEFT: the six-system stack -->
+        <text x="20" y="30" font-family="JetBrains Mono, monospace" font-size="20" fill="#657220" letter-spacing="2">SIX SYSTEMS</text>
+        <g font-family="Inter, sans-serif" font-size="21" font-weight="700" fill="#1a1a1a">
+          <rect x="20"  y="60"  width="200" height="75" rx="12" fill="#f2f1eb" stroke="#1a1a1a" stroke-width="1.6"/>
+          <text x="120" y="112" text-anchor="middle">Vector DB</text>
+          <rect x="260" y="60"  width="200" height="75" rx="12" fill="#f2f1eb" stroke="#1a1a1a" stroke-width="1.6"/>
+          <text x="360" y="112" text-anchor="middle">Graph DB</text>
+          <rect x="20"  y="170" width="200" height="75" rx="12" fill="#f2f1eb" stroke="#1a1a1a" stroke-width="1.6"/>
+          <text x="120" y="222" text-anchor="middle">Doc store</text>
+          <rect x="260" y="170" width="200" height="75" rx="12" fill="#f2f1eb" stroke="#1a1a1a" stroke-width="1.6"/>
+          <text x="360" y="222" text-anchor="middle">Cache</text>
+          <rect x="20"  y="280" width="200" height="75" rx="12" fill="#f2f1eb" stroke="#1a1a1a" stroke-width="1.6"/>
+          <text x="120" y="332" text-anchor="middle">Queue</text>
+          <rect x="260" y="280" width="200" height="75" rx="12" fill="#fff7ed" stroke="#1a1a1a" stroke-width="1.6"/>
+          <text x="360" y="332" text-anchor="middle">Middleware</text>
         </g>
-        <g font-family="JetBrains Mono, monospace" font-size="14" fill="#657220">
-          <text x="120" y="82"  text-anchor="middle" letter-spacing="1">VECTOR</text>
-          <text x="360" y="82"  text-anchor="middle" letter-spacing="1">GRAPH</text>
-          <text x="120" y="312" text-anchor="middle" letter-spacing="1">SEARCH</text>
-          <text x="360" y="312" text-anchor="middle" letter-spacing="1">CACHE</text>
-          <text x="240" y="197" text-anchor="middle" letter-spacing="1">RECORDS</text>
+        <g font-family="JetBrains Mono, monospace" font-size="13" fill="#657220">
+          <text x="120" y="82"  text-anchor="middle" letter-spacing="1">EMBEDDINGS</text>
+          <text x="360" y="82"  text-anchor="middle" letter-spacing="1">ENTITIES · EDGES</text>
+          <text x="120" y="192" text-anchor="middle" letter-spacing="1">CHUNKS</text>
+          <text x="360" y="192" text-anchor="middle" letter-spacing="1">SESSION STATE</text>
+          <text x="120" y="302" text-anchor="middle" letter-spacing="1">EVENTS</text>
+          <text x="360" y="302" text-anchor="middle" letter-spacing="1">MEMORY API</text>
         </g>
-        <!-- glue lines -->
+        <!-- glue lines: every boundary a leak -->
         <g stroke="#ffa440" stroke-width="1.8" stroke-dasharray="6 5">
-          <line x1="220" y1="100" x2="260" y2="100"/>
-          <line x1="220" y1="330" x2="260" y2="330"/>
-          <line x1="120" y1="140" x2="200" y2="180"/>
-          <line x1="360" y1="140" x2="290" y2="180"/>
-          <line x1="120" y1="290" x2="200" y2="250"/>
-          <line x1="360" y1="290" x2="290" y2="250"/>
+          <line x1="220" y1="97"  x2="260" y2="97"/>
+          <line x1="220" y1="207" x2="260" y2="207"/>
+          <line x1="220" y1="317" x2="260" y2="317"/>
+          <line x1="120" y1="135" x2="120" y2="170"/>
+          <line x1="360" y1="135" x2="360" y2="170"/>
+          <line x1="120" y1="245" x2="120" y2="280"/>
+          <line x1="360" y1="245" x2="360" y2="280"/>
+          <line x1="220" y1="135" x2="260" y2="170"/>
+          <line x1="260" y1="245" x2="220" y2="280"/>
         </g>
-        <text x="240" y="430" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="16" fill="#9a6a2a" letter-spacing="1.5">SYNC JOBS · DRIFT · 5× OPS</text>
+        <text x="240" y="408" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="15" fill="#9a6a2a" letter-spacing="1">DATA FRAGMENTS AT EVERY SYSTEM BOUNDARY</text>
+        <text x="240" y="436" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="15" fill="#9a6a2a" letter-spacing="1">"THE GLUE CODE BECOMES THE PRODUCT"</text>
 
         <!-- arrow -->
         <line x1="560" y1="215" x2="700" y2="215" stroke="#1a1a1a" stroke-width="2.5"/>
@@ -985,11 +993,149 @@ body:not(.anim-ready) .sweep { opacity: 0; }
     </figure>
   </div>
   <aside class="notes">
-    Left side is a real architecture — I've seen this exact diagram in multiple agent-memory posts, and it's what most memory frameworks assume underneath. The orange dashed lines are the part that hurts: every pair of stores that must agree needs a sync path, and every sync path is a place where your agent's knowledge forks. When the vector store returns a memory that the graph store already superseded, the agent confidently acts on stale context — that class of bug simply cannot exist when there is one store. The right side is not "five databases in a trench coat": it's one storage engine, one query planner, one transaction log, in which these five are index types and query operators.
+    SurrealDB calls this the context wall, and the left side is their own inventory of what AI teams end up assembling: a vector database, a graph database, a document store, a cache, a queue, and a memory middleware layer on top. The orange dashed lines are the part that hurts: every pair of stores that must agree needs a sync path, and every sync path is a place where your agent's knowledge forks. The two captions are the site's own wording: data fragments at every system boundary, and — the line I'd frame — the glue code becomes the product. The right side is not six databases in a trench coat: one storage engine, one query planner, one transaction log, in which the models are index types and query operators.
   </aside>
 </section>
 
-<!-- 8 · The two hard problems -->
+<!-- 8 · What fragmentation costs -->
+<section class="layout-default">
+  <div class="eyebrow"><span class="dot"></span>01 · The database</div>
+  <h2 class="title">What fragmentation costs.</h2>
+  <div class="slide-content">
+    <div class="grid cols-3">
+      <div class="card">
+        <div class="k">Accuracy</div>
+        <h3>Context leaks</h3>
+        <svg viewBox="0 0 440 210" xmlns="http://www.w3.org/2000/svg" fill="none" style="margin:14px 0">
+          <rect x="20"  y="50" width="160" height="70" rx="10" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.4"/>
+          <text x="100" y="92" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14" fill="#1a1a1a">vector store</text>
+          <rect x="260" y="50" width="160" height="70" rx="10" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.4"/>
+          <text x="340" y="92" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14" fill="#1a1a1a">graph store</text>
+          <line x1="180" y1="85" x2="215" y2="85" stroke="#1a1a1a" stroke-width="1.8"/>
+          <line x1="245" y1="85" x2="260" y2="85" stroke="#1a1a1a" stroke-width="1.8" stroke-dasharray="3 4" opacity="0.4"/>
+          <text x="228" y="93" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="20" font-weight="700" fill="#9a6a2a">✕</text>
+          <text x="220" y="160" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" fill="#9a6a2a" letter-spacing="0.5">RELATIONSHIPS · HISTORY · METADATA</text>
+          <text x="220" y="182" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" fill="#9a6a2a" letter-spacing="0.5">FRAGMENT AT THE BOUNDARY</text>
+        </svg>
+        <p>Data flows between six systems — what one store knows, the next one doesn't. The agent acts on the gap.</p>
+      </div>
+      <div class="card tint-warm">
+        <div class="k">Cost</div>
+        <h3>One fact, 3× the tokens</h3>
+        <svg viewBox="0 0 440 210" xmlns="http://www.w3.org/2000/svg" fill="none" style="margin:14px 0">
+          <g font-family="JetBrains Mono, monospace" font-size="13" fill="#1a1a1a">
+            <rect x="20" y="20"  width="180" height="44" rx="9" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.3"/>
+            <text x="110" y="47" text-anchor="middle">fact · vector db</text>
+            <rect x="20" y="80"  width="180" height="44" rx="9" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.3"/>
+            <text x="110" y="107" text-anchor="middle">fact · graph db</text>
+            <rect x="20" y="140" width="180" height="44" rx="9" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.3"/>
+            <text x="110" y="167" text-anchor="middle">fact · doc store</text>
+          </g>
+          <g stroke="#1a1a1a" stroke-width="1.6">
+            <line x1="200" y1="42"  x2="280" y2="95"/>
+            <line x1="200" y1="102" x2="280" y2="102"/>
+            <line x1="200" y1="162" x2="280" y2="110"/>
+          </g>
+          <rect x="285" y="65" width="135" height="75" rx="10" fill="#ffa440" fill-opacity="0.25" stroke="#1a1a1a" stroke-width="1.5"/>
+          <text x="352" y="97" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14" font-weight="700" fill="#1a1a1a">the prompt</text>
+          <text x="352" y="122" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" fill="#9a6a2a">×3 copies</text>
+        </svg>
+        <p>Every store returns its own copy of the same context. Duplicate chunks inflate every single prompt.</p>
+      </div>
+      <div class="card">
+        <div class="k">Latency</div>
+        <h3>Round trips stack</h3>
+        <svg viewBox="0 0 440 210" xmlns="http://www.w3.org/2000/svg" fill="none" style="margin:14px 0">
+          <g font-family="JetBrains Mono, monospace" font-size="13" fill="#1a1a1a">
+            <text x="30" y="45"  >agent → vector db</text>
+            <text x="30" y="85"  >  → graph db</text>
+            <text x="30" y="125" >  → doc store</text>
+            <text x="30" y="165" >  → auth</text>
+          </g>
+          <g stroke="#1a1a1a" stroke-width="1.4">
+            <rect x="250" y="30"  width="60"  height="20" fill="#d9f400" fill-opacity="0.5"/>
+            <rect x="250" y="70"  width="105" height="20" fill="#d9f400" fill-opacity="0.5"/>
+            <rect x="250" y="110" width="150" height="20" fill="#ffa440" fill-opacity="0.4"/>
+            <rect x="250" y="150" width="185" height="20" fill="#ffa440" fill-opacity="0.6"/>
+          </g>
+          <text x="240" y="196" font-family="JetBrains Mono, monospace" font-size="13" fill="#9a6a2a" letter-spacing="0.5">EVERY SYSTEM ADDS A HOP</text>
+        </svg>
+        <p>Sequential hops under load — the loop's latency is the sum of every store's worst case.</p>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    These three costs are how surrealdb.com itself argues the problem, and they're worth keeping because each one lands with a different person in the room. Accuracy: context leaks at every seam — relationships, history and metadata fragment at system boundaries, and the agent acts on the gap. Cost: their phrase is "one fact, three times the tokens" — every store returns its own copy of the same context, so duplicate chunks inflate every prompt, and you pay for that inflation on every model call. Latency: every system adds a network hop, and the hops are sequential, so round trips stack under load. Fold in operations — six failure modes, six monitoring setups, six sets of credentials — and you get the line from the previous slide: the glue code becomes the product.
+  </aside>
+</section>
+
+<!-- 8 · A database is two layers -->
+<section class="layout-default">
+  <div class="eyebrow"><span class="dot"></span>01 · The database</div>
+  <h2 class="title">A database is two layers.</h2>
+  <div class="slide-content">
+    <figure class="figure" style="padding:40px 60px">
+      <svg viewBox="0 0 1560 500" xmlns="http://www.w3.org/2000/svg" fill="none">
+        <!-- query layer -->
+        <g>
+          <rect x="60" y="30" width="1160" height="170" rx="16" fill="#d9f400" fill-opacity="0.18" stroke="#1a1a1a" stroke-width="2"/>
+          <text x="100" y="75" font-family="JetBrains Mono, monospace" font-size="16" fill="#465016" letter-spacing="2">THE QUERY LAYER</text>
+          <text x="100" y="115" font-family="Inter, sans-serif" font-size="30" font-weight="800" fill="#1a1a1a">parse · plan · execute</text>
+          <g font-family="JetBrains Mono, monospace" font-size="15" fill="#1a1a1a" text-anchor="middle">
+            <rect x="100"  y="140" width="200" height="42" rx="21" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.4"/>
+            <text x="200"  y="167">data models</text>
+            <rect x="320"  y="140" width="150" height="42" rx="21" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.4"/>
+            <text x="395"  y="167">schema</text>
+            <rect x="490"  y="140" width="160" height="42" rx="21" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.4"/>
+            <text x="570"  y="167">indexes</text>
+            <rect x="670"  y="140" width="240" height="42" rx="21" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.4"/>
+            <text x="790"  y="167">query language</text>
+          </g>
+          <text x="1180" y="80" text-anchor="end" font-family="Inter, sans-serif" font-size="24" font-weight="700" fill="#1a1a1a">where data</text>
+          <text x="1180" y="112" text-anchor="end" font-family="Inter, sans-serif" font-size="24" font-weight="700" fill="#1a1a1a">modelling happens</text>
+        </g>
+
+        <!-- interface band -->
+        <rect x="60" y="230" width="1160" height="50" rx="10" fill="#1a1a1a"/>
+        <text x="640" y="262" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="15" fill="#d9f400" letter-spacing="2">TRANSACTIONAL KEY-VALUE INTERFACE</text>
+
+        <!-- storage layer -->
+        <g>
+          <rect x="60" y="310" width="1160" height="150" rx="16" fill="#ffa440" fill-opacity="0.12" stroke="#1a1a1a" stroke-width="2"/>
+          <text x="100" y="355" font-family="JetBrains Mono, monospace" font-size="16" fill="#9a6a2a" letter-spacing="2">THE STORAGE LAYER</text>
+          <text x="100" y="395" font-family="Inter, sans-serif" font-size="30" font-weight="800" fill="#1a1a1a">persist · replicate · scale</text>
+          <g font-family="JetBrains Mono, monospace" font-size="15" fill="#1a1a1a" text-anchor="middle">
+            <rect x="490" y="368" width="150" height="42" rx="21" fill="#fff7ed" stroke="#1a1a1a" stroke-width="1.4"/>
+            <text x="565" y="395">memory</text>
+            <rect x="660" y="368" width="130" height="42" rx="21" fill="#fff7ed" stroke="#1a1a1a" stroke-width="1.4"/>
+            <text x="725" y="395">disk</text>
+            <rect x="810" y="368" width="160" height="42" rx="21" fill="#fff7ed" stroke="#1a1a1a" stroke-width="1.4"/>
+            <text x="890" y="395">cluster</text>
+          </g>
+          <text x="1180" y="380" text-anchor="end" font-family="Inter, sans-serif" font-size="24" font-weight="700" fill="#1a1a1a">where scaling</text>
+          <text x="1180" y="412" text-anchor="end" font-family="Inter, sans-serif" font-size="24" font-weight="700" fill="#1a1a1a">happens</text>
+        </g>
+
+        <!-- connectors -->
+        <line class="ont-flow" x1="640" y1="200" x2="640" y2="230" stroke="#1a1a1a" stroke-width="1.8"/>
+        <line class="ont-flow" x1="640" y1="280" x2="640" y2="310" stroke="#1a1a1a" stroke-width="1.8"/>
+
+        <!-- side annotations to the acts -->
+        <g font-family="JetBrains Mono, monospace" font-size="14" fill="#657220">
+          <text x="1270" y="120" letter-spacing="1">→ ACT 02</text>
+          <text x="1270" y="392" letter-spacing="1">→ ACT 03</text>
+        </g>
+
+        <text x="640" y="492" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="15" fill="#657220" letter-spacing="1.5">EVERY DATABASE YOU'VE USED HAS BOTH — THE QUESTION IS WHAT EACH LAYER CAN DO</text>
+      </svg>
+    </figure>
+  </div>
+  <aside class="notes">
+    Before the two hard problems, thirty seconds of anatomy. Every database you've ever used — Postgres, MySQL, Mongo — decomposes into these two layers. The query layer parses, plans and executes: when you pick a data model, define a schema, add an index, you are working in the query layer — data modelling is its job. The storage layer persists, replicates and scales: when you worry about fitting in memory, surviving a crash, or sharding across machines, you're worrying about the storage layer. Most databases weld the two decisions together — choose the model and you've silently chosen the scaling story. Hold the split: the next slide poses one hard problem in each layer, and acts two and three answer them one at a time.
+  </aside>
+</section>
+
+<!-- 9 · The two hard problems -->
 <section class="layout-default">
   <div class="eyebrow"><span class="dot"></span>01 · The database</div>
   <h2 class="title">That takes solving two hard problems.</h2>
@@ -1078,7 +1224,7 @@ body:not(.anim-ready) .sweep { opacity: 0; }
     </figure>
   </div>
   <aside class="notes">
-    Two hard problems, and they're independent. Problem one is the language: SQL has no words for "nearest neighbours" or "walk this edge" — so most databases bolt those on as function calls, and it shows. SurrealQL extends the grammar itself; act two walks through it operator by operator. Problem two is scale: the engine that's perfect inside a laptop process is the wrong design for a hundred-node cluster. SurrealDB's answer is one query engine over swappable storage — act three. These two problems are the skeleton of the talk.
+    Now that you have the two layers, here are the two hard problems — one in each layer. They're independent. Problem one is the language: SQL has no words for "nearest neighbours" or "walk this edge" — so most databases bolt those on as function calls, and it shows. SurrealQL extends the grammar itself; act two walks through it operator by operator. Problem two is scale: the engine that's perfect inside a laptop process is the wrong design for a hundred-node cluster. SurrealDB's answer is one query engine over swappable storage — act three. These two problems are the skeleton of the talk.
   </aside>
 </section>
 
@@ -1802,28 +1948,113 @@ body:not(.anim-ready) .sweep { opacity: 0; }
   </aside>
 </section>
 <!-- ================================================================
-     ACT 4 — THE CONTEXT LAYER
+     ACT 4 — THE CONTEXT LAYER, DEFINED (v6, 8 slides)
+     One master anatomy diagram, then one define-slide per part.
+     Definitions quoted from surrealdb.com (homepage, /use-cases/
+     agent-memory, /use-cases/ai-agents, /use-cases/knowledge-graphs,
+     blog: context-layers-semantic-layers-and-knowledge-graphs).
      ================================================================ -->
 
-<!-- 29 · Divider -->
+<!-- Divider -->
 <section class="layout-divider">
   <div class="act-num">04</div>
-  <div class="eyebrow"><span class="dot"></span>Act four · agents</div>
-  <h2 class="title">What agents actually&nbsp;need.</h2>
-  <p class="lede">Context windows are working memory, not memory. What a real context layer does — and why every piece of it maps onto a data model you just saw.</p>
+  <div class="eyebrow"><span class="dot"></span>Act four · the context layer</div>
+  <h2 class="title">The context layer.</h2>
+  <p class="lede">Before building anything: the map. What an agentic system is made of, what each part is for — and why every part is a database concept.</p>
   <aside class="notes">
-    Act four. We leave the database for a moment and talk about agents — specifically about what the "context layer" everyone is naming actually has to do. My goal in the next four slides is to convince you that each of its responsibilities is, precisely, one of the data models from act two. That's the hinge of the whole talk.
+    Act four is the definitions act. "Context layer", "agent memory", "knowledge graph" get used loosely, so before we build one in act five, I want one picture of how all the parts sit together — and then a precise, one-slide definition of each part. I'm not inventing the definitions: they're quoted from SurrealDB's own architecture writing, so when you go read those pages later, the vocabulary will match.
   </aside>
 </section>
 
-<!-- 30 · Agents forget -->
+<!-- Anatomy: the master diagram -->
 <section class="layout-default">
-  <div class="eyebrow"><span class="dot"></span>04 · The problem</div>
-  <h2 class="title">Your agent learns for one session, then forgets.</h2>
+  <div class="eyebrow"><span class="dot"></span>04 · The map</div>
+  <h2 class="title">Anatomy of an agentic system.</h2>
+  <div class="slide-content">
+    <figure class="figure" style="padding:28px 50px">
+      <svg viewBox="0 0 1560 660" xmlns="http://www.w3.org/2000/svg" fill="none">
+        <!-- row 1: agent + context window, equal siblings -->
+        <g>
+          <rect x="300" y="20" width="440" height="100" rx="14" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="2"/>
+          <text x="330" y="55" font-family="JetBrains Mono, monospace" font-size="20" fill="#657220">①</text>
+          <text x="520" y="56" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="15" fill="#657220" letter-spacing="2">THE AGENT</text>
+          <text x="520" y="96" text-anchor="middle" font-family="Inter, sans-serif" font-size="26" font-weight="800" fill="#1a1a1a">LLM · tools · loop</text>
+        </g>
+        <line x1="740" y1="70" x2="820" y2="70" stroke="#1a1a1a" stroke-width="1.8"/>
+        <g>
+          <rect x="820" y="20" width="440" height="100" rx="14" fill="#fff7ed" stroke="#1a1a1a" stroke-width="2"/>
+          <text x="850" y="55" font-family="JetBrains Mono, monospace" font-size="20" fill="#9a6a2a">②</text>
+          <text x="1040" y="56" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="15" fill="#9a6a2a" letter-spacing="2">THE CONTEXT WINDOW</text>
+          <text x="1040" y="94" text-anchor="middle" font-family="Inter, sans-serif" font-size="21" font-weight="700" fill="#1a1a1a">working memory — big, but it forgets</text>
+        </g>
+
+        <!-- capture down / recall up -->
+        <line class="ont-flow" x1="480" y1="120" x2="480" y2="206" stroke="#1a1a1a" stroke-width="2"/>
+        <polygon points="471,200 480,216 489,200" fill="#1a1a1a"/>
+        <text x="452" y="172" text-anchor="end" font-family="JetBrains Mono, monospace" font-size="15" fill="#657220" letter-spacing="1.5">CAPTURE</text>
+        <line class="ont-flow" x1="1080" y1="216" x2="1080" y2="134" stroke="#1a1a1a" stroke-width="2"/>
+        <polygon points="1071,140 1080,124 1089,140" fill="#1a1a1a"/>
+        <text x="1108" y="172" font-family="JetBrains Mono, monospace" font-size="15" fill="#657220" letter-spacing="1.5">RECALL · INJECT</text>
+
+        <!-- context layer band -->
+        <g>
+          <rect x="240" y="220" width="1080" height="100" rx="14" fill="#d9f400" stroke="#1a1a1a" stroke-width="2"/>
+          <text x="270" y="256" font-family="JetBrains Mono, monospace" font-size="20" fill="#465016">③</text>
+          <text x="780" y="258" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="16" fill="#465016" letter-spacing="2">THE CONTEXT LAYER</text>
+          <text x="780" y="298" text-anchor="middle" font-family="Inter, sans-serif" font-size="25" font-weight="700" fill="#1a1a1a">gathers · filters · packages — "what does the model need to know right now?"</text>
+        </g>
+
+        <!-- arrows layer -> memory/kg -->
+        <line class="ont-flow" x1="480" y1="320" x2="480" y2="366" stroke="#1a1a1a" stroke-width="1.8"/>
+        <polygon points="472,360 480,374 488,360" fill="#1a1a1a"/>
+        <line class="ont-flow" x1="1080" y1="320" x2="1080" y2="366" stroke="#1a1a1a" stroke-width="1.8"/>
+        <polygon points="1072,360 1080,374 1088,360" fill="#1a1a1a"/>
+
+        <!-- memory + knowledge graph -->
+        <g>
+          <rect x="240" y="380" width="510" height="132" rx="14" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="2"/>
+          <text x="270" y="416" font-family="JetBrains Mono, monospace" font-size="20" fill="#657220">④</text>
+          <text x="495" y="418" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="15" fill="#657220" letter-spacing="2">MEMORY</text>
+          <text x="495" y="456" text-anchor="middle" font-family="Inter, sans-serif" font-size="22" font-weight="700" fill="#1a1a1a">everything the agent learned</text>
+          <text x="495" y="490" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#657220">episodic · semantic · procedural · preference · shared</text>
+        </g>
+        <g>
+          <rect x="810" y="380" width="510" height="132" rx="14" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="2"/>
+          <text x="840" y="416" font-family="JetBrains Mono, monospace" font-size="20" fill="#657220">⑤</text>
+          <text x="1065" y="418" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="15" fill="#657220" letter-spacing="2">THE KNOWLEDGE GRAPH</text>
+          <text x="1065" y="456" text-anchor="middle" font-family="Inter, sans-serif" font-size="22" font-weight="700" fill="#1a1a1a">how everything is connected</text>
+          <text x="1065" y="490" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#657220">entities · typed edges · properties</text>
+        </g>
+
+        <!-- arrows to storage -->
+        <line class="ont-flow" x1="480" y1="512" x2="480" y2="552" stroke="#1a1a1a" stroke-width="1.8"/>
+        <polygon points="472,546 480,560 488,546" fill="#1a1a1a"/>
+        <line class="ont-flow" x1="1080" y1="512" x2="1080" y2="552" stroke="#1a1a1a" stroke-width="1.8"/>
+        <polygon points="1072,546 1080,560 1088,546" fill="#1a1a1a"/>
+
+        <!-- storage -->
+        <g>
+          <rect x="240" y="566" width="1080" height="90" rx="14" fill="#1a1a1a"/>
+          <text x="270" y="604" font-family="JetBrains Mono, monospace" font-size="20" fill="#d9f400">⑥</text>
+          <text x="780" y="604" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="15" fill="#d9f400" letter-spacing="2">STORAGE — ONE MULTI-MODEL DATABASE</text>
+          <text x="780" y="636" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14" fill="#f2f1eb" opacity="0.85">document · graph · vector · full-text — browser → embedded → server → cluster</text>
+        </g>
+      </svg>
+    </figure>
+  </div>
+  <aside class="notes">
+    Here is the whole system on one picture — the next five slides define the numbered parts, in order. At the top, the agent: an LLM, its tools, and a loop. Beside it, the context window — its working memory, and the only memory the model itself has. Below it, the context layer: the runtime that captures what the agent does and decides, every turn, what the model needs to know right now. The capture-down, recall-up pair of arrows is the read-think-write loop from SurrealDB's homepage — we'll zoom into it in three slides. The layer draws on two bodies of knowledge — memory, everything the agent has learned, and the knowledge graph, how everything is connected — and all of it lives in storage. The claim of this talk is that boxes three through six are one database; the diagram is assembled from SurrealDB's own architecture writing, not invented for the slide.
+  </aside>
+</section>
+
+<!-- Define ② · the context window -->
+<section class="layout-default">
+  <div class="eyebrow"><span class="dot"></span>04 · Define ② · the context window</div>
+  <h2 class="title">The context window is working memory.</h2>
   <div class="slide-content">
     <div class="grid cols-2 cols-1-1-align">
       <div>
-        <p class="lede" style="margin-bottom:28px">The context window is <strong>working memory</strong>. Fast. Rich. Wiped every session. What evaporates:</p>
+        <p class="lede" style="margin-bottom:28px"><strong>"Active session context."</strong> Fast. Rich. Wiped every session. What evaporates:</p>
         <ul class="list">
           <li>The <strong>decision</strong> you debated for an hour and settled</li>
           <li>The <strong>root cause</strong> of the bug it just fixed</li>
@@ -1862,99 +2093,139 @@ body:not(.anim-ready) .sweep { opacity: 0; }
     </div>
   </div>
   <aside class="notes">
-    Everyone in this room has felt the sawtooth. Session one, the agent ramps up on your codebase, makes real progress — and at the cutoff, everything above the axis is gone. Session two starts from zero, re-reads the same files, re-asks the same questions, sometimes re-attempts the same failed fix. Bigger context windows don't fix this — they just make the teeth taller; the reset still comes, and cost scales with everything you re-feed. The lime curve is what we actually want: knowledge that compounds. The difference between the two curves is not a smarter model — the model is identical. It's persistence.
+    Part two of the diagram, and the definition is three words — the window is "active session context", working memory. Everyone in this room has felt the sawtooth. Session one, the agent ramps up on your codebase, makes real progress — and at the cutoff, everything above the axis is gone. Session two starts from zero, re-reads the same files, sometimes re-attempts the same failed fix. Bigger windows don't fix this — they make the teeth taller; the reset still comes, and cost scales with everything you re-feed. The lime curve is what we want: knowledge that compounds. The model is identical in both curves. The difference is persistence — which is everything below the window in the diagram.
   </aside>
 </section>
 
-<!-- 31 · Anatomy -->
+<!-- Define ③ · memory, six types -->
 <section class="layout-default">
-  <div class="eyebrow"><span class="dot"></span>04 · The anatomy</div>
-  <h2 class="title">A context layer is five verbs and a lifecycle.</h2>
+  <div class="eyebrow"><span class="dot"></span>04 · Define ③ · memory</div>
+  <h2 class="title">"Memory" is six different things.</h2>
   <div class="slide-content">
-    <figure class="figure" style="padding:44px 60px">
-      <svg viewBox="0 0 1560 480" xmlns="http://www.w3.org/2000/svg" fill="none">
-        <!-- agent -->
-        <g>
-          <rect x="620" y="20" width="320" height="90" rx="14" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.8"/>
-          <text x="780" y="58" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14" fill="#657220" letter-spacing="1.5">THE AGENT LOOP</text>
-          <text x="780" y="90" text-anchor="middle" font-family="Inter, sans-serif" font-size="26" font-weight="700" fill="#1a1a1a">prompt → act → observe</text>
-        </g>
-        <!-- down + up arrows -->
-        <line class="ont-flow" x1="660" y1="110" x2="560" y2="185" stroke="#1a1a1a" stroke-width="1.8"/>
-        <polygon points="562,177 553,191 570,188" fill="#1a1a1a"/>
-        <text x="520" y="150" font-family="JetBrains Mono, monospace" font-size="14" fill="#657220" letter-spacing="1">EVERY TOOL CALL</text>
-        <line class="ont-flow" x1="1010" y1="185" x2="905" y2="110" stroke="#1a1a1a" stroke-width="1.8"/>
-        <polygon points="896,116 905,105 909,122" fill="#1a1a1a"/>
-        <text x="1000" y="150" font-family="JetBrains Mono, monospace" font-size="14" fill="#657220" letter-spacing="1">TOP-K, RANKED</text>
-
-        <!-- pipeline -->
-        <g font-family="Inter, sans-serif" font-size="24" font-weight="700" fill="#1a1a1a" text-anchor="middle">
-          <rect x="60"   y="190" width="240" height="110" rx="12" fill="#fff7ed" stroke="#1a1a1a" stroke-width="1.6"/>
-          <text x="180" y="240">capture</text>
-          <rect x="360"  y="190" width="240" height="110" rx="12" fill="#fff7ed" stroke="#1a1a1a" stroke-width="1.6"/>
-          <text x="480" y="240">compress</text>
-          <rect x="660"  y="190" width="240" height="110" rx="12" fill="#d9f400" fill-opacity="0.30" stroke="#1a1a1a" stroke-width="1.8"/>
-          <text x="780" y="240">store</text>
-          <rect x="960"  y="190" width="240" height="110" rx="12" fill="#f5f3ff" stroke="#1a1a1a" stroke-width="1.6"/>
-          <text x="1080" y="240">recall</text>
-          <rect x="1260" y="190" width="240" height="110" rx="12" fill="#f5f3ff" stroke="#1a1a1a" stroke-width="1.6"/>
-          <text x="1380" y="240">inject</text>
-        </g>
-        <g font-family="JetBrains Mono, monospace" font-size="13" fill="#657220" text-anchor="middle">
-          <text x="180"  y="272">hooks · events · raw</text>
-          <text x="480"  y="272">title · facts · embed</text>
-          <text x="780"  y="272">multi-model DB</text>
-          <text x="1080" y="272">hybrid + graph</text>
-          <text x="1380" y="272">token budget</text>
-        </g>
-        <g stroke="#1a1a1a" stroke-width="1.8">
-          <line class="ont-flow" x1="300" y1="245" x2="352" y2="245"/>
-          <line class="ont-flow" x1="600" y1="245" x2="652" y2="245"/>
-          <line class="ont-flow" x1="900" y1="245" x2="952" y2="245"/>
-          <line class="ont-flow" x1="1200" y1="245" x2="1252" y2="245"/>
-        </g>
-        <polygon points="346,238 360,245 346,252" fill="#1a1a1a"/>
-        <polygon points="646,238 660,245 646,252" fill="#1a1a1a"/>
-        <polygon points="946,238 960,245 946,252" fill="#1a1a1a"/>
-        <polygon points="1246,238 1260,245 1246,252" fill="#1a1a1a"/>
-
-        <!-- lifecycle band -->
-        <g>
-          <rect x="60" y="360" width="1440" height="80" rx="12" fill="#1a1a1a"/>
-          <text x="780" y="395" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="16" fill="#d9f400" letter-spacing="2">THE LIFECYCLE — RUNS FOREVER, UNDER EVERYTHING</text>
-          <text x="780" y="424" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="15" fill="#f2f1eb" opacity="0.8">decay · reinforce · consolidate · version · contradict · forget</text>
-        </g>
-        <line class="ont-flow" x1="780" y1="300" x2="780" y2="360" stroke="#1a1a1a" stroke-width="1.8"/>
-      </svg>
-    </figure>
+    <p class="lede" style="margin-bottom:0">surrealdb.com's taxonomy. Only the first fits inside the model — the other five must live outside it, in a database.</p>
+    <div class="grid cols-3">
+      <div class="card tint-warm"><div class="k">In the window</div><h3>Working</h3><p>"Active session context" — the conversation so far. The only one the model carries itself.</p></div>
+      <div class="card"><div class="k">In the store</div><h3>Episodic</h3><p>"Past interactions and outcomes" — what happened, what was tried, what worked.</p></div>
+      <div class="card"><div class="k">In the store</div><h3>Semantic</h3><p>"Facts and knowledge graphs" — what the agent knows, independent of when it learned it.</p></div>
+      <div class="card"><div class="k">In the store</div><h3>Procedural</h3><p>"Learned patterns and workflows" — how this team does deploys, reviews, releases.</p></div>
+      <div class="card"><div class="k">In the store</div><h3>Preference</h3><p>"User personalisation" — how you like commits written, which tools you avoid.</p></div>
+      <div class="card"><div class="k">Across agents</div><h3>Shared</h3><p>"Multi-agent coordination" — memory more than one agent can read and write, safely.</p></div>
+    </div>
   </div>
   <aside class="notes">
-    Five verbs. Capture: hook the agent loop, record what happened — tool calls, edits, decisions. Compress: shrink raw events to a title, facts and keywords, then embed. Store. Recall: given the task, retrieve the top-k most useful things. Inject: fit them into the token budget. The part everyone underestimates is the black band: memory is a lifecycle, not append-only storage. Facts decay. Useful ones get reinforced. Contradictions supersede, history preserved. This band is what separates a context layer from a logging pipeline — and every verb in it is a database operation.
+    Part three: memory — which turns out to be six different things, and this taxonomy is straight from SurrealDB's agent-memory page. Working memory is the window from the previous slide; it's the only kind the model carries. Episodic is what happened; semantic is what's true; procedural is how we do things; preference is how you like things; shared is what a fleet of agents agrees on. Two observations to carry forward: first, five of the six must live outside the model, which is why memory is a database problem. Second, they're different shapes — episodic wants an ordered log, semantic wants facts and a graph, procedural wants documents — which is why it's a multi-model database problem. In act five you'll see hifz implement the store-side types with exactly the primitives from act two.
   </aside>
 </section>
 
-<!-- 32 · Each need is a data model -->
+<!-- Define ④ · the knowledge graph -->
 <section class="layout-default">
-  <div class="eyebrow"><span class="dot"></span>04 · The thesis</div>
-  <h2 class="title">Every need is a data model you've already seen.</h2>
+  <div class="eyebrow"><span class="dot"></span>04 · Define ④ · the knowledge graph</div>
+  <h2 class="title">The knowledge graph: how things are connected.</h2>
+  <div class="slide-content">
+    <div class="grid cols-2 cols-1-1-align">
+      <div>
+        <p class="lede" style="margin-bottom:26px">"Entities (nodes) and typed relationships (edges) with attached properties." It answers: <strong>how are things connected — and what do we know about them?</strong></p>
+        <ul class="list" style="font-size:26px">
+          <li>Edges are <strong>documents too</strong> — they carry dates, confidence, provenance</li>
+          <li>"Your schema is your ontology" — no separate modelling layer</li>
+          <li>The <strong>semantic layer</strong> is the meaning on top: <span class="m">"what does this data mean?"</span></li>
+        </ul>
+      </div>
+      <div>
+        <pre class="code-block sm"><span class="c-comment">-- an edge that knows when, and how sure
+-- (surrealdb.com/use-cases/knowledge-graphs)</span>
+<span class="c-kw">RELATE</span> person:jaime<span class="c-hi">-&gt;knows-&gt;</span>person:sarah <span class="c-kw">SET</span>
+  since      = d<span class="c-str">"2020-03-15"</span>,
+  confidence = 0.95;
+
+<span class="c-comment">-- traverse it, filtering on the edge itself</span>
+<span class="c-kw">SELECT</span> -&gt;knows<span class="c-hi">[WHERE confidence &gt; 0.9]</span>
+       -&gt;person.name
+<span class="c-kw">FROM</span> person:jaime;</pre>
+        <p class="code-caption">the graph from act 02 — plus properties on the edge</p>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    Part four: the knowledge graph — the world model. The definition: entities as nodes, typed relationships as edges, properties attached to both. It answers the question search can't: how are things connected, and what do we know about the connection itself? That last part matters — in SurrealDB an edge is a record, so it carries data: since when do these two know each other, with what confidence, from which source. The query filters on the edge, not the nodes. And because your table schema literally is the ontology, there's no separate modelling layer to keep in sync. The semantic layer, in the architecture posts, is the thin layer of meaning on top — what does this data mean in business terms; here, it's DEFINE FIELD and naming discipline rather than a separate product.
+  </aside>
+</section>
+
+<!-- Define ⑤ · the context layer + the loop -->
+<section class="layout-default">
+  <div class="eyebrow"><span class="dot"></span>04 · Define ⑤ · the context layer</div>
+  <h2 class="title">The context layer runs read → think → write.</h2>
+  <div class="slide-content" style="gap:24px">
+    <p class="lede" style="margin-bottom:0; font-size:27px">"The layer that gathers, filters, and packages data as context for the model" — every turn of the agent loop runs one cycle:</p>
+    <svg viewBox="0 0 1560 170" xmlns="http://www.w3.org/2000/svg" fill="none">
+      <g font-family="Inter, sans-serif" text-anchor="middle">
+        <rect x="30" y="12" width="440" height="140" rx="13" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.8"/>
+        <text x="250" y="60" font-size="24" font-weight="800" fill="#1a1a1a">READ</text>
+        <text x="250" y="94" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#657220">graph + vector + temporal —</text>
+        <text x="250" y="118" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#657220">one statement, one round trip</text>
+        <rect x="560" y="12" width="440" height="140" rx="13" fill="#d9f400" fill-opacity="0.3" stroke="#1a1a1a" stroke-width="1.8"/>
+        <text x="780" y="60" font-size="24" font-weight="800" fill="#1a1a1a">THINK</text>
+        <text x="780" y="94" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#657220">documents · relations · vectors · history</text>
+        <text x="780" y="118" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#657220">→ complete context, no gaps</text>
+        <rect x="1090" y="12" width="440" height="140" rx="13" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.8"/>
+        <text x="1310" y="60" font-size="24" font-weight="800" fill="#1a1a1a">WRITE</text>
+        <text x="1310" y="94" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#657220">persist decisions, update entities —</text>
+        <text x="1310" y="118" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#657220">one ACID transaction → committed</text>
+      </g>
+      <line class="ont-flow" x1="470" y1="82" x2="558" y2="82" stroke="#1a1a1a" stroke-width="2"/>
+      <polygon points="552,74 566,82 552,90" fill="#1a1a1a"/>
+      <line class="ont-flow" x1="1000" y1="82" x2="1088" y2="82" stroke="#1a1a1a" stroke-width="2"/>
+      <polygon points="1082,74 1096,82 1082,90" fill="#1a1a1a"/>
+    </svg>
+    <div class="grid cols-2 cols-1-1-align">
+      <pre class="code-block xs"><span class="c-comment">-- "context engineering in one query"
+-- (quoted from surrealdb.com/use-cases/ai-agents)</span>
+<span class="c-kw">LET</span> $user = user:jaime;
+<span class="c-kw">LET</span> $query_vec = <span class="c-fn">fn::embed</span>(<span class="c-str">"What products
+                          does this user like?"</span>);
+<span class="c-kw">SELECT</span>
+  -&gt;purchased-&gt;product <span class="c-kw">AS</span> purchase_history,
+  -&gt;reviewed-&gt;product[<span class="c-kw">WHERE</span> <span class="c-fn">vector::similarity::
+    cosine</span>(...) &gt; 0.8] <span class="c-kw">AS</span> relevant_products,
+  -&gt;preferences[<span class="c-kw">WHERE</span> valid_at &lt;= <span class="c-fn">time::now</span>()]
+    <span class="c-kw">AS</span> current_preferences
+<span class="c-kw">FROM ONLY</span> $user;</pre>
+      <div>
+        <ul class="mono-list" style="font-size:22px">
+          <li>the READ is <strong>one statement</strong> — history, similarity, time filters together</li>
+          <li>the WRITE lands in <strong>the same transaction domain</strong> it read from</li>
+          <li>six systems make this loop a distributed system — one engine makes it <strong>two queries</strong></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    Part five, the layer itself — and the definition answers a question: what does the model need to know right now? SurrealDB's name for the cycle is the read-think-write loop. Read: gather context — graph hops, vector similarity, temporal filters — as one statement, one round trip. Think: the model reasons over complete context, not fragments. Write: whatever was decided is persisted in one ACID transaction, so the next read sees it. The query on the left is the site's own example of "context engineering in one query" — purchase history by graph, relevant products by vector similarity, current preferences by time filter, one statement. When this loop spans six systems, it's a distributed-systems problem; inside one engine it's two queries per turn. Act five builds exactly this loop, with hooks on each end.
+  </aside>
+</section>
+
+<!-- Define ⑥ · storage: each need is a data model -->
+<section class="layout-default">
+  <div class="eyebrow"><span class="dot"></span>04 · Define ⑥ · storage</div>
+  <h2 class="title">Storage: every part is a table in one engine.</h2>
   <div class="slide-content">
     <table class="tbl" style="font-size:23px">
-      <tr><th style="width:32%">The context layer needs…</th><th style="width:26%">…which is this model</th><th>…and this construct from act 02</th></tr>
-      <tr><td>A log — "what happened, in order"</td><td class="dim">documents</td><td class="hi">CREATE · a UNIQUE ordering index</td></tr>
-      <tr><td>Meaning — "find similar work"</td><td class="dim">vectors</td><td class="hi">HNSW · &lt;|k,ef|&gt;</td></tr>
-      <tr><td>Exact words — "find that error string"</td><td class="dim">full-text</td><td class="hi">BM25 · @1@</td></tr>
-      <tr><td>Connections — "what relates to what"</td><td class="dim">graph</td><td class="hi">RELATE · -&gt;wrote-&gt;article</td></tr>
-      <tr><td>Origin — "where did this come from"</td><td class="dim">record links</td><td class="hi">a stored record id · dot access</td></tr>
-      <tr class="hi-row"><td>Change — "update without losing history"</td><td>transactions</td><td>old version kept, new version marked current</td></tr>
+      <tr><th style="width:32%">The part you just met…</th><th style="width:26%">…is this model</th><th>…and this construct from act 02</th></tr>
+      <tr><td>Episodic memory — "what happened, in order"</td><td class="dim">documents</td><td class="hi">CREATE · a UNIQUE ordering index</td></tr>
+      <tr><td>Semantic memory — "find similar meaning"</td><td class="dim">vectors</td><td class="hi">HNSW · &lt;|k,ef|&gt;</td></tr>
+      <tr><td>Recall by exact words</td><td class="dim">full-text</td><td class="hi">BM25 · @1@</td></tr>
+      <tr><td>The knowledge graph</td><td class="dim">graph</td><td class="hi">RELATE · edges with properties</td></tr>
+      <tr><td>Provenance — "where did this come from"</td><td class="dim">record links</td><td class="hi">a stored record id · dot access</td></tr>
+      <tr class="hi-row"><td>The write step — change without losing history</td><td>transactions</td><td>old version kept, new version marked current</td></tr>
     </table>
-    <p class="lede" style="margin-bottom:0; font-size:36px; opacity:1"><strong>The context layer is a multi-model workload.</strong> <span style="opacity:0.7">One engine makes it schema. Five stores make it your product.</span></p>
+    <p class="lede" style="margin-bottom:0; font-size:36px; opacity:1"><strong>The context layer is a multi-model workload.</strong> <span style="opacity:0.7">One engine makes it schema. Six stores make it your product.</span></p>
   </div>
   <aside class="notes">
-    Here is the hinge of the talk, as one table. Walk the left column — the needs are uncontroversial; every memory paper and framework converges on this list. The middle column is just naming which data model each need is. And the right column is act two: every row lands on a construct you've already seen with real syntax. Nothing about agents required inventing new database concepts — what they require is all of the concepts at once, in one consistency domain. That's the entire argument for a multi-model database as the context layer. Act five is this table, running.
+    Part six closes the loop back to the database: storage. Walk the left column — it's the parts you just met, nothing new. Episodic memory is an ordered document log. Semantic memory recalls by meaning — vectors — and by exact words — full-text. The knowledge graph is RELATE with properties on edges. Provenance is a record link. And the write step of the loop is a transaction that versions instead of overwriting. The middle column names the model; the right column is act two, with syntax you've already run. Nothing about agents required inventing new database concepts — they require all of the concepts at once, in one consistency domain. That is the entire argument. Act five is this table, running.
   </aside>
 </section>
 
-<!-- 33 · Retrieval quality is agent quality -->
+<!-- Retrieval quality is agent quality -->
 <section class="layout-default">
   <div class="eyebrow"><span class="dot"></span>04 · The stakes</div>
   <h2 class="title">Retrieval quality <em>is</em> agent quality.</h2>
@@ -1967,7 +2238,7 @@ body:not(.anim-ready) .sweep { opacity: 0; }
     </div>
   </div>
   <aside class="notes">
-    Last framing slide, on why this is worth engineering carefully. Memory is not free context — it competes for the same window as code and reasoning, so a retriever with poor precision actively degrades the agent. Worse, memory is authoritative to the model: recall a decision that was reversed last month and the agent doesn't hedge, it acts. So the ranking function has to combine signals — is it about this? does it mention this exact identifier? is it connected to what else matters now? is it fresh? has it proven useful? Each signal comes from a different data model. When those live in one engine, that ranking is a query. When they don't, it's a distributed system. Now let me show you the running version.
+    Last framing slide, on why this is worth engineering carefully. Memory is not free context — it competes for the same window as code and reasoning, so a retriever with poor precision actively degrades the agent. Worse, memory is authoritative to the model: recall a decision that was reversed last month and the agent doesn't hedge, it acts. So the ranking function has to combine signals — is it about this? does it mention this exact identifier? is it connected to what else matters now? is it fresh? Each signal comes from a different data model. When those live in one engine, that ranking is a query. When they don't, it's a distributed system. Now let me show you the running version.
   </aside>
 </section>
 <!-- ================================================================
@@ -1987,9 +2258,9 @@ body:not(.anim-ready) .sweep { opacity: 0; }
   <div class="act-num">05</div>
   <div class="eyebrow"><span class="dot"></span>Act five · build a context layer</div>
   <h2 class="title">Build a context layer.</h2>
-  <p class="lede">Seven components, one database. hifz is the worked example — by the end of this act, you can build your own.</p>
+  <p class="lede">Act four gave you the anatomy — ① agent · ② window · ③ context layer · ④ memory · ⑤ knowledge · ⑥ storage. This act builds boxes ③ to ⑥, with hifz as the worked example.</p>
   <aside class="notes">
-    Act five is the build. A context layer sounds like a big system, but it decomposes into seven small components — capture, chunking, embeddings, vector search, text search, graph links, and graph-expanded retrieval — and every one of them is a table or an index on the database from act two. I'll use hifz, my memory plugin for Claude Code, as the worked example throughout: not to explain hifz, but so every component comes with a real query you can copy. First: where a plugin like this sits relative to the agent.
+    Act five is the build, and it follows the map from act four exactly. hifz is box three — a layer that stores and searches context and memory for Claude Code. Its box four is the memory tables, its box five is the code and the documents, and its box six is an embedded SurrealDB. I'll use it as the worked example throughout: not to explain hifz, but so every box comes with a real query you can copy. First: where box three sits relative to the agent.
   </aside>
 </section>
 
@@ -2003,16 +2274,16 @@ body:not(.anim-ready) .sweep { opacity: 0; }
         <!-- agent (left, spans both lanes) -->
         <g>
           <rect x="40" y="90" width="300" height="330" rx="16" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="2"/>
-          <text x="190" y="135" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="15" fill="#657220" letter-spacing="1.5">THE AGENT</text>
+          <text x="190" y="135" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="15" fill="#657220" letter-spacing="1.5">① THE AGENT</text>
           <text x="190" y="175" text-anchor="middle" font-family="Inter, sans-serif" font-size="24" font-weight="800" fill="#1a1a1a">Claude Code</text>
           <text x="190" y="215" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14" fill="#657220">Read · Bash · Edit</text>
-          <text x="190" y="340" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" fill="#9a6a2a">context window:</text>
+          <text x="190" y="340" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" fill="#9a6a2a">② context window:</text>
           <text x="190" y="362" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" fill="#9a6a2a">big, but it forgets</text>
         </g>
         <!-- store (right, spans both lanes) -->
         <g>
           <rect x="1220" y="90" width="300" height="330" rx="16" fill="#d9f400" fill-opacity="0.2" stroke="#1a1a1a" stroke-width="2"/>
-          <text x="1370" y="135" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="15" fill="#657220" letter-spacing="1.5">THE STORE</text>
+          <text x="1370" y="135" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="15" fill="#657220" letter-spacing="1.5">⑥ THE STORE</text>
           <text x="1370" y="175" text-anchor="middle" font-family="Inter, sans-serif" font-size="24" font-weight="800" fill="#1a1a1a">SurrealDB</text>
           <text x="1370" y="215" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#657220">rows · vectors · words · links</text>
           <text x="1370" y="340" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" fill="#465016">small, but it remembers</text>
@@ -2056,12 +2327,12 @@ body:not(.anim-ready) .sweep { opacity: 0; }
         <line class="ont-flow" x1="500" y1="370" x2="350" y2="370" stroke="#1a1a1a" stroke-width="2"/>
         <polygon points="356,362 342,370 356,378" fill="#1a1a1a"/>
 
-        <text x="780" y="510" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14.5" fill="#657220" letter-spacing="1.5">EVERY MEMORY PLUGIN IS THIS LOOP — THE REST OF THE ACT BUILDS THE MIDDLE</text>
+        <text x="780" y="510" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14.5" fill="#657220" letter-spacing="1.5">EVERY MEMORY PLUGIN IS THIS LOOP — BOX ③ OF THE ANATOMY; THE REST OF THE ACT BUILDS IT</text>
       </svg>
     </figure>
   </div>
   <aside class="notes">
-    Before any component: the shape. Every memory plugin — hifz, or the one you build — is this loop. Top lane, while the agent works: the agent's actions fire hook events, the plugin captures each one and stores it. Bottom lane, when a new session starts or a prompt arrives: the plugin searches the store and injects the results — in Claude Code, a SessionStart hook's stdout is prepended, and a UserPromptSubmit hook returns matches in an additionalContext field. There's also a deliberate path — MCP tools the agent calls to save or search on demand — but the loop is the spine. Everything that follows is what goes inside the two middle boxes.
+    Before any component: the shape. Every memory plugin — hifz, or the one you build — is this loop. Top lane, while the agent works: the agent's actions fire hook events, the plugin captures each one and stores it. Bottom lane, when a new session starts or a prompt arrives: the plugin searches the store and injects the results — in Claude Code, a SessionStart hook's stdout is prepended, and a UserPromptSubmit hook returns matches in an additionalContext field. There's also a deliberate path — MCP tools the agent calls to save or search on demand — but the loop is the spine. You saw where this sits on the anatomy map in act four — capture and recall were its two arrows; now we build what's behind them.
   </aside>
 </section>
 
@@ -2075,7 +2346,7 @@ body:not(.anim-ready) .sweep { opacity: 0; }
         <!-- claude code -->
         <g>
           <rect x="30" y="120" width="330" height="260" rx="14" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.8"/>
-          <text x="195" y="160" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="15" fill="#657220" letter-spacing="1.5">CLAUDE CODE</text>
+          <text x="195" y="160" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14" fill="#657220" letter-spacing="1.2">① ② CLAUDE CODE</text>
           <g font-family="JetBrains Mono, monospace" font-size="14" fill="#1a1a1a" text-anchor="middle">
             <rect x="60" y="185" width="270" height="48" rx="9" fill="#fff7ed" stroke="#1a1a1a" stroke-width="1.3"/>
             <text x="195" y="215">hooks · every event</text>
@@ -2092,7 +2363,7 @@ body:not(.anim-ready) .sweep { opacity: 0; }
         <!-- hifz binary -->
         <g>
           <rect x="460" y="40" width="700" height="420" rx="16" fill="#d9f400" fill-opacity="0.12" stroke="#1a1a1a" stroke-width="2"/>
-          <text x="490" y="80" font-family="JetBrains Mono, monospace" font-size="15" fill="#657220" letter-spacing="1.5">HIFZ · ONE RUST BINARY</text>
+          <text x="490" y="80" font-family="JetBrains Mono, monospace" font-size="15" fill="#657220" letter-spacing="1.5">③ HIFZ — THE CONTEXT LAYER · ONE RUST BINARY</text>
           <g font-family="Inter, sans-serif" font-size="21" font-weight="700" fill="#1a1a1a" text-anchor="middle">
             <rect x="490" y="105" width="310" height="70" rx="11" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.5"/>
             <text x="645" y="138">axum REST :3111</text>
@@ -2103,7 +2374,7 @@ body:not(.anim-ready) .sweep { opacity: 0; }
           </g>
           <g class="ont-pulse">
             <rect x="490" y="215" width="640" height="150" rx="13" fill="#d9f400" stroke="#1a1a1a" stroke-width="1.8"/>
-            <text x="810" y="258" text-anchor="middle" font-family="Inter, sans-serif" font-size="30" font-weight="800" fill="#1a1a1a" letter-spacing="-0.5">SurrealDB — embedded</text>
+            <text x="810" y="258" text-anchor="middle" font-family="Inter, sans-serif" font-size="30" font-weight="800" fill="#1a1a1a" letter-spacing="-0.5">⑥ SurrealDB — embedded</text>
             <text x="810" y="295" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="15" fill="#1a1a1a">document · graph · vector · full-text · relational</text>
             <text x="810" y="330" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14" fill="#657220">Surreal::new::&lt;SurrealKv&gt;(path) — in-process, no server</text>
           </g>
@@ -2125,81 +2396,96 @@ body:not(.anim-ready) .sweep { opacity: 0; }
     </figure>
   </div>
   <aside class="notes">
-    Here's the loop made concrete — hifz. One Rust binary: a REST API the hooks post to, an MCP server for the deliberate path, a dashboard, a local embedding model, and SurrealDB embedded in-process via surrealkv from act three. The deployment is a directory; no API keys, no cloud, no sidecars. Every component you're about to see — capture, chunking, embeddings, the two searches, the graph — lives inside this one box as either a table or an index. Now let's open it up.
+    Here's the loop made concrete — hifz, with the act-four numbers on the picture. Claude Code is boxes one and two: the agent and its window. hifz is box three, the context layer: one Rust binary — REST API for the hooks, MCP server for deliberate saves and searches, a dashboard, a local embedding model. Box six is SurrealDB, embedded in-process via surrealkv from act three; the deployment is a directory, no API keys, no cloud. Boxes four and five — the memory and the knowledge — are tables inside it, and that's the next slide.
   </aside>
 </section>
 
-<!-- 37 · The pipeline map -->
+<!-- 37 · The map: boxes 4 and 5 as tables -->
 <section class="layout-default">
-  <div class="eyebrow"><span class="dot"></span>05 · The architecture of a context layer</div>
-  <h2 class="title">The pipeline: a write path and a read path.</h2>
+  <div class="eyebrow"><span class="dot"></span>05 · The map, instantiated</div>
+  <h2 class="title">Boxes ④ and ⑤, as tables.</h2>
   <div class="slide-content">
-    <figure class="figure" style="padding:44px 60px">
-      <svg viewBox="0 0 1560 500" xmlns="http://www.w3.org/2000/svg" fill="none">
-        <!-- write lane -->
-        <text x="40" y="50" font-family="JetBrains Mono, monospace" font-size="15" fill="#657220" letter-spacing="2">WRITE PATH — WHEN THE AGENT WORKS</text>
-        <g font-family="Inter, sans-serif" text-anchor="middle">
-          <rect x="40" y="80" width="320" height="110" rx="13" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.8"/>
-          <text x="200" y="125" font-size="22" font-weight="800" fill="#1a1a1a">capture</text>
-          <text x="200" y="158" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#657220">events → rows</text>
-          <rect x="430" y="80" width="320" height="110" rx="13" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.8"/>
-          <text x="590" y="125" font-size="22" font-weight="800" fill="#1a1a1a">chunk</text>
-          <text x="590" y="158" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#657220">big things → pieces</text>
-          <rect x="820" y="80" width="320" height="110" rx="13" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.8"/>
-          <text x="980" y="125" font-size="22" font-weight="800" fill="#1a1a1a">embed</text>
-          <text x="980" y="158" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#657220">meaning → numbers</text>
-          <rect x="1210" y="80" width="320" height="110" rx="13" fill="#d9f400" fill-opacity="0.3" stroke="#1a1a1a" stroke-width="1.8"/>
-          <text x="1370" y="125" font-size="22" font-weight="800" fill="#1a1a1a">store + link</text>
-          <text x="1370" y="158" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#657220">rows, indexes, edges</text>
+    <figure class="figure" style="padding:36px 60px">
+      <svg viewBox="0 0 1560 560" xmlns="http://www.w3.org/2000/svg" fill="none">
+        <!-- box 4: memory -->
+        <g>
+          <rect x="60" y="20" width="660" height="230" rx="16" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="2"/>
+          <text x="95" y="62" font-family="JetBrains Mono, monospace" font-size="15" fill="#657220" letter-spacing="1.5">④ MEMORY — HIFZ CORE</text>
+          <text x="390" y="106" text-anchor="middle" font-family="Inter, sans-serif" font-size="24" font-weight="800" fill="#1a1a1a">what happened, what was learned</text>
+          <g font-family="JetBrains Mono, monospace" font-size="14" fill="#1a1a1a" text-anchor="middle">
+            <rect x="105" y="130" width="180" height="42" rx="21" fill="#f2f1eb" stroke="#1a1a1a" stroke-width="1.4"/>
+            <text x="195" y="157">observation</text>
+            <rect x="305" y="130" width="140" height="42" rx="21" fill="#f2f1eb" stroke="#1a1a1a" stroke-width="1.4"/>
+            <text x="375" y="157">memory</text>
+            <rect x="465" y="130" width="110" height="42" rx="21" fill="#f2f1eb" stroke="#1a1a1a" stroke-width="1.4"/>
+            <text x="520" y="157">run</text>
+          </g>
+          <rect x="105" y="192" width="420" height="38" rx="9" fill="#d9f400" fill-opacity="0.45" stroke="#1a1a1a" stroke-width="1.3"/>
+          <text x="315" y="217" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13.5" font-weight="700" fill="#1a1a1a">STORED WHOLE — NEVER CHUNKED</text>
+          <text x="640" y="217" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12.5" fill="#657220">unit = an event</text>
         </g>
-        <line class="ont-flow" x1="360" y1="135" x2="428" y2="135" stroke="#1a1a1a" stroke-width="2"/><polygon points="422,127 436,135 422,143" fill="#1a1a1a"/>
-        <line class="ont-flow" x1="750" y1="135" x2="818" y2="135" stroke="#1a1a1a" stroke-width="2"/><polygon points="812,127 826,135 812,143" fill="#1a1a1a"/>
-        <line class="ont-flow" x1="1140" y1="135" x2="1208" y2="135" stroke="#1a1a1a" stroke-width="2"/><polygon points="1202,127 1216,135 1202,143" fill="#1a1a1a"/>
-
-        <!-- connector store→read -->
-        <path class="ont-flow" d="M 1370 190 L 1370 250 L 380 250 L 380 305" stroke="#1a1a1a" stroke-width="1.8" fill="none"/>
-        <polygon points="372,300 380,314 388,300" fill="#1a1a1a"/>
-        <text x="785" y="240" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" fill="#9a6a2a" letter-spacing="1">…LATER, A QUESTION ARRIVES…</text>
-
-        <!-- read lane -->
-        <text x="40" y="298" font-family="JetBrains Mono, monospace" font-size="15" fill="#657220" letter-spacing="2">READ PATH — WHEN THE AGENT ASKS</text>
-        <g font-family="Inter, sans-serif" text-anchor="middle">
-          <rect x="40" y="315" width="420" height="110" rx="13" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.8"/>
-          <text x="250" y="360" font-size="22" font-weight="800" fill="#1a1a1a">search</text>
-          <text x="250" y="393" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#657220">by meaning (vector) + by words (text)</text>
-          <rect x="540" y="315" width="420" height="110" rx="13" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.8"/>
-          <text x="750" y="360" font-size="22" font-weight="800" fill="#1a1a1a">expand</text>
-          <text x="750" y="393" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#657220">follow the graph to linked context</text>
-          <rect x="1040" y="315" width="490" height="110" rx="13" fill="#d9f400" fill-opacity="0.3" stroke="#1a1a1a" stroke-width="1.8"/>
-          <text x="1285" y="360" font-size="22" font-weight="800" fill="#1a1a1a">inject</text>
-          <text x="1285" y="393" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#657220">top-k into the agent's context window</text>
+        <!-- box 5: knowledge -->
+        <g>
+          <rect x="840" y="20" width="660" height="230" rx="16" fill="#fff7ed" stroke="#1a1a1a" stroke-width="2"/>
+          <text x="875" y="62" font-family="JetBrains Mono, monospace" font-size="15" fill="#9a6a2a" letter-spacing="1.5">⑤ KNOWLEDGE — THE ARTIFACTS</text>
+          <text x="1170" y="106" text-anchor="middle" font-family="Inter, sans-serif" font-size="24" font-weight="800" fill="#1a1a1a">the code and the documents</text>
+          <g font-family="JetBrains Mono, monospace" font-size="14" fill="#1a1a1a" text-anchor="middle">
+            <rect x="885" y="130" width="170" height="42" rx="21" fill="#f2f1eb" stroke="#1a1a1a" stroke-width="1.4"/>
+            <text x="970" y="157">code_chunk</text>
+            <rect x="1075" y="130" width="190" height="42" rx="21" fill="#f2f1eb" stroke="#1a1a1a" stroke-width="1.4"/>
+            <text x="1170" y="157">maktab_chunk</text>
+            <rect x="1285" y="130" width="190" height="42" rx="21" fill="#f2f1eb" stroke="#1a1a1a" stroke-width="1.4"/>
+            <text x="1380" y="157">memory_chunk</text>
+          </g>
+          <rect x="885" y="192" width="400" height="38" rx="9" fill="#ffa440" fill-opacity="0.35" stroke="#1a1a1a" stroke-width="1.3"/>
+          <text x="1085" y="217" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13.5" font-weight="700" fill="#1a1a1a">CHUNKED TO RETRIEVAL UNITS</text>
+          <text x="1400" y="217" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12.5" fill="#9a6a2a">unit = a passage</text>
         </g>
-        <line class="ont-flow" x1="460" y1="370" x2="538" y2="370" stroke="#1a1a1a" stroke-width="2"/><polygon points="532,362 546,370 532,378" fill="#1a1a1a"/>
-        <line class="ont-flow" x1="960" y1="370" x2="1038" y2="370" stroke="#1a1a1a" stroke-width="2"/><polygon points="1032,362 1046,370 1032,378" fill="#1a1a1a"/>
 
-        <text x="785" y="482" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14.5" fill="#657220" letter-spacing="1.5">SEVEN STAGES · ONE DATABASE — ONE SLIDE EACH, WITH THE QUERY</text>
+        <!-- converge arrows -->
+        <line class="ont-flow" x1="390" y1="250" x2="390" y2="308" stroke="#1a1a1a" stroke-width="2"/>
+        <polygon points="382,302 390,316 398,302" fill="#1a1a1a"/>
+        <line class="ont-flow" x1="1170" y1="250" x2="1170" y2="308" stroke="#1a1a1a" stroke-width="2"/>
+        <polygon points="1162,302 1170,316 1178,302" fill="#1a1a1a"/>
+
+        <!-- shared band -->
+        <g>
+          <rect x="60" y="316" width="1440" height="90" rx="14" fill="#d9f400" fill-opacity="0.2" stroke="#1a1a1a" stroke-width="2"/>
+          <text x="780" y="355" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14" fill="#465016" letter-spacing="1.5">EVERYTHING BELOW THE LINE IS SHARED</text>
+          <text x="780" y="388" text-anchor="middle" font-family="Inter, sans-serif" font-size="22" font-weight="700" fill="#1a1a1a">one embedder (384d) · one index set (HNSW + BM25) · one edge graph</text>
+        </g>
+
+        <line class="ont-flow" x1="780" y1="406" x2="780" y2="450" stroke="#1a1a1a" stroke-width="2"/>
+        <polygon points="772,444 780,458 788,444" fill="#1a1a1a"/>
+
+        <!-- box 6: storage -->
+        <g>
+          <rect x="60" y="458" width="1440" height="70" rx="14" fill="#1a1a1a"/>
+          <text x="780" y="502" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="15" fill="#d9f400" letter-spacing="1.5">⑥ ONE SURREALDB — 16 TABLES, ONE CONSISTENCY DOMAIN</text>
+        </g>
+        <text x="780" y="552" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14" fill="#657220" letter-spacing="1.5">ONE RETRIEVAL DISCIPLINE OVER ALL OF IT — THE READ SIDE, IN FOUR SLIDES</text>
       </svg>
     </figure>
   </div>
   <aside class="notes">
-    This is the whole architecture — memorise this slide and the rest of the act is just zooming in. Write path, while the agent works: capture events as rows, chunk anything too big to retrieve whole, embed everything, store it with its indexes and links. Read path, when a question arrives: search by meaning and by exact words at once, expand through the graph to whatever the hits are linked to, inject the top results into the context window. Seven stages. Each one is now one slide, one plain-language idea, and one query — and the strip at the top of each slide shows where we are.
+    Here's the correction to the picture most people carry: not everything gets chunked. Box four, memory — hifz core: what happened and what was learned. An observation or a lesson is already the size of an answer, so it's compressed, embedded, and stored whole — never chunked. Box five, knowledge — the artifacts: the code and the documents. A repository or a PDF is far bigger than any answer, so those are chunked to retrieval units — code_chunk for code, maktab_chunk for documents, and long-form plans spill into memory_chunk by the same rule. The dividing question is just: is the thing bigger than the answer? Below the line, everything is shared — one embedder, one index set, one edge graph — on one SurrealDB, sixteen tables, one consistency domain. Write side first, then the shared read side.
   </aside>
 </section>
 
 <!-- 38 · Component 1: capture -->
 <section class="layout-default">
   <span class="model-badge">document</span>
-  <div class="eyebrow"><span class="dot"></span>05 · Write path</div>
+  <div class="eyebrow"><span class="dot"></span>05 · Write path · box ④</div>
   <h2 class="title">Capture: every event becomes a row.</h2>
   <div class="slide-content" style="gap:26px">
     <div class="crumbs">
-      <span class="on">capture</span><span class="sep">→</span><span>chunk</span><span class="sep">→</span><span>embed</span><span class="sep">→</span><span>store + link</span><span class="sep">·&nbsp;·&nbsp;·</span><span>search</span><span class="sep">→</span><span>expand</span><span class="sep">→</span><span>inject</span>
+      <span class="on">④ memory</span><span>⑤ code</span><span>⑤ docs</span><span class="sep">→</span><span>embed</span><span class="sep">·</span><span>link</span><span class="sep">·</span><span>search</span><span class="sep">·</span><span>expand</span>
     </div>
     <div class="grid cols-2 cols-1-1-align">
       <div>
         <p class="lede" style="margin-bottom:26px">Agents emit events — every tool call, file edit, test run. A hook turns each one into a row.</p>
         <ul class="list" style="font-size:26px">
-          <li>One row per event; long output shrunk to a title and facts</li>
+          <li>An event is already the retrieval unit — compressed, embedded, <strong>stored whole</strong>. No chunking here.</li>
           <li>When the agent's context <strong>compacts</strong>, the summary is stored too — <strong>the log outlives the window</strong></li>
         </ul>
       </div>
@@ -2216,18 +2502,18 @@ body:not(.anim-ready) .sweep { opacity: 0; }
     </div>
   </div>
   <aside class="notes">
-    Component one: capture. The agent emits events constantly — hifz listens with hooks, and each event becomes one observation row: session, type, a short title, the files touched. That's the entire ingredient list: a document table. One detail that matters more than it looks: when the agent's own context window compacts mid-session, the compaction summary is captured as a row too — so the plugin's log remembers what the window forgot. And notice the row already carries an embedding field; that's the next two slides.
+    Component one: capture. The agent emits events constantly — hifz listens with hooks, and each event becomes one observation row: session, type, a short title, the files touched. That's the entire ingredient list: a document table — and note what does NOT happen: no chunking; the record is compressed and embedded whole, because an event is already the size of an answer. One detail that matters more than it looks: when the agent's own context window compacts mid-session, the compaction summary is captured as a row too — so the plugin's log remembers what the window forgot. And notice the row already carries an embedding field; that's the next two slides.
   </aside>
 </section>
 
 <!-- 39 · Component 2: chunking -->
 <section class="layout-default">
   <span class="model-badge">document + record links</span>
-  <div class="eyebrow"><span class="dot"></span>05 · Write path</div>
-  <h2 class="title">Chunking: big things become retrievable pieces.</h2>
+  <div class="eyebrow"><span class="dot"></span>05 · Write path · box ⑤</div>
+  <h2 class="title">One rule: bigger than the answer? Chunk it.</h2>
   <div class="slide-content" style="gap:26px">
     <div class="crumbs">
-      <span>capture</span><span class="sep">→</span><span class="on">chunk</span><span class="sep">→</span><span>embed</span><span class="sep">→</span><span>store + link</span><span class="sep">·&nbsp;·&nbsp;·</span><span>search</span><span class="sep">→</span><span>expand</span><span class="sep">→</span><span>inject</span>
+      <span>④ memory</span><span class="on">⑤ code</span><span class="on">⑤ docs</span><span class="sep">→</span><span>embed</span><span class="sep">·</span><span>link</span><span class="sep">·</span><span>search</span><span class="sep">·</span><span>expand</span>
     </div>
     <div class="grid cols-2 cols-1-1-align">
       <figure class="figure flat" style="background:var(--page)">
@@ -2255,24 +2541,24 @@ body:not(.anim-ready) .sweep { opacity: 0; }
             <text x="325" y="242" fill="#1a1a1a">fn logout · L204-238</text>
           </g>
           <text x="455" y="300" text-anchor="middle" font-family="Inter, sans-serif" font-size="16.5" fill="#1a1a1a" opacity="0.78">every chunk points back to its source file</text>
-          <text x="455" y="326" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12.5" fill="#657220">code: one chunk = one function · docs: ~500 tokens</text>
+          <text x="455" y="326" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12.5" fill="#657220">chunks follow structure · ~500-token passages</text>
         </svg>
       </figure>
       <div>
-        <pre class="code-block sm"><span class="c-comment">-- code: tree-sitter splits on function
--- boundaries (8 languages)</span>
+        <pre class="code-block sm"><span class="c-comment">-- code: a tree-sitter-aware splitter
+-- follows the code structure</span>
 <span class="c-kw">CREATE</span> code_chunk <span class="c-kw">SET</span>
   path       = <span class="c-str">'src/auth.rs'</span>,
   start_line = 142,
   end_line   = 198,
   symbols    = [<span class="c-str">'refresh_token'</span>],
   embedding  = $vec;</pre>
-        <p class="code-caption">documents get ~500-token chunks the same way — that's how maktab ingests PDFs and markdown</p>
+        <p class="code-caption">maktab splits PDFs and markdown into ~500-token passages the same way · long-form plans spill into memory_chunk by the same rule</p>
       </div>
     </div>
   </div>
   <aside class="notes">
-    Component two: chunking. You can't retrieve a whole file or a whole PDF — the useful unit is smaller. So split: code splits on function boundaries using tree-sitter, eight languages; documents split into roughly five-hundred-token chunks — that's exactly how maktab, the document side of hifz, ingests PDFs and markdown. Each chunk is its own row — here, refresh_token at src/auth.rs lines 142 to 198 — and a record link points back to the source, so a hit can always show where it came from. Rule of thumb: chunk to the size you'd want pasted into the context window.
+    Chunking — and the rule for when it applies: is the artifact bigger than the answer? A repository or a PDF is; an event is not. Code goes through a tree-sitter-aware splitter that follows the code's structure into code_chunk rows — here, the refresh_token region of src/auth.rs. Documents go through maktab into roughly five-hundred-token passages in maktab_chunk. And the same rule catches long-form memories: a multi-page plan or design spills into memory_chunk. Three chunk tables, one rule — and every chunk keeps a record link back to its source, so a hit can always show where it came from.
   </aside>
 </section>
 
@@ -2283,7 +2569,7 @@ body:not(.anim-ready) .sweep { opacity: 0; }
   <h2 class="title">Embeddings: meaning becomes coordinates.</h2>
   <div class="slide-content" style="gap:26px">
     <div class="crumbs">
-      <span>capture</span><span class="sep">→</span><span>chunk</span><span class="sep">→</span><span class="on">embed</span><span class="sep">→</span><span>store + link</span><span class="sep">·&nbsp;·&nbsp;·</span><span>search</span><span class="sep">→</span><span>expand</span><span class="sep">→</span><span>inject</span>
+      <span>④ memory</span><span>⑤ code</span><span>⑤ docs</span><span class="sep">→</span><span class="on">embed</span><span class="sep">·</span><span>link</span><span class="sep">·</span><span>search</span><span class="sep">·</span><span>expand</span>
     </div>
     <div class="grid cols-2 cols-1-1-align">
       <figure class="figure flat" style="background:var(--page)">
@@ -2306,7 +2592,7 @@ body:not(.anim-ready) .sweep { opacity: 0; }
         </svg>
       </figure>
       <div>
-        <p class="lede" style="margin-bottom:22px">A model turns text into <strong>384 numbers</strong>. Texts that mean similar things land near each other.</p>
+        <p class="lede" style="margin-bottom:22px">Events, chunks, symbols, concepts — everything becomes <strong>the same 384 numbers</strong>, from one local model. Similar meaning lands nearby.</p>
         <pre class="code-block sm"><span class="c-comment">-- the row carries its vector…</span>
   embedding = $vec
   <span class="c-comment">-- computed in-process (local ONNX model)</span>
@@ -2323,86 +2609,14 @@ body:not(.anim-ready) .sweep { opacity: 0; }
   </aside>
 </section>
 
-<!-- 41 · Component 4: vector search / RAG -->
-<section class="layout-default">
-  <span class="model-badge">vector</span>
-  <div class="eyebrow"><span class="dot"></span>05 · Read path</div>
-  <h2 class="title">Vector search: recall by meaning — this is RAG.</h2>
-  <div class="slide-content" style="gap:26px">
-    <div class="crumbs">
-      <span>capture</span><span class="sep">→</span><span>chunk</span><span class="sep">→</span><span>embed</span><span class="sep">→</span><span>store + link</span><span class="sep">·&nbsp;·&nbsp;·</span><span class="on">search</span><span class="sep">→</span><span>expand</span><span class="sep">→</span><span>inject</span>
-    </div>
-    <div class="grid cols-2 cols-1-1-align">
-      <div>
-        <pre class="code-block"><span class="c-comment">-- embed the question, find the nearest rows</span>
-<span class="c-kw">SELECT</span> title <span class="c-kw">FROM</span> observation
-<span class="c-kw">WHERE</span> embedding <span class="c-hi">&lt;|20,80|&gt;</span> $question;
-        <span class="c-comment">-- 20 nearest · search effort 80</span></pre>
-        <p class="code-caption">one operator against the HNSW index from the last slide</p>
-      </div>
-      <div class="card tint-neon">
-        <div class="k">The reveal</div>
-        <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:14px 0 18px">
-          <span class="pill" style="font-size:18px; padding:7px 18px">chunk</span><span style="font-family:var(--font-mono); font-weight:700">+</span>
-          <span class="pill" style="font-size:18px; padding:7px 18px">embed</span><span style="font-family:var(--font-mono); font-weight:700">+</span>
-          <span class="pill" style="font-size:18px; padding:7px 18px">search</span><span style="font-family:var(--font-mono); font-weight:700">+</span>
-          <span class="pill" style="font-size:18px; padding:7px 18px">inject</span>
-          <span style="font-family:var(--font-mono); font-weight:700; font-size:22px">= RAG</span>
-        </div>
-        <p>Retrieval-augmented generation is these four stages — and you already have all four. No framework required.</p>
-      </div>
-    </div>
-  </div>
-  <aside class="notes">
-    Component four, and we cross to the read path. Embed the question with the same model, then one operator — five nearest rows, search effort forty — against the index we just defined. Now the reveal for anyone new to this: RAG, the acronym you keep hearing, is nothing more than the four stages you've now seen — chunk, embed, search, inject the results into the prompt. You already have all four; a context layer's read path is RAG pointed at your own history. What RAG alone gets wrong, the next two slides fix.
-  </aside>
-</section>
-
-<!-- 42 · Component 5: full-text + hybrid -->
-<section class="layout-default">
-  <span class="model-badge">search</span>
-  <div class="eyebrow"><span class="dot"></span>05 · Read path</div>
-  <h2 class="title">Hybrid: meaning and exact words.</h2>
-  <div class="slide-content" style="gap:26px">
-    <div class="crumbs">
-      <span>capture</span><span class="sep">→</span><span>chunk</span><span class="sep">→</span><span>embed</span><span class="sep">→</span><span>store + link</span><span class="sep">·&nbsp;·&nbsp;·</span><span class="on">search</span><span class="sep">→</span><span>expand</span><span class="sep">→</span><span>inject</span>
-    </div>
-    <div class="grid cols-2 cols-1-1-align">
-      <pre class="code-block sm"><span class="c-comment">-- run all three, fuse the rankings</span>
-<span class="c-fn">search::rrf</span>([
-  (<span class="c-kw">SELECT</span> id <span class="c-kw">FROM</span> memory
-   <span class="c-kw">WHERE</span> embedding <span class="c-hi">&lt;|20,80|&gt;</span> $question),
-                        <span class="c-comment">-- by meaning</span>
-  (<span class="c-kw">SELECT</span> id <span class="c-kw">FROM</span> memory
-   <span class="c-kw">WHERE</span> title <span class="c-hi">@1@</span> <span class="c-str">'token refresh'</span>),
-                        <span class="c-comment">-- exact: title</span>
-  (<span class="c-kw">SELECT</span> id <span class="c-kw">FROM</span> memory
-   <span class="c-kw">WHERE</span> content <span class="c-hi">@2@</span> <span class="c-str">'token refresh'</span>)
-                        <span class="c-comment">-- exact: body</span>
-], 10);</pre>
-      <div>
-        <p class="lede" style="margin-bottom:24px">Each search has a blind spot. Run them together; merge the rankings.</p>
-        <ul class="mono-list" style="font-size:22px">
-          <li><span class="m">vector finds</span> "auth timing issue" <span class="m">— but misses the literal</span> 9f2c1a</li>
-          <li><span class="m">text (BM25) finds</span> refresh_token <span class="m">— but misses paraphrases</span></li>
-          <li><strong>search::rrf</strong> <span class="m">fuses all three by rank — one query, no re-ranking service</span></li>
-        </ul>
-      </div>
-    </div>
-  </div>
-  <aside class="notes">
-    Component five: the second search. Vectors are great at meaning and bad at literals — ask for commit 9f2c1a or a function name and cosine similarity shrugs. A BM25 full-text index is the opposite: exact words, no paraphrase. So a context layer runs all three branches — one vector operator plus two BM25 matches, over title and body — and search::rrf fuses their rankings by reciprocal rank. That's a whole "hybrid search service" as one database function. One more blind spot remains: search only knows similarity, not relationships. Graph, next.
-  </aside>
-</section>
-
 <!-- 43 · Component 6: graph -->
 <section class="layout-default">
   <span class="model-badge">graph</span>
-  <div class="eyebrow"><span class="dot"></span>05 · Write path, revisited</div>
+  <div class="eyebrow"><span class="dot"></span>05 · Write path · box ⑤ meets ④</div>
   <h2 class="title">Graph: link facts to their source.</h2>
   <div class="slide-content" style="gap:26px">
     <div class="crumbs">
-      <span>capture</span><span class="sep">→</span><span>chunk</span><span class="sep">→</span><span>embed</span><span class="sep">→</span><span class="on">store + link</span><span class="sep">·&nbsp;·&nbsp;·</span><span>search</span><span class="sep">→</span><span>expand</span><span class="sep">→</span><span>inject</span>
+      <span>④ memory</span><span>⑤ code</span><span>⑤ docs</span><span class="sep">→</span><span>embed</span><span class="sep">·</span><span class="on">link</span><span class="sep">·</span><span>search</span><span class="sep">·</span><span>expand</span>
     </div>
     <div class="grid cols-2 cols-1-1-align">
       <pre class="code-block sm"><span class="c-comment">-- a lesson learned while fixing the issue</span>
@@ -2410,11 +2624,12 @@ body:not(.anim-ready) .sweep { opacity: 0; }
   title = <span class="c-str">'Token refresh race caused
            flaky CI auth tests'</span>;
 
-<span class="c-comment">-- link it to the code it explains,
--- and to the work that produced it</span>
-<span class="c-kw">RELATE</span> memory:auth_race<span class="c-hi">-&gt;references-&gt;</span>code_chunk;
-                              <span class="c-comment">-- src/auth.rs:142</span>
-<span class="c-kw">RELATE</span> memory:auth_race<span class="c-hi">-&gt;generated_by-&gt;</span>run;</pre>
+<span class="c-comment">-- one edge table; the type is a field
+-- (rich edges, like act four's 'knows')</span>
+<span class="c-kw">RELATE</span> memory:auth_race<span class="c-hi">-&gt;edge-&gt;</span>code_chunk
+  <span class="c-kw">SET</span> relation = <span class="c-str">'references'</span>; <span class="c-comment">-- auth.rs:142</span>
+<span class="c-kw">RELATE</span> memory:auth_race<span class="c-hi">-&gt;edge-&gt;</span>run
+  <span class="c-kw">SET</span> relation = <span class="c-str">'generated_by'</span>;</pre>
       <figure class="figure flat" style="background:var(--page)">
         <svg viewBox="0 0 620 360" xmlns="http://www.w3.org/2000/svg" fill="none">
           <text x="30" y="34" font-family="JetBrains Mono, monospace" font-size="13" fill="#657220" letter-spacing="1.5">THE WORK BECOMES A TRAIL</text>
@@ -2444,7 +2659,76 @@ body:not(.anim-ready) .sweep { opacity: 0; }
     </div>
   </div>
   <aside class="notes">
-    Component six takes us briefly back to the write path: links. Search can only say "these sound alike" — it can't know that a lesson explains a specific function, or that a plan led to a specific commit. So when something worth keeping is saved, hifz RELATEs it: this lesson references that code chunk, this memory was generated by that run. Two RELATE statements and the week's work becomes a connected trail — issue, plan, commit, code, lesson. In hifz, the commit is the anchor: memories linked to shipped code are kept and strengthened; work that never shipped fades. Why store links at all? Because of what they let you do at read time — next slide.
+    The write side finishes with links. Search can only say "these sound alike" — it can't know that a lesson explains a specific function, or that a plan led to a specific commit. So hifz RELATEs: one generic edge table where the relation type is a field — references to a code chunk with a line anchor that re-anchors when the file changes, generated_by to the run that produced it, plus mentions, related and supersedes across memories. maktab's concept graph uses the same pattern: documents mention concepts, concepts relate to concepts. The commit is the anchor: memories linked to shipped code are kept and strengthened; work that never shipped fades. The read side cashes these links in, three slides from now.
+  </aside>
+</section>
+
+<!-- 41 · Component 4: vector search / RAG -->
+<section class="layout-default">
+  <span class="model-badge">vector</span>
+  <div class="eyebrow"><span class="dot"></span>05 · Read path</div>
+  <h2 class="title">Vector search: recall by meaning — this is RAG.</h2>
+  <div class="slide-content" style="gap:26px">
+    <div class="crumbs">
+      <span>④ memory</span><span>⑤ code</span><span>⑤ docs</span><span class="sep">→</span><span>embed</span><span class="sep">·</span><span>link</span><span class="sep">·</span><span class="on">search</span><span class="sep">·</span><span>expand</span>
+    </div>
+    <div class="grid cols-2 cols-1-1-align">
+      <div>
+        <pre class="code-block"><span class="c-comment">-- embed the question, find the nearest rows</span>
+<span class="c-kw">SELECT</span> title <span class="c-kw">FROM</span> observation
+<span class="c-kw">WHERE</span> embedding <span class="c-hi">&lt;|5,40|&gt;</span> $question;
+        <span class="c-comment">-- 5 nearest · search effort 40</span></pre>
+        <p class="code-caption">one operator against the HNSW index from the last slide</p>
+      </div>
+      <div class="card tint-neon">
+        <div class="k">The reveal</div>
+        <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:14px 0 18px">
+          <span class="pill" style="font-size:18px; padding:7px 18px">chunk</span><span style="font-family:var(--font-mono); font-weight:700">+</span>
+          <span class="pill" style="font-size:18px; padding:7px 18px">embed</span><span style="font-family:var(--font-mono); font-weight:700">+</span>
+          <span class="pill" style="font-size:18px; padding:7px 18px">search</span><span style="font-family:var(--font-mono); font-weight:700">+</span>
+          <span class="pill" style="font-size:18px; padding:7px 18px">inject</span>
+          <span style="font-family:var(--font-mono); font-weight:700; font-size:22px">= RAG</span>
+        </div>
+        <p>Retrieval-augmented generation is these four stages — and you already have all four. No framework required.</p>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    Now we cross to the read path. Embed the question with the same model, then one operator — five nearest rows, search effort forty — against the index we just defined. Now the reveal for anyone new to this: RAG, the acronym you keep hearing, is nothing more than the four stages you've now seen — chunk, embed, search, inject the results into the prompt. You already have all four; a context layer's read path is RAG pointed at your own history. What RAG alone gets wrong, the next two slides fix.
+  </aside>
+</section>
+
+<!-- 42 · Component 5: full-text + hybrid -->
+<section class="layout-default">
+  <span class="model-badge">search</span>
+  <div class="eyebrow"><span class="dot"></span>05 · Read path</div>
+  <h2 class="title">Hybrid: meaning and exact words.</h2>
+  <div class="slide-content" style="gap:26px">
+    <div class="crumbs">
+      <span>④ memory</span><span>⑤ code</span><span>⑤ docs</span><span class="sep">→</span><span>embed</span><span class="sep">·</span><span>link</span><span class="sep">·</span><span class="on">search</span><span class="sep">·</span><span>expand</span>
+    </div>
+    <div class="grid cols-2 cols-1-1-align">
+      <pre class="code-block sm"><span class="c-comment">-- run both, fuse the rankings</span>
+<span class="c-fn">search::rrf</span>([
+  (<span class="c-kw">SELECT</span> id <span class="c-kw">FROM</span> memory
+   <span class="c-kw">WHERE</span> embedding <span class="c-hi">&lt;|20,80|&gt;</span> $question),
+                        <span class="c-comment">-- by meaning</span>
+  (<span class="c-kw">SELECT</span> id <span class="c-kw">FROM</span> memory
+   <span class="c-kw">WHERE</span> content <span class="c-hi">@1@</span> <span class="c-str">'token refresh'</span>)
+                        <span class="c-comment">-- by exact words</span>
+], 10);</pre>
+      <div>
+        <p class="lede" style="margin-bottom:24px">Each search has a blind spot. Run both; merge the two rankings.</p>
+        <ul class="mono-list" style="font-size:22px">
+          <li><span class="m">vector finds</span> "auth timing issue" <span class="m">— but misses the literal</span> 9f2c1a</li>
+          <li><span class="m">text (BM25) finds</span> refresh_token <span class="m">— but misses paraphrases</span></li>
+          <li><strong>search::rrf</strong> <span class="m">fuses both lists by rank — one query, no re-ranking service</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    The second search. Vectors are great at meaning and bad at literals — ask for commit 9f2c1a or a function name and cosine similarity shrugs. A BM25 full-text index is the opposite: exact words, no paraphrase. So a context layer runs both branches — the vector operator and the match operator from act two — and search::rrf fuses the two rankings by reciprocal rank. That's a whole "hybrid search service" as one database function. One more blind spot remains: search only knows similarity, not relationships. Graph, next.
   </aside>
 </section>
 
@@ -2455,15 +2739,15 @@ body:not(.anim-ready) .sweep { opacity: 0; }
   <h2 class="title">GraphRAG: search finds seeds, the graph finds context.</h2>
   <div class="slide-content" style="gap:26px">
     <div class="crumbs">
-      <span>capture</span><span class="sep">→</span><span>chunk</span><span class="sep">→</span><span>embed</span><span class="sep">→</span><span>store + link</span><span class="sep">·&nbsp;·&nbsp;·</span><span>search</span><span class="sep">→</span><span class="on">expand</span><span class="sep">→</span><span>inject</span>
+      <span>④ memory</span><span>⑤ code</span><span>⑤ docs</span><span class="sep">→</span><span>embed</span><span class="sep">·</span><span>link</span><span class="sep">·</span><span>search</span><span class="sep">·</span><span class="on">expand</span>
     </div>
     <div class="grid cols-2 cols-1-1-align">
       <div>
         <p class="lede" style="margin-bottom:24px">Hybrid search returns entry points. One hop pulls in everything they're connected to.</p>
         <pre class="code-block sm"><span class="c-comment">-- "Why is token refresh written this way?"
 -- $found = the hybrid-search winners</span>
-<span class="c-kw">SELECT</span> <span class="c-hi">-&gt;references-&gt;code_chunk</span>,
-       <span class="c-hi">&lt;-generated_by&lt;-run</span>
+<span class="c-kw">SELECT</span> <span class="c-hi">-&gt;edge[WHERE relation = 'references']</span>
+         <span class="c-hi">-&gt;code_chunk</span>
 <span class="c-kw">FROM</span> $found;</pre>
         <p class="code-caption">answer: the lesson + the plan + src/auth.rs:142 — sources attached. Pointed at documents, this same recipe is maktab: cited answers from your PDFs.</p>
       </div>
@@ -2495,7 +2779,7 @@ body:not(.anim-ready) .sweep { opacity: 0; }
             <rect x="40"  y="275" width="180" height="46" rx="10" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.4"/>
             <text x="130" y="304">auth.rs:142</text>
             <rect x="240" y="275" width="160" height="46" rx="10" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.4"/>
-            <text x="320" y="304">the run</text>
+            <text x="320" y="304">related memory</text>
             <rect x="420" y="275" width="180" height="46" rx="10" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.4"/>
             <text x="510" y="304">commit 9f2c1a</text>
           </g>
@@ -2505,7 +2789,7 @@ body:not(.anim-ready) .sweep { opacity: 0; }
     </div>
   </div>
   <aside class="notes">
-    Component seven, the last one: GraphRAG — which is just search plus the links from the previous slide. The hybrid query finds the entry points: the lesson and the plan. Then one graph hop — the arrow syntax from act two — expands them: forward along references to the code lines, backward along generated_by to the run and its commit. So the question "why is token refresh written this way" comes back as the lesson, the plan, and src/auth.rs 142 — an answer with its sources attached, not a lucky paragraph. And pointed at documents instead of work history, this identical recipe is maktab: ask a question over your PDFs, get an answer with file and line citations.
+    The last component: GraphRAG — search plus the links from two slides ago. The hybrid query finds the entry points: the lesson and the plan. Then the graph expands them — the edge-filtered arrow syntax from act four — following references to the code lines, and related, mentions and co-occurrence edges to neighbouring memories, two hops out. Provenance edges like generated_by are stored for audit but deliberately not traversed — expansion follows meaning, not lineage. The question "why is token refresh written this way" comes back as the lesson, the plan, and src/auth.rs 142 — an answer with its sources attached. Pointed at documents, the identical recipe is maktab: cited answers over your PDFs.
   </aside>
 </section>
 
@@ -2636,7 +2920,7 @@ body:not(.anim-ready) .sweep { opacity: 0; }
             <text x="430" y="150">1 · Similar observations become <tspan font-weight="700">one fact</tspan> <tspan font-size="15" fill="#657220">(local LLM)</tspan></text>
             <text x="430" y="200">2 · Related memories get <tspan font-weight="700">linked</tspan> <tspan font-size="15" fill="#657220">(keyword overlap)</tspan></text>
             <text x="430" y="250">3 · Repeated workflows become <tspan font-weight="700">procedures</tspan> <tspan font-size="15" fill="#657220">(local LLM)</tspan></text>
-            <text x="430" y="300">4 · Unused facts <tspan font-weight="700">fade</tspan> <tspan font-size="15" fill="#657220">(strength ×0.9 per pass; gone below 0.1)</tspan></text>
+            <text x="430" y="300">4 · Unused facts <tspan font-weight="700">fade</tspan> <tspan font-size="15" fill="#657220">(exponential decay · 30–90 days by kind)</tspan></text>
           </g>
         </g>
         <line class="ont-flow" x1="1160" y1="200" x2="1230" y2="200" stroke="#1a1a1a" stroke-width="2"/>
@@ -2653,7 +2937,7 @@ body:not(.anim-ready) .sweep { opacity: 0; }
     </figure>
   </div>
   <aside class="notes">
-    One last piece a context layer needs: maintenance, or it silts up. hifz runs one background job with four passes. Similar observations get merged into one fact by a local LLM; related memories get linked by keyword overlap — plain math; workflows that keep repeating become step-by-step procedures; and facts nobody uses fade — strength times zero-point-nine per pass, deleted below a threshold. In: a week of raw observations. Out: fewer, stronger rows. No fine-tuning, no GPU; each pass is idempotent and runs on a schedule.
+    One last piece a context layer needs: maintenance, or it silts up. hifz runs one background job with four passes. Similar observations get merged into one fact by a local LLM; related memories get linked by keyword overlap — plain math; workflows that keep repeating become step-by-step procedures; and facts nobody uses fade on an exponential clock — thirty to ninety days by kind, with commit-protected memories lasting longest. In: a week of raw observations. Out: fewer, stronger rows. No fine-tuning, no GPU; each pass is idempotent and runs on a schedule.
   </aside>
 </section>
 
@@ -2668,45 +2952,47 @@ body:not(.anim-ready) .sweep { opacity: 0; }
       <tr><td>chunking — pieces + their source</td><td class="dim">documents + record links</td><td class="hi">CREATE code_chunk · parent link</td></tr>
       <tr><td>recall by meaning</td><td class="dim">vector</td><td class="hi">HNSW · &lt;|k,ef|&gt;</td></tr>
       <tr><td>recall by exact words</td><td class="dim">full-text</td><td class="hi">BM25 · @1@ · search::rrf</td></tr>
-      <tr><td>relationships — GraphRAG</td><td class="dim">graph</td><td class="hi">RELATE · -&gt;references-&gt;</td></tr>
-      <tr><td>consistency across all of it</td><td class="dim">transactions</td><td class="hi">BEGIN · COMMIT</td></tr>
+      <tr><td>relationships — GraphRAG</td><td class="dim">graph</td><td class="hi">RELATE -&gt;edge-&gt; · SET relation</td></tr>
+      <tr><td>consistency per write</td><td class="dim">atomic statements</td><td class="hi">one CREATE per write · BEGIN·COMMIT to span several</td></tr>
     </table>
     <div style="display:flex; align-items:center; gap:40px;">
-      <p class="lede" style="margin-bottom:0; flex:1">This table is the whole design. <strong>Extra services deployed: 0.</strong> One Rust process, twelve tables, two queries per recall.</p>
+      <p class="lede" style="margin-bottom:0; flex:1">This table is the whole design. <strong>Extra services deployed: 0.</strong> One Rust process, sixteen tables, two queries per recall.</p>
     </div>
   </div>
   <aside class="notes">
-    The act as a blueprint. Left column: the seven components you just saw, collapsed to six rows. Middle: which SurrealDB model carries each one. Right: the exact construct — and every construct appeared in act two with a runnable doc example before you saw it in production here. This is why the talk is a database talk: build this table and the context layer follows. The count at the bottom is the whole operational story — no extra services, one process, twelve tables, two queries per recall.
+    The act as a blueprint. Left column: the seven components you just saw, collapsed to six rows. Middle: which SurrealDB model carries each one. Right: the exact construct — and every construct appeared in act two with a runnable doc example before you saw it in production here. This is why the talk is a database talk: build this table and the context layer follows. The count at the bottom is the whole operational story — no extra services, one process, sixteen tables, two queries per recall. One honest note on the last row: hifz keeps every write a single atomic statement — a deliberate simplification — and BEGIN-COMMIT is there the day one answer has to span several.
   </aside>
 </section>
 <!-- ================================================================
      ACT 6 — WHERE THIS GOES + CLOSE
      ================================================================ -->
 
-<!-- 48 · Bridge -->
+<!-- 44 · Bridge -->
 <section class="layout-divider">
   <div class="act-num">06</div>
   <div class="eyebrow"><span class="dot"></span>Act six · where this goes</div>
   <h2 class="title">hifz builds memory <em>on</em> the database.<br/>What if memory lived <em>in</em> it?</h2>
   <p class="lede">Everything in act five — decay, linking, consolidation, versioning — is application code built on database primitives. The next question is whether those belong in the database itself.</p>
+  <p class="lede" style="font-family:var(--font-mono); font-size:22px; opacity:0.75">"Memory in the database, not above it." — surrealdb.com</p>
   <aside class="notes">
-    Last act, and a genuine open question rather than a pitch. Look back at what hifz is: SurrealDB supplies the models and the transactions, and a few thousand lines of Rust turn them into memory semantics — decay schedules, link channels, consolidation tiers. It works. But notice the shape: all of that logic is generic. Nothing about "memories decay" or "contradictions supersede" is specific to my app. When application logic is that universal, it usually migrates down into the platform — the way full-text search migrated from Lucene sidecars into the database. So: what would it look like if memory semantics lived in the database itself?
+    Last act, and a genuine open question rather than a pitch. Look back at what hifz is: SurrealDB supplies the models and the transactions, and a few thousand lines of Rust turn them into memory semantics — decay schedules, link channels, consolidation tiers. It works. But notice the shape: all of that logic is generic. Nothing about "memories decay" or "contradictions supersede" is specific to my app. When application logic is that universal, it usually migrates down into the platform — the way full-text search migrated from Lucene sidecars into the database. SurrealDB's own site now says it in five words: memory in the database, not above it. And notice their homepage tagline — "the context layer for AI agents" — is literally the title of this talk.
   </aside>
 </section>
 
-<!-- 49 · Spectron -->
+<!-- 45 · Spectron -->
 <section class="layout-default">
   <div class="eyebrow"><span class="dot"></span>06 · What we're exploring</div>
   <h2 class="title">Spectron: memory semantics as substrate.</h2>
   <div class="slide-content">
     <div class="grid cols-2 cols-1-1-align">
       <div>
-        <p class="lede" style="margin-bottom:28px">A research direction at SurrealDB. Knowledge. Lived experience. Reasoning traces. One transactional substrate — <strong>where the database itself understands memory.</strong></p>
-        <ul class="list" style="font-size:26px">
-          <li><strong>Reconciliation</strong> — authoritative documents and lived observations merge under one trust model, in one transaction</li>
-          <li><strong>Elaboration</strong> — inferred links across entities, computed differentially, not in batch jobs</li>
-          <li><strong>Reflection &amp; consolidation</strong> — the store thinks while the agent is away: traces become memory, repetition becomes belief</li>
-          <li><strong>Calibration</strong> — every assertion carries confidence; memory that knows what it doesn't know</li>
+        <p class="lede" style="margin-bottom:28px">"The memory and knowledge layer for AI agents — every data model and every fact, in <strong>one ACID transaction</strong>."</p>
+        <ul class="list" style="font-size:25px">
+          <li><strong>Reconciliation</strong> — new facts supersede old beliefs under a trust model, atomically</li>
+          <li><strong>Elaboration</strong> — background sweeps propose links between entities that share context</li>
+          <li><strong>Reflection &amp; consolidation</strong> — the store thinks between sessions: traces become memory, repetition becomes belief</li>
+          <li><strong>Calibration</strong> — confidence and source trust are stored, queryable, never implicit</li>
+          <li><strong>Collective</strong> — shared, reconcilable memory across agents, with corroboration thresholds</li>
         </ul>
       </div>
       <figure class="figure flat" style="background:var(--page)">
@@ -2738,11 +3024,150 @@ body:not(.anim-ready) .sweep { opacity: 0; }
     </div>
   </div>
   <aside class="notes">
-    Spectron is that exploration. The framing: an agent's mind has three kinds of content — knowledge it was given, experience it lived, and reasoning it performed — and today those are reconciled by application code, if at all. Spectron pushes the semantics down: reconciliation with a trust model, so documentation supersedes hearsay atomically; elaboration that infers new links differentially as facts arrive; reflection and consolidation as background processes — the store literally thinks between sessions; and calibration, where every assertion carries confidence, so the memory can say "I don't know" instead of hallucinating. I'm showing you the ladder deliberately: bottom rung is where the industry is, hifz is the middle rung and you can build it today, Spectron is the rung we're exploring. If that question interests you, come find me after.
+    Spectron is that exploration — and it now has a public page, so this slide is its own words. The one-liner: the memory and knowledge layer for AI agents, every data model and every fact in one ACID transaction. The pillars: reconciliation, where new facts supersede old beliefs under a trust model — documentation outranks hearsay, atomically; elaboration, background sweeps proposing links between entities that share context; reflection and consolidation, the store thinking between sessions; calibration, where confidence and source trust are stored and queryable, so memory can say "I don't know"; and collective — shared memory across a fleet of agents with corroboration thresholds. It's in early preview, waitlist open. I'm showing you the ladder deliberately: bottom rung is where the industry is, hifz is the middle rung and you can build it today, Spectron is the rung above. If that interests you, come find me after.
   </aside>
 </section>
 
-<!-- 50 · Takeaways -->
+<!-- Spectron · how it works -->
+<section class="layout-default">
+  <div class="eyebrow"><span class="dot"></span>06 · Spectron · how it works</div>
+  <h2 class="title">The same pipeline, industrialised.</h2>
+  <div class="slide-content" style="gap:26px">
+    <svg viewBox="0 0 1560 170" xmlns="http://www.w3.org/2000/svg" fill="none">
+      <g font-family="Inter, sans-serif" text-anchor="middle">
+        <rect x="20" y="12" width="340" height="140" rx="13" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.8"/>
+        <text x="190" y="58" font-size="23" font-weight="800" fill="#1a1a1a">INGEST</text>
+        <text x="190" y="92" font-family="JetBrains Mono, monospace" font-size="13" fill="#657220">conversations · tool outputs ·</text>
+        <text x="190" y="116" font-family="JetBrains Mono, monospace" font-size="13" fill="#657220">code · PDFs · images · audio</text>
+        <rect x="410" y="12" width="340" height="140" rx="13" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.8"/>
+        <text x="580" y="58" font-size="23" font-weight="800" fill="#1a1a1a">EXTRACT</text>
+        <text x="580" y="92" font-family="JetBrains Mono, monospace" font-size="13" fill="#657220">an LLM pulls typed entities,</text>
+        <text x="580" y="116" font-family="JetBrains Mono, monospace" font-size="13" fill="#657220">attributes, relations + embeddings</text>
+        <rect x="800" y="12" width="340" height="140" rx="13" fill="#d9f400" fill-opacity="0.3" stroke="#1a1a1a" stroke-width="1.8"/>
+        <text x="970" y="58" font-size="23" font-weight="800" fill="#1a1a1a">CONNECT</text>
+        <text x="970" y="92" font-family="JetBrains Mono, monospace" font-size="13" fill="#657220">the reconciler supersedes prior</text>
+        <text x="970" y="116" font-family="JetBrains Mono, monospace" font-size="13" fill="#657220">beliefs — conflicts stay explicit</text>
+        <rect x="1190" y="12" width="340" height="140" rx="13" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.8"/>
+        <text x="1360" y="58" font-size="23" font-weight="800" fill="#1a1a1a">QUERY</text>
+        <text x="1360" y="92" font-family="JetBrains Mono, monospace" font-size="13" fill="#657220">a four-tier ladder, gated by</text>
+        <text x="1360" y="116" font-family="JetBrains Mono, monospace" font-size="13" fill="#657220">query understanding</text>
+      </g>
+      <line class="ont-flow" x1="360" y1="82" x2="398" y2="82" stroke="#1a1a1a" stroke-width="2"/><polygon points="394,74 408,82 394,90" fill="#1a1a1a"/>
+      <line class="ont-flow" x1="750" y1="82" x2="788" y2="82" stroke="#1a1a1a" stroke-width="2"/><polygon points="784,74 798,82 784,90" fill="#1a1a1a"/>
+      <line class="ont-flow" x1="1140" y1="82" x2="1178" y2="82" stroke="#1a1a1a" stroke-width="2"/><polygon points="1174,74 1188,82 1174,90" fill="#1a1a1a"/>
+    </svg>
+    <table class="tbl" style="font-size:21px">
+      <tr><th style="width:24%">The query ladder</th><th>What runs</th><th style="width:22%">Cost</th></tr>
+      <tr><td>① direct lookup</td><td class="dim">by key from the entity graph — no embeddings, no LLM</td><td class="hi">sub-millisecond</td></tr>
+      <tr><td>② response reuse</td><td class="dim">semantic match on prior answers, entity-aware invalidation</td><td class="hi">tens of ms · no LLM</td></tr>
+      <tr><td>③ hybrid retrieval</td><td class="dim">vector + BM25 + graph + PageRank + geography — one fused ranking</td><td class="hi">the act-5 read path, ×8 signals</td></tr>
+      <tr><td>④ full-context fallback</td><td class="dim">broader sweep when retrieval is thin or low-confidence</td><td class="hi">deepest tier only</td></tr>
+    </table>
+  </div>
+  <aside class="notes">
+    How it works, in the page's own stages — and notice it's act five's shape, built out to production depth. Ingest takes everything, including PDFs, images and audio, not just tool events. Extract is chunk-and-embed plus an LLM pulling typed entities and relations — our chunking and embedding slides, industrialised. Connect is the reconciler: prior beliefs are superseded, never overwritten, and cross-source conflicts stay explicit instead of silently picking a winner. And query is a cost ladder: most questions never reach an LLM — a typed question is a sub-millisecond key lookup, a repeated question reuses a prior answer, and only real retrieval runs the hybrid rank — eight signals fused where hifz fuses two — with a deeper sweep as the last resort.
+  </aside>
+</section>
+
+<!-- Spectron · supersession -->
+<section class="layout-default">
+  <div class="eyebrow"><span class="dot"></span>06 · Spectron · memory with a history</div>
+  <h2 class="title">Supersede, don't delete.</h2>
+  <div class="slide-content" style="gap:26px">
+    <svg viewBox="0 0 1560 290" xmlns="http://www.w3.org/2000/svg" fill="none">
+      <line x1="60" y1="180" x2="1500" y2="180" stroke="#1a1a1a" stroke-width="2"/>
+      <polygon points="1494,172 1510,180 1494,188" fill="#1a1a1a"/>
+      <!-- turn 1 -->
+      <g>
+        <circle cx="220" cy="180" r="11" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.8"/>
+        <rect x="80" y="40" width="290" height="90" rx="12" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.5"/>
+        <text x="225" y="72" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" fill="#657220" letter-spacing="1">TURN 1 · MAR 15</text>
+        <text x="225" y="104" text-anchor="middle" font-family="Inter, sans-serif" font-size="19" font-weight="700" fill="#1a1a1a">"I live in Berlin"</text>
+        <line x1="220" y1="130" x2="220" y2="167" stroke="#1a1a1a" stroke-width="1.4"/>
+        <text x="220" y="225" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" fill="#657220">fact stored · valid from Mar 15</text>
+      </g>
+      <!-- turn 7 -->
+      <g>
+        <circle cx="700" cy="180" r="11" fill="#fff7ed" stroke="#1a1a1a" stroke-width="1.8"/>
+        <rect x="520" y="40" width="360" height="90" rx="12" fill="#fff7ed" stroke="#1a1a1a" stroke-width="1.5"/>
+        <text x="700" y="72" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" fill="#9a6a2a" letter-spacing="1">TURN 7 · APR 12</text>
+        <text x="700" y="104" text-anchor="middle" font-family="Inter, sans-serif" font-size="19" font-weight="700" fill="#1a1a1a">"Actually, I moved to Paris last month"</text>
+        <line x1="700" y1="130" x2="700" y2="167" stroke="#1a1a1a" stroke-width="1.4"/>
+        <text x="700" y="225" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" fill="#9a6a2a">Berlin superseded — valid_until set, nothing overwritten</text>
+      </g>
+      <!-- query -->
+      <g>
+        <circle cx="1230" cy="180" r="11" fill="#d9f400" stroke="#1a1a1a" stroke-width="1.8"/>
+        <rect x="1020" y="30" width="460" height="100" rx="12" fill="#d9f400" fill-opacity="0.3" stroke="#1a1a1a" stroke-width="1.6"/>
+        <text x="1250" y="60" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" fill="#465016" letter-spacing="1">ASK: "WHERE DO I LIVE?"</text>
+        <text x="1250" y="90" text-anchor="middle" font-family="Inter, sans-serif" font-size="20" font-weight="800" fill="#1a1a1a">Paris — with the trace</text>
+        <text x="1250" y="115" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12" fill="#465016">user_message[turn_7] · user_message[turn_1] (superseded)</text>
+        <line x1="1230" y1="130" x2="1230" y2="167" stroke="#1a1a1a" stroke-width="1.4"/>
+      </g>
+      <text x="780" y="278" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14.5" fill="#657220" letter-spacing="1.5">"EVERY FACT KNOWS WHERE IT CAME FROM — AND WHEN IT WAS TRUE"</text>
+    </svg>
+    <div class="grid cols-3">
+      <div class="card"><div class="k">Clock 1 · system time</div><h3>The audit clock</h3><p><span class="inline-code">SELECT … VERSION</span> returns the substrate exactly as it was at any past instant — MVCC underneath.</p></div>
+      <div class="card"><div class="k">Clock 2 · known time</div><h3>When it was believed</h3><p>When the system first learned the fact — turn 1 for Berlin, turn 7 for Paris.</p></div>
+      <div class="card"><div class="k">Clock 3 · valid time</div><h3>When it was true</h3><p>When the fact held in the world — Berlin until March, Paris since.</p></div>
+    </div>
+  </div>
+  <aside class="notes">
+    The page's own worked example, and it's the clearest picture of what "memory with a history" means. Turn one: I live in Berlin — stored. Turn seven, a month later: actually, Paris. Berlin is not deleted or overwritten — it's superseded, with its validity window closed. Ask where the user lives and you get Paris, plus the trace: which messages the answer rests on, including the superseded one. Three independent clocks make that possible — system time for audit via MVCC time-travel, known time for when a fact was believed, valid time for when it was true. This is act five's "old version kept, current one marked", grown into a full temporal model. And deletion still exists — it's just explicit: a forget verb, with purge.
+  </aside>
+</section>
+
+<!-- Spectron · enterprise -->
+<section class="layout-default">
+  <div class="eyebrow"><span class="dot"></span>06 · Spectron · for teams</div>
+  <h2 class="title">What enterprises get.</h2>
+  <div class="slide-content" style="gap:28px">
+    <div class="grid cols-2">
+      <div class="card">
+        <div class="k">Audit</div>
+        <h3>Answers with lineage</h3>
+        <ul class="mono-list" style="font-size:20px">
+          <li>provenance is a stored field on every fact</li>
+          <li>tri-temporal history — system · known · valid time</li>
+          <li>the trace graph is queryable: show why an answer was given</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="k">Isolation</div>
+        <h3>Tenancy at the engine</h3>
+        <ul class="mono-list" style="font-size:20px">
+          <li>each Context = its own namespace + database</li>
+          <li>cross-Context reads not expressible in the API</li>
+          <li>scoped, per-verb grants (read · write · forget), deny-by-default</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="k">Deployment</div>
+        <h3>A stateless tier on SurrealDB</h3>
+        <ul class="mono-list" style="font-size:20px">
+          <li>scale-to-zero — an idle deployment costs nothing</li>
+          <li>self-host · SurrealDB Cloud · air-gapped with local inference</li>
+          <li>one Rust binary, MCP built in · SDKs: Python · TS · Kotlin · Swift</li>
+        </ul>
+      </div>
+      <div class="card tint-neon">
+        <div class="k">Measured &amp; open</div>
+        <h3>Benchmarked, not vibes</h3>
+        <ul class="mono-list" style="font-size:20px">
+          <li>evaluated on LoCoMo + LongMemEval, plus an in-tree state suite</li>
+          <li>SurrealDB underneath is open source — 32.7k stars</li>
+          <li>roadmap intent: upstream parts of the memory model</li>
+        </ul>
+      </div>
+    </div>
+    <p style="font-family:var(--font-mono); font-size:20px; margin-bottom:0; opacity:0.8">early preview · waitlist for builders — talk to sales for platform teams · surrealdb.com/platform/spectron</p>
+  </div>
+  <aside class="notes">
+    The enterprise story, in the page's own terms. Audit: provenance and three clocks on every fact, and a queryable trace graph — when a regulator or a postmortem asks why the agent said something, the answer has lineage. Isolation: a Context is a real boundary — its own namespace and database, cross-Context reads not even expressible — with scoped, per-verb, deny-by-default grants; a fleet of agents can be partitioned down to territory at the substrate level. Deployment: a stateless tier over SurrealDB, so compute-storage separation gives you scale-to-zero, and it runs self-hosted, in SurrealDB Cloud, or fully air-gapped with local inference. And it's measured: published conversational-memory benchmarks plus an in-tree suite, comparable run over run. For the security crowd in Q&amp;A: encryption at rest, TLS 1.3 with optional mTLS, and two-layer prompt-injection scanning at ingest and across the substrate.
+  </aside>
+</section>
+
+<!-- 46 · Takeaways -->
 <section class="layout-default">
   <div class="eyebrow"><span class="dot"></span>06 · Takeaways</div>
   <h2 class="title">Three things to take home.</h2>
@@ -2758,7 +3183,7 @@ body:not(.anim-ready) .sweep { opacity: 0; }
   </aside>
 </section>
 
-<!-- 51 · Closing -->
+<!-- 47 · Closing -->
 <section class="layout-closing">
   <div class="eyebrow"><span class="dot"></span>Thank you · Bengaluru</div>
   <h2 class="title">Give your agents a<br/>memory that <span class="mark" style="color:#1a1a1a">compounds</span>.</h2>

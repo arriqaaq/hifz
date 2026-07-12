@@ -815,6 +815,80 @@ body:not(.anim-ready) .sweep { opacity: 0; }
   </aside>
 </section>
 
+<!-- 3 · The territory and the route -->
+<section class="layout-default">
+  <div class="eyebrow"><span class="dot"></span>The map</div>
+  <h2 class="title">The territory, and the route.</h2>
+  <div class="slide-content" style="gap:24px">
+    <p class="lede" style="margin-bottom:0">Everything in this talk lives on this picture. We build it bottom-up.</p>
+    <svg viewBox="0 0 1560 600" xmlns="http://www.w3.org/2000/svg" fill="none">
+      <!-- agent + window -->
+      <g>
+        <rect x="240" y="10" width="400" height="90" rx="13" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.8"/>
+        <text x="440" y="48" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#657220" letter-spacing="1.5">① THE AGENT</text>
+        <text x="440" y="80" text-anchor="middle" font-family="Inter, sans-serif" font-size="21" font-weight="800" fill="#1a1a1a">LLM · tools · loop</text>
+      </g>
+      <line x1="640" y1="55" x2="700" y2="55" stroke="#1a1a1a" stroke-width="1.6"/>
+      <g>
+        <rect x="700" y="10" width="420" height="90" rx="13" fill="#fff7ed" stroke="#1a1a1a" stroke-width="1.8"/>
+        <text x="910" y="48" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#9a6a2a" letter-spacing="1.5">② THE CONTEXT WINDOW</text>
+        <text x="910" y="80" text-anchor="middle" font-family="Inter, sans-serif" font-size="19" font-weight="700" fill="#1a1a1a">working memory — it forgets</text>
+      </g>
+      <!-- arrows -->
+      <line class="ont-flow" x1="440" y1="100" x2="440" y2="158" stroke="#1a1a1a" stroke-width="2"/>
+      <polygon points="432,152 440,166 448,152" fill="#1a1a1a"/>
+      <text x="415" y="138" text-anchor="end" font-family="JetBrains Mono, monospace" font-size="13" fill="#657220" letter-spacing="1">CAPTURE</text>
+      <line class="ont-flow" x1="920" y1="166" x2="920" y2="108" stroke="#1a1a1a" stroke-width="2"/>
+      <polygon points="912,114 920,100 928,114" fill="#1a1a1a"/>
+      <text x="945" y="138" font-family="JetBrains Mono, monospace" font-size="13" fill="#657220" letter-spacing="1">RECALL · INJECT</text>
+      <!-- context layer -->
+      <g>
+        <rect x="240" y="166" width="880" height="86" rx="13" fill="#d9f400" stroke="#1a1a1a" stroke-width="2"/>
+        <text x="680" y="202" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#465016" letter-spacing="1.5">③ THE CONTEXT LAYER</text>
+        <text x="680" y="234" text-anchor="middle" font-family="Inter, sans-serif" font-size="20" font-weight="700" fill="#1a1a1a">what does the model need to know right now?</text>
+      </g>
+      <line class="ont-flow" x1="440" y1="252" x2="440" y2="296" stroke="#1a1a1a" stroke-width="1.8"/>
+      <polygon points="432,290 440,304 448,290" fill="#1a1a1a"/>
+      <line class="ont-flow" x1="920" y1="252" x2="920" y2="296" stroke="#1a1a1a" stroke-width="1.8"/>
+      <polygon points="912,290 920,304 928,290" fill="#1a1a1a"/>
+      <!-- memory + kg -->
+      <g>
+        <rect x="240" y="304" width="425" height="96" rx="13" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.8"/>
+        <text x="452" y="342" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#657220" letter-spacing="1.5">④ MEMORY</text>
+        <text x="452" y="376" text-anchor="middle" font-family="Inter, sans-serif" font-size="19" font-weight="700" fill="#1a1a1a">everything the agent learned</text>
+      </g>
+      <g>
+        <rect x="695" y="304" width="425" height="96" rx="13" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.8"/>
+        <text x="907" y="342" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#657220" letter-spacing="1.5">⑤ THE KNOWLEDGE GRAPH</text>
+        <text x="907" y="376" text-anchor="middle" font-family="Inter, sans-serif" font-size="19" font-weight="700" fill="#1a1a1a">how everything is connected</text>
+      </g>
+      <line class="ont-flow" x1="440" y1="400" x2="440" y2="442" stroke="#1a1a1a" stroke-width="1.8"/>
+      <polygon points="432,436 440,450 448,436" fill="#1a1a1a"/>
+      <line class="ont-flow" x1="920" y1="400" x2="920" y2="442" stroke="#1a1a1a" stroke-width="1.8"/>
+      <polygon points="912,436 920,450 928,436" fill="#1a1a1a"/>
+      <!-- storage -->
+      <g>
+        <rect x="240" y="450" width="880" height="80" rx="13" fill="#1a1a1a"/>
+        <text x="680" y="484" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#d9f400" letter-spacing="1.5">⑥ STORAGE — ONE MULTI-MODEL DATABASE</text>
+        <text x="680" y="512" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" fill="#f2f1eb" opacity="0.85">document · graph · vector · full-text — browser → cluster</text>
+      </g>
+      <!-- route tags -->
+      <g font-family="JetBrains Mono, monospace" font-size="15" font-weight="700" fill="#1a1a1a">
+        <path d="M 1160 166 L 1178 166 L 1178 400 L 1160 400" stroke="#1a1a1a" stroke-width="1.6" fill="none"/>
+        <text x="1200" y="270" letter-spacing="1">→ ACTS 04–05</text>
+        <text x="1200" y="298" font-size="13" font-weight="400" fill="#657220">define it · build it</text>
+        <path d="M 1160 450 L 1178 450 L 1178 530 L 1160 530" stroke="#1a1a1a" stroke-width="1.6" fill="none"/>
+        <text x="1200" y="482" letter-spacing="1">→ ACTS 01–03</text>
+        <text x="1200" y="510" font-size="13" font-weight="400" fill="#657220">the database</text>
+      </g>
+      <text x="680" y="580" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14" fill="#657220" letter-spacing="1.5">BOTTOM-UP: THE DATABASE FIRST, THEN THE LAYER — ACT 06: WHERE IT GOES</text>
+    </svg>
+  </div>
+  <aside class="notes">
+    Thirty seconds of orientation before anything else, because "context layer" means five different things on the internet. An agent is a model, tools, and a loop; its context window is working memory — big, but wiped. Below it sits the context layer, whose whole job is one question: what does the model need to know right now? It draws on memory — everything the agent learned — and the knowledge graph — how everything is connected. And all of it has to live somewhere: storage. The route of this talk is bottom-up: acts one to three build the storage box — the database; acts four and five define and then build everything above it; act six is where it goes next. We'll come back to this exact map in act four and define every box precisely.
+  </aside>
+</section>
+
 <!-- 3 · Running code disclaimer / hifz teaser -->
 <section class="layout-default">
   <div class="eyebrow"><span class="dot"></span>Proof over promises</div>
@@ -904,17 +978,66 @@ body:not(.anim-ready) .sweep { opacity: 0; }
   <div class="eyebrow"><span class="dot"></span>01 · The database</div>
   <h2 class="title">"Multi-model" is one engine, not a bundle.</h2>
   <div class="slide-content">
-    <div class="grid cols-3">
-      <div class="card"><div class="k">Document</div><h3>Schemaless or strict</h3><p>Nested objects, arrays, typed fields — <span class="inline-code">SCHEMAFULL</span> when you want contracts, <span class="inline-code">FLEXIBLE</span> when you don't.</p></div>
-      <div class="card"><div class="k">Relational</div><h3>Tables &amp; indexes</h3><p>Typed columns, unique and composite indexes, foreign keys as first-class <span class="inline-code">record&lt;table&gt;</span> links.</p></div>
-      <div class="card"><div class="k">Graph</div><h3>Edges as tables</h3><p>Typed relations with their own fields, traversed with <span class="inline-code">-&gt;edge-&gt;node</span> arrows in any query.</p></div>
-      <div class="card"><div class="k">Vector</div><h3>HNSW built in</h3><p>Embeddings are just array fields; KNN via the <span class="inline-code">&lt;|k,ef|&gt;</span> operator against a native index.</p></div>
-      <div class="card"><div class="k">Full-text</div><h3>BM25 built in</h3><p>Analyzers, tokenizers, stemming and relevance scoring in the engine — no external search cluster.</p></div>
-      <div class="card tint-neon"><div class="k">The point</div><h3>One transaction</h3><p>All five in the same statement, same index set, same ACID commit. Nothing to sync, ever.</p></div>
-    </div>
+    <svg viewBox="0 0 1560 620" xmlns="http://www.w3.org/2000/svg" fill="none">
+      <!-- spokes: lines hub -> nodes -->
+      <g stroke="#1a1a1a" stroke-width="1.6">
+        <line class="ont-flow" x1="640" y1="250" x2="420" y2="150"/>
+        <line class="ont-flow" x1="780" y1="230" x2="780" y2="140"/>
+        <line class="ont-flow" x1="920" y1="250" x2="1140" y2="150"/>
+        <line class="ont-flow" x1="660" y1="360" x2="500" y2="460"/>
+        <line class="ont-flow" x1="900" y1="360" x2="1060" y2="460"/>
+      </g>
+      <!-- hub -->
+      <g>
+        <rect x="560" y="230" width="440" height="130" rx="16" fill="#d9f400" stroke="#1a1a1a" stroke-width="2.2"/>
+        <text x="780" y="284" text-anchor="middle" font-family="Inter, sans-serif" font-size="32" font-weight="800" fill="#1a1a1a" letter-spacing="-0.5">ONE ENGINE</text>
+        <text x="780" y="322" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14.5" fill="#465016" letter-spacing="1">one ACID transaction · nothing to sync, ever</text>
+      </g>
+      <!-- node: documents -->
+      <g>
+        <rect class="sweep s1" x="180" y="40" width="300" height="120" rx="14" fill="#d9f400" fill-opacity="0.45"/>
+        <rect x="180" y="40" width="300" height="120" rx="14" fill="none" stroke="#1a1a1a" stroke-width="1.8"/>
+        <text x="330" y="90" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="30" font-weight="700" fill="#1a1a1a">{ }</text>
+        <text x="330" y="120" text-anchor="middle" font-family="Inter, sans-serif" font-size="19" font-weight="700" fill="#1a1a1a">documents</text>
+        <text x="330" y="145" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12.5" fill="#657220">strict or open</text>
+      </g>
+      <!-- node: vector -->
+      <g>
+        <rect class="sweep s2" x="630" y="20" width="300" height="120" rx="14" fill="#d9f400" fill-opacity="0.45"/>
+        <rect x="630" y="20" width="300" height="120" rx="14" fill="none" stroke="#1a1a1a" stroke-width="1.8"/>
+        <text x="780" y="70" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="28" font-weight="700" fill="#1a1a1a">&lt;|k|&gt;</text>
+        <text x="780" y="100" text-anchor="middle" font-family="Inter, sans-serif" font-size="19" font-weight="700" fill="#1a1a1a">vector</text>
+        <text x="780" y="125" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12.5" fill="#657220">HNSW built in</text>
+      </g>
+      <!-- node: graph -->
+      <g>
+        <rect class="sweep s3" x="1080" y="40" width="300" height="120" rx="14" fill="#d9f400" fill-opacity="0.45"/>
+        <rect x="1080" y="40" width="300" height="120" rx="14" fill="none" stroke="#1a1a1a" stroke-width="1.8"/>
+        <text x="1230" y="90" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="30" font-weight="700" fill="#1a1a1a">-&gt;</text>
+        <text x="1230" y="120" text-anchor="middle" font-family="Inter, sans-serif" font-size="19" font-weight="700" fill="#1a1a1a">graph</text>
+        <text x="1230" y="145" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12.5" fill="#657220">edges are tables</text>
+      </g>
+      <!-- node: relational -->
+      <g>
+        <rect class="sweep s4" x="260" y="450" width="300" height="120" rx="14" fill="#d9f400" fill-opacity="0.45"/>
+        <rect x="260" y="450" width="300" height="120" rx="14" fill="none" stroke="#1a1a1a" stroke-width="1.8"/>
+        <text x="410" y="500" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="28" font-weight="700" fill="#1a1a1a">⊞</text>
+        <text x="410" y="530" text-anchor="middle" font-family="Inter, sans-serif" font-size="19" font-weight="700" fill="#1a1a1a">relational</text>
+        <text x="410" y="555" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12.5" fill="#657220">tables · indexes · links</text>
+      </g>
+      <!-- node: full-text -->
+      <g>
+        <rect class="sweep s5" x="1000" y="450" width="300" height="120" rx="14" fill="#d9f400" fill-opacity="0.45"/>
+        <rect x="1000" y="450" width="300" height="120" rx="14" fill="none" stroke="#1a1a1a" stroke-width="1.8"/>
+        <text x="1150" y="500" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="28" font-weight="700" fill="#1a1a1a">@1@</text>
+        <text x="1150" y="530" text-anchor="middle" font-family="Inter, sans-serif" font-size="19" font-weight="700" fill="#1a1a1a">full-text</text>
+        <text x="1150" y="555" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12.5" fill="#657220">BM25 built in</text>
+      </g>
+      <text x="780" y="608" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14" fill="#657220" letter-spacing="1.5">FIVE MODELS · ONE STATEMENT · ONE COMMIT — NOT FIVE PRODUCTS IN A TRENCH COAT</text>
+    </svg>
   </div>
   <aside class="notes">
-    The bar for "multi-model": can one query, in one transaction, use all the models together? Plenty of products bolt a vector plugin onto a document store — but if the models live in different index structures with different consistency guarantees, you've just internalized the sprawl. In SurrealDB each of these is native: HNSW and BM25 are index types exactly like a unique index, edges are tables, and everything commits atomically together. Hold the "one transaction" cell in your head — it's what makes the agent story in act four work.
+    The bar for "multi-model": can one query, in one transaction, use all the models together? Plenty of products bolt a vector plugin onto a document store — but if the models live in different index structures with different consistency guarantees, you've just internalized the sprawl. In SurrealDB each spoke is native. Documents: nested objects and arrays — SCHEMAFULL when you want contracts, FLEXIBLE when you don't. Relational: typed columns, unique and composite indexes, foreign keys as first-class record links. Graph: edges are tables with their own fields, walked with arrow syntax in any query. Vector: embeddings are array fields, KNN through a native HNSW index. Full-text: analyzers, stemming and BM25 relevance in the engine. The hub is the point — same statement, same index set, same ACID commit — and it's what makes the agent story in act four work.
   </aside>
 </section>
 
@@ -2043,7 +2166,7 @@ body:not(.anim-ready) .sweep { opacity: 0; }
     </figure>
   </div>
   <aside class="notes">
-    Here is the whole system on one picture — the next five slides define the numbered parts, in order. At the top, the agent: an LLM, its tools, and a loop. Beside it, the context window — its working memory, and the only memory the model itself has. Below it, the context layer: the runtime that captures what the agent does and decides, every turn, what the model needs to know right now. The capture-down, recall-up pair of arrows is the read-think-write loop from SurrealDB's homepage — we'll zoom into it in three slides. The layer draws on two bodies of knowledge — memory, everything the agent has learned, and the knowledge graph, how everything is connected — and all of it lives in storage. The claim of this talk is that boxes three through six are one database; the diagram is assembled from SurrealDB's own architecture writing, not invented for the slide.
+    You saw this map in the opening — now we define every box. The next five slides take the numbered parts in order. At the top, the agent: an LLM, its tools, and a loop. Beside it, the context window — its working memory, and the only memory the model itself has. Below it, the context layer: the runtime that captures what the agent does and decides, every turn, what the model needs to know right now. The capture-down, recall-up pair of arrows is the read-think-write loop from SurrealDB's homepage — we'll zoom into it later in this act. The layer draws on two bodies of knowledge — memory, everything the agent has learned, and the knowledge graph, how everything is connected — and all of it lives in storage. The claim of this talk is that boxes three through six are one database; the diagram is assembled from SurrealDB's own architecture writing, not invented for the slide.
   </aside>
 </section>
 
@@ -2263,6 +2386,110 @@ body:not(.anim-ready) .sweep { opacity: 0; }
     Act five is the build, and it follows the map from act four exactly. hifz is box three — a layer that stores and searches context and memory for Claude Code. Its box four is the memory tables, its box five is the code and the documents, and its box six is an embedded SurrealDB. I'll use it as the worked example throughout: not to explain hifz, but so every box comes with a real query you can copy. First: where box three sits relative to the agent.
   </aside>
 </section>
+
+<!-- The goal: one issue end to end -->
+<section class="layout-default">
+  <div class="eyebrow"><span class="dot"></span>05 · The goal</div>
+  <h2 class="title">What we'll build: one issue, end to end.</h2>
+  <div class="slide-content">
+    <figure class="figure" style="padding:44px 60px">
+      <svg viewBox="0 0 1560 520" xmlns="http://www.w3.org/2000/svg" fill="none">
+        <!-- timeline base -->
+        <line x1="60" y1="260" x2="1500" y2="260" stroke="#1a1a1a" stroke-width="2"/>
+        <polygon points="1494,252 1510,260 1494,268" fill="#1a1a1a"/>
+
+        <!-- issue -->
+        <g>
+          <circle cx="140" cy="260" r="12" fill="#ffa440" stroke="#1a1a1a" stroke-width="1.8"/>
+          <rect x="40" y="120" width="230" height="90" rx="12" fill="#fff7ed" stroke="#1a1a1a" stroke-width="1.5"/>
+          <text x="155" y="152" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12" fill="#9a6a2a" letter-spacing="1">THE ISSUE</text>
+          <text x="155" y="178" text-anchor="middle" font-family="Inter, sans-serif" font-size="16" font-weight="700" fill="#1a1a1a">"CI auth tests are flaky —</text>
+          <text x="155" y="200" text-anchor="middle" font-family="Inter, sans-serif" font-size="16" font-weight="700" fill="#1a1a1a">they pass locally"</text>
+          <line x1="140" y1="210" x2="140" y2="246" stroke="#1a1a1a" stroke-width="1.4"/>
+        </g>
+
+        <!-- commands ticks -->
+        <g stroke="#1a1a1a" stroke-width="1.6">
+          <line x1="230" y1="250" x2="230" y2="270"/><line x1="262" y1="250" x2="262" y2="270"/>
+          <line x1="294" y1="250" x2="294" y2="270"/><line x1="326" y1="250" x2="326" y2="270"/>
+          <line x1="390" y1="250" x2="390" y2="270"/><line x1="422" y1="250" x2="422" y2="270"/>
+          <line x1="454" y1="250" x2="454" y2="270"/>
+        </g>
+        <text x="342" y="310" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" fill="#657220" letter-spacing="1">A SESSION OF COMMANDS → OBSERVATIONS</text>
+
+        <!-- compaction marker -->
+        <g>
+          <circle cx="358" cy="260" r="10" fill="#f2f1eb" stroke="#1a1a1a" stroke-width="1.8" stroke-dasharray="3 3"/>
+          <line x1="358" y1="250" x2="358" y2="176" stroke="#1a1a1a" stroke-width="1.4" stroke-dasharray="4 4"/>
+          <rect x="288" y="120" width="290" height="52" rx="10" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.4" stroke-dasharray="6 4"/>
+          <text x="433" y="145" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12.5" fill="#657220" letter-spacing="0.5">CONTEXT COMPACTS — WINDOW FORGETS,</text>
+          <text x="433" y="163" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12.5" fill="#657220" letter-spacing="0.5">THE LOG SURVIVES</text>
+        </g>
+
+        <!-- plan -->
+        <g>
+          <circle cx="560" cy="260" r="12" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.8"/>
+          <rect x="460" y="330" width="220" height="80" rx="12" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.5"/>
+          <text x="570" y="362" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12" fill="#657220" letter-spacing="1">THE PLAN</text>
+          <text x="570" y="390" text-anchor="middle" font-family="Inter, sans-serif" font-size="16" font-weight="700" fill="#1a1a1a">"refresh tokens before expiry"</text>
+          <line x1="560" y1="274" x2="560" y2="330" stroke="#1a1a1a" stroke-width="1.4"/>
+        </g>
+
+        <!-- commit -->
+        <g>
+          <circle cx="800" cy="260" r="14" fill="#d9f400" stroke="#1a1a1a" stroke-width="2"/>
+          <rect x="690" y="110" width="240" height="100" rx="12" fill="#d9f400" fill-opacity="0.3" stroke="#1a1a1a" stroke-width="1.6"/>
+          <text x="810" y="142" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12" fill="#465016" letter-spacing="1">CODE SHIPS · GROUND TRUTH</text>
+          <text x="810" y="170" text-anchor="middle" font-family="Inter, sans-serif" font-size="17" font-weight="700" fill="#1a1a1a">commit 9f2c1a</text>
+          <text x="810" y="196" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" fill="#657220">src/auth.rs:142</text>
+          <line x1="800" y1="210" x2="800" y2="244" stroke="#1a1a1a" stroke-width="1.4"/>
+        </g>
+
+        <!-- lesson -->
+        <g>
+          <circle cx="960" cy="260" r="12" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.8"/>
+          <rect x="860" y="330" width="230" height="80" rx="12" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.5"/>
+          <text x="975" y="362" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12" fill="#657220" letter-spacing="1">THE LESSON, SAVED</text>
+          <text x="975" y="390" text-anchor="middle" font-family="Inter, sans-serif" font-size="16" font-weight="700" fill="#1a1a1a">"token refresh race → fix"</text>
+          <line x1="960" y1="274" x2="960" y2="330" stroke="#1a1a1a" stroke-width="1.4"/>
+        </g>
+
+        <!-- gap -->
+        <text x="1120" y="245" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14" fill="#657220" letter-spacing="2">… WEEKS LATER …</text>
+
+        <!-- question -->
+        <g>
+          <circle cx="1300" cy="260" r="12" fill="#ffa440" stroke="#1a1a1a" stroke-width="1.8"/>
+          <rect x="1180" y="110" width="290" height="100" rx="12" fill="#fff7ed" stroke="#1a1a1a" stroke-width="1.5"/>
+          <text x="1325" y="142" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12" fill="#9a6a2a" letter-spacing="1">A NEW SESSION ASKS</text>
+          <text x="1325" y="170" text-anchor="middle" font-family="Inter, sans-serif" font-size="16" font-weight="700" fill="#1a1a1a">"why is token refresh</text>
+          <text x="1325" y="192" text-anchor="middle" font-family="Inter, sans-serif" font-size="16" font-weight="700" fill="#1a1a1a">written this way?"</text>
+          <line x1="1300" y1="210" x2="1300" y2="246" stroke="#1a1a1a" stroke-width="1.4"/>
+        </g>
+        <g>
+          <rect x="1220" y="330" width="260" height="80" rx="12" fill="#d9f400" fill-opacity="0.3" stroke="#1a1a1a" stroke-width="1.5"/>
+          <text x="1350" y="362" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12" fill="#465016" letter-spacing="1">THE ANSWER COMES BACK</text>
+          <text x="1350" y="390" text-anchor="middle" font-family="Inter, sans-serif" font-size="16" font-weight="700" fill="#1a1a1a">lesson + plan + auth.rs:142</text>
+          <line x1="1300" y1="274" x2="1330" y2="330" stroke="#1a1a1a" stroke-width="1.4"/>
+        </g>
+
+        <!-- component brackets -->
+        <g font-family="JetBrains Mono, monospace" font-size="15" font-weight="700" fill="#1a1a1a">
+          <path d="M 210 460 L 210 478 L 470 478 L 470 460" stroke="#1a1a1a" stroke-width="1.6" fill="none"/>
+          <text x="340" y="508" text-anchor="middle">CAPTURE + CHUNK + EMBED</text>
+          <path d="M 500 460 L 500 478 L 1030 478 L 1030 460" stroke="#1a1a1a" stroke-width="1.6" fill="none"/>
+          <text x="765" y="508" text-anchor="middle">STORE + LINK (GRAPH)</text>
+          <path d="M 1180 460 L 1180 478 L 1480 478 L 1480 460" stroke="#1a1a1a" stroke-width="1.6" fill="none"/>
+          <text x="1330" y="508" text-anchor="middle">SEARCH + EXPAND + INJECT</text>
+        </g>
+      </svg>
+    </figure>
+  </div>
+  <aside class="notes">
+    Before any machinery, the goal — hold this picture for the whole act. An issue arrives; a long session of commands is captured — and when the context window compacts mid-session, the log survives. The investigation becomes a plan, the fix ships as commit 9f2c1a, and the lesson is linked to the code. Weeks later a new session asks why token refresh is written this way — and the lesson, the plan, and the exact lines come back before the agent writes a token. Every bracket under the timeline names components this act builds; by the blueprint at the end, you'll have the query behind each one.
+  </aside>
+</section>
+
 
 <!-- 35 · The plugin loop -->
 <section class="layout-default">
@@ -2678,7 +2905,7 @@ body:not(.anim-ready) .sweep { opacity: 0; }
 <span class="c-kw">SELECT</span> title <span class="c-kw">FROM</span> observation
 <span class="c-kw">WHERE</span> embedding <span class="c-hi">&lt;|5,40|&gt;</span> $question;
         <span class="c-comment">-- 5 nearest · search effort 40</span></pre>
-        <p class="code-caption">one operator against the HNSW index from the last slide</p>
+        <p class="code-caption">one operator against the HNSW index from the embeddings slide</p>
       </div>
       <div class="card tint-neon">
         <div class="k">The reveal</div>
@@ -2694,7 +2921,7 @@ body:not(.anim-ready) .sweep { opacity: 0; }
     </div>
   </div>
   <aside class="notes">
-    Now we cross to the read path. Embed the question with the same model, then one operator — five nearest rows, search effort forty — against the index we just defined. Now the reveal for anyone new to this: RAG, the acronym you keep hearing, is nothing more than the four stages you've now seen — chunk, embed, search, inject the results into the prompt. You already have all four; a context layer's read path is RAG pointed at your own history. What RAG alone gets wrong, the next two slides fix.
+    Now we cross to the read path. Embed the question with the same model, then one operator — five nearest rows, search effort forty — against the index from the embeddings slide. Now the reveal for anyone new to this: RAG, the acronym you keep hearing, is nothing more than the four stages you've now seen — chunk, embed, search, inject the results into the prompt. You already have all four; a context layer's read path is RAG pointed at your own history. What RAG alone gets wrong, the next two slides fix.
   </aside>
 </section>
 
@@ -2728,7 +2955,7 @@ body:not(.anim-ready) .sweep { opacity: 0; }
     </div>
   </div>
   <aside class="notes">
-    The second search. Vectors are great at meaning and bad at literals — ask for commit 9f2c1a or a function name and cosine similarity shrugs. A BM25 full-text index is the opposite: exact words, no paraphrase. So a context layer runs both branches — the vector operator and the match operator from act two — and search::rrf fuses the two rankings by reciprocal rank. That's a whole "hybrid search service" as one database function. One more blind spot remains: search only knows similarity, not relationships. Graph, next.
+    The second search. Vectors are great at meaning and bad at literals — ask for commit 9f2c1a or a function name and cosine similarity shrugs. A BM25 full-text index is the opposite: exact words, no paraphrase. So a context layer runs both branches — the vector operator and the match operator from act two — and search::rrf fuses the two rankings by reciprocal rank. That's a whole "hybrid search service" as one database function. One more blind spot remains: search only knows similarity, not relationships — which is exactly why the write side stored the links. GraphRAG, next.
   </aside>
 </section>
 
@@ -2790,109 +3017,6 @@ body:not(.anim-ready) .sweep { opacity: 0; }
   </div>
   <aside class="notes">
     The last component: GraphRAG — search plus the links from two slides ago. The hybrid query finds the entry points: the lesson and the plan. Then the graph expands them — the edge-filtered arrow syntax from act four — following references to the code lines, and related, mentions and co-occurrence edges to neighbouring memories, two hops out. Provenance edges like generated_by are stored for audit but deliberately not traversed — expansion follows meaning, not lineage. The question "why is token refresh written this way" comes back as the lesson, the plan, and src/auth.rs 142 — an answer with its sources attached. Pointed at documents, the identical recipe is maktab: cited answers over your PDFs.
-  </aside>
-</section>
-
-<!-- 45 · Recap: one issue end to end -->
-<section class="layout-default">
-  <div class="eyebrow"><span class="dot"></span>05 · All together</div>
-  <h2 class="title">One issue, end to end.</h2>
-  <div class="slide-content">
-    <figure class="figure" style="padding:44px 60px">
-      <svg viewBox="0 0 1560 520" xmlns="http://www.w3.org/2000/svg" fill="none">
-        <!-- timeline base -->
-        <line x1="60" y1="260" x2="1500" y2="260" stroke="#1a1a1a" stroke-width="2"/>
-        <polygon points="1494,252 1510,260 1494,268" fill="#1a1a1a"/>
-
-        <!-- issue -->
-        <g>
-          <circle cx="140" cy="260" r="12" fill="#ffa440" stroke="#1a1a1a" stroke-width="1.8"/>
-          <rect x="40" y="120" width="230" height="90" rx="12" fill="#fff7ed" stroke="#1a1a1a" stroke-width="1.5"/>
-          <text x="155" y="152" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12" fill="#9a6a2a" letter-spacing="1">THE ISSUE</text>
-          <text x="155" y="178" text-anchor="middle" font-family="Inter, sans-serif" font-size="16" font-weight="700" fill="#1a1a1a">"CI auth tests are flaky —</text>
-          <text x="155" y="200" text-anchor="middle" font-family="Inter, sans-serif" font-size="16" font-weight="700" fill="#1a1a1a">they pass locally"</text>
-          <line x1="140" y1="210" x2="140" y2="246" stroke="#1a1a1a" stroke-width="1.4"/>
-        </g>
-
-        <!-- commands ticks -->
-        <g stroke="#1a1a1a" stroke-width="1.6">
-          <line x1="230" y1="250" x2="230" y2="270"/><line x1="262" y1="250" x2="262" y2="270"/>
-          <line x1="294" y1="250" x2="294" y2="270"/><line x1="326" y1="250" x2="326" y2="270"/>
-          <line x1="390" y1="250" x2="390" y2="270"/><line x1="422" y1="250" x2="422" y2="270"/>
-          <line x1="454" y1="250" x2="454" y2="270"/>
-        </g>
-        <text x="342" y="310" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" fill="#657220" letter-spacing="1">A SESSION OF COMMANDS → OBSERVATIONS</text>
-
-        <!-- compaction marker -->
-        <g>
-          <circle cx="358" cy="260" r="10" fill="#f2f1eb" stroke="#1a1a1a" stroke-width="1.8" stroke-dasharray="3 3"/>
-          <line x1="358" y1="250" x2="358" y2="176" stroke="#1a1a1a" stroke-width="1.4" stroke-dasharray="4 4"/>
-          <rect x="288" y="120" width="290" height="52" rx="10" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.4" stroke-dasharray="6 4"/>
-          <text x="433" y="145" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12.5" fill="#657220" letter-spacing="0.5">CONTEXT COMPACTS — WINDOW FORGETS,</text>
-          <text x="433" y="163" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12.5" fill="#657220" letter-spacing="0.5">THE LOG SURVIVES</text>
-        </g>
-
-        <!-- plan -->
-        <g>
-          <circle cx="560" cy="260" r="12" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.8"/>
-          <rect x="460" y="330" width="220" height="80" rx="12" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.5"/>
-          <text x="570" y="362" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12" fill="#657220" letter-spacing="1">THE PLAN</text>
-          <text x="570" y="390" text-anchor="middle" font-family="Inter, sans-serif" font-size="16" font-weight="700" fill="#1a1a1a">"refresh tokens before expiry"</text>
-          <line x1="560" y1="274" x2="560" y2="330" stroke="#1a1a1a" stroke-width="1.4"/>
-        </g>
-
-        <!-- commit -->
-        <g>
-          <circle cx="800" cy="260" r="14" fill="#d9f400" stroke="#1a1a1a" stroke-width="2"/>
-          <rect x="690" y="110" width="240" height="100" rx="12" fill="#d9f400" fill-opacity="0.3" stroke="#1a1a1a" stroke-width="1.6"/>
-          <text x="810" y="142" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12" fill="#465016" letter-spacing="1">CODE SHIPS · GROUND TRUTH</text>
-          <text x="810" y="170" text-anchor="middle" font-family="Inter, sans-serif" font-size="17" font-weight="700" fill="#1a1a1a">commit 9f2c1a</text>
-          <text x="810" y="196" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" fill="#657220">src/auth.rs:142</text>
-          <line x1="800" y1="210" x2="800" y2="244" stroke="#1a1a1a" stroke-width="1.4"/>
-        </g>
-
-        <!-- lesson -->
-        <g>
-          <circle cx="960" cy="260" r="12" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.8"/>
-          <rect x="860" y="330" width="230" height="80" rx="12" fill="#f8f8f5" stroke="#1a1a1a" stroke-width="1.5"/>
-          <text x="975" y="362" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12" fill="#657220" letter-spacing="1">THE LESSON, SAVED</text>
-          <text x="975" y="390" text-anchor="middle" font-family="Inter, sans-serif" font-size="16" font-weight="700" fill="#1a1a1a">"token refresh race → fix"</text>
-          <line x1="960" y1="274" x2="960" y2="330" stroke="#1a1a1a" stroke-width="1.4"/>
-        </g>
-
-        <!-- gap -->
-        <text x="1120" y="245" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14" fill="#657220" letter-spacing="2">… WEEKS LATER …</text>
-
-        <!-- question -->
-        <g>
-          <circle cx="1300" cy="260" r="12" fill="#ffa440" stroke="#1a1a1a" stroke-width="1.8"/>
-          <rect x="1180" y="110" width="290" height="100" rx="12" fill="#fff7ed" stroke="#1a1a1a" stroke-width="1.5"/>
-          <text x="1325" y="142" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12" fill="#9a6a2a" letter-spacing="1">A NEW SESSION ASKS</text>
-          <text x="1325" y="170" text-anchor="middle" font-family="Inter, sans-serif" font-size="16" font-weight="700" fill="#1a1a1a">"why is token refresh</text>
-          <text x="1325" y="192" text-anchor="middle" font-family="Inter, sans-serif" font-size="16" font-weight="700" fill="#1a1a1a">written this way?"</text>
-          <line x1="1300" y1="210" x2="1300" y2="246" stroke="#1a1a1a" stroke-width="1.4"/>
-        </g>
-        <g>
-          <rect x="1220" y="330" width="260" height="80" rx="12" fill="#d9f400" fill-opacity="0.3" stroke="#1a1a1a" stroke-width="1.5"/>
-          <text x="1350" y="362" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12" fill="#465016" letter-spacing="1">THE ANSWER COMES BACK</text>
-          <text x="1350" y="390" text-anchor="middle" font-family="Inter, sans-serif" font-size="16" font-weight="700" fill="#1a1a1a">lesson + plan + auth.rs:142</text>
-          <line x1="1300" y1="274" x2="1330" y2="330" stroke="#1a1a1a" stroke-width="1.4"/>
-        </g>
-
-        <!-- component brackets -->
-        <g font-family="JetBrains Mono, monospace" font-size="15" font-weight="700" fill="#1a1a1a">
-          <path d="M 210 460 L 210 478 L 470 478 L 470 460" stroke="#1a1a1a" stroke-width="1.6" fill="none"/>
-          <text x="340" y="508" text-anchor="middle">CAPTURE + CHUNK + EMBED</text>
-          <path d="M 500 460 L 500 478 L 1030 478 L 1030 460" stroke="#1a1a1a" stroke-width="1.6" fill="none"/>
-          <text x="765" y="508" text-anchor="middle">STORE + LINK (GRAPH)</text>
-          <path d="M 1180 460 L 1180 478 L 1480 478 L 1480 460" stroke="#1a1a1a" stroke-width="1.6" fill="none"/>
-          <text x="1330" y="508" text-anchor="middle">SEARCH + EXPAND + INJECT</text>
-        </g>
-      </svg>
-    </figure>
-  </div>
-  <aside class="notes">
-    All seven components on one real week. An issue arrives; a long session of commands is captured as observations — and when the context window compacts mid-session, the log survives. The plan is saved, the fix ships as commit 9f2c1a, and the lesson is linked to the code and the run. Weeks later a new session asks why token refresh is written this way — search finds the lesson, the graph expands to the plan and the exact lines, and the answer is injected before the agent writes a token. Every bracket under the timeline is a component you now have the query for.
   </aside>
 </section>
 
@@ -2960,7 +3084,7 @@ body:not(.anim-ready) .sweep { opacity: 0; }
     </div>
   </div>
   <aside class="notes">
-    The act as a blueprint. Left column: the seven components you just saw, collapsed to six rows. Middle: which SurrealDB model carries each one. Right: the exact construct — and every construct appeared in act two with a runnable doc example before you saw it in production here. This is why the talk is a database talk: build this table and the context layer follows. The count at the bottom is the whole operational story — no extra services, one process, sixteen tables, two queries per recall. One honest note on the last row: hifz keeps every write a single atomic statement — a deliberate simplification — and BEGIN-COMMIT is there the day one answer has to span several.
+    The act as a blueprint. Left column: the seven components you just saw, collapsed to six rows. Middle: which SurrealDB model carries each one. Right: the exact construct — and every construct appeared in act two with a runnable doc example before you saw it in production here. This is why the talk is a database talk: build this table and the context layer follows. And the timeline you saw at the start of the act? Every bracket on it is now a query you have. The count at the bottom is the whole operational story — no extra services, one process, sixteen tables, two queries per recall. One honest note on the last row: hifz keeps every write a single atomic statement — a deliberate simplification — and BEGIN-COMMIT is there the day one answer has to span several.
   </aside>
 </section>
 <!-- ================================================================
